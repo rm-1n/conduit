@@ -1,0 +1,36 @@
+# KiCad-focused ignore rules for this repository.
+# Keep source/project files tracked (schematics, PCB, symbols, footprints, 3D models)
+# and ignore local state, autosaves, generated backups, and OS junk.
+
+# OS junk
+.DS_Store
+
+# KiCad local state / machine-specific files
+*.kicad_prl
+*.lck
+.history
+
+# KiCad temporary/autosave files
+*.000
+*.bak
+*.bck
+*.tmp
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*-save.pro
+*-save.kicad_pcb
+_autosave-*
+*~
+~*
+#auto_saved_files#
+fp-info-cache
+
+# KiCad backups
+*-backups/
+
+# KiCad export/derived artifacts
+*.net
+*.dsn
+*.ses
+hardware/**/*.csv
+hardware/**/*.xml
