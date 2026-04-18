@@ -34,3 +34,5 @@ fp-info-cache
 *.ses
 hardware/**/*.csv
 hardware/**/*.xml
+**/production/*
+fabrication-toolkit-options.json
