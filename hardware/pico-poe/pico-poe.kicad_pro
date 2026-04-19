@@ -127,7 +127,7 @@
         ],
         [
           "clearance|95697500|117487500|bac3505c-f8b3-4a0b-88dc-40b5129aa380|5741fbe7-a06f-4e72-95c4-4ceea3372935",
-          "Pin 5 not represented by rules, OK!"
+          "Pad 5 not reflected in schamtic, OK!"
         ],
         [
           "clearance|95742904|115144000|183a8c8f-72bd-45e5-b5e5-6f79261e0262|5741fbe7-a06f-4e72-95c4-4ceea3372935",
@@ -192,14 +192,6 @@
         [
           "lib_footprint_mismatch|114870000|119390000|f3e0d7fa-6288-48b4-940e-b03fc933cdce|00000000-0000-0000-0000-000000000000",
           "J1 + J2 checked, OK!"
-        ],
-        [
-          "silk_edge_clearance|71900000|102123000|6b077df0-a81b-434c-aab7-4ecc3ee00d05|31920324-8336-4454-981f-a957532fab69",
-          "ETH connector edge alignment causes this"
-        ],
-        [
-          "silk_edge_clearance|71900000|118853000|6b077df0-a81b-434c-aab7-4ecc3ee00d05|8dd8991e-738a-4211-ad64-31e99f031d0e",
-          "ETH connector edge alignment causes this"
         ]
       ],
       "meta": {
@@ -287,7 +279,7 @@
         "min_track_width": 0.1,
         "min_via_annular_width": 0.1,
         "min_via_diameter": 0.5,
-        "solder_mask_to_copper_clearance": 0.0,
+        "solder_mask_to_copper_clearance": 0.005,
         "use_height_for_length_calcs": true
       },
       "teardrop_options": [
