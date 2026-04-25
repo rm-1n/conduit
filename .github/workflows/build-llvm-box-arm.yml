@@ -1,0 +1,101 @@
+# Builds a WASM port of Clang + LLD + supporting LLVM tools with the ARM
+# backend enabled, based on jprendes/emception. Emception ships with only the
+# WebAssembly target compiled in; we patch LLVM_TARGETS_TO_BUILD to include
+# ARM so `clang -target thumbv8m.main-none-eabi -mcpu=cortex-m33 ...` works
+# in the browser for the pico-poe IDE.
+#
+# Runs on-demand only (workflow_dispatch). Typical run time is several hours
+# on a GitHub-hosted ubuntu-latest runner — LLVM + Emscripten cold build.
+#
+# Output: a GitHub Release with the entire Emception runtime tarred up as
+# llvm-box-arm.tar.gz. The browser fetches this asset at runtime the first
+# time the user clicks Build in the IDE.
+
+name: build-llvm-box-arm
+
+on:
+  workflow_dispatch:
+    inputs:
+      emception_ref:
+        description: 'jprendes/emception git ref to build against'
+        required: false
+        default: 'master'
+      llvm_targets:
+        description: 'LLVM_TARGETS_TO_BUILD (semicolon-separated)'
+        required: false
+        default: 'WebAssembly;ARM'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: write # needed to create a release
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        # LLVM + Emscripten builds are large; the ubuntu runner ships with
+        # several GB of preinstalled tooling we don't need.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h
+
+      - name: Clone Emception
+        run: |
+          git clone https://github.com/jprendes/emception.git emception
+          cd emception
+          git checkout "${{ github.event.inputs.emception_ref }}"
+          echo "emception_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Patch LLVM_TARGETS_TO_BUILD to include ARM
+        run: |
+          cd emception
+          # Double-quote the value so bash keeps the semicolon as literal and
+          # cmake sees it as a CMake list.
+          sed -i 's|-DLLVM_TARGETS_TO_BUILD=WebAssembly|-DLLVM_TARGETS_TO_BUILD="${{ github.event.inputs.llvm_targets }}"|g' build-llvm.sh
+          echo '--- patched build-llvm.sh (LLVM_TARGETS_TO_BUILD occurrences) ---'
+          grep -n LLVM_TARGETS_TO_BUILD build-llvm.sh
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run Emception build
+        run: |
+          cd emception
+          ./build-with-docker.sh
+          echo '--- build/emception tree ---'
+          ls -laR build/emception | head -200
+          echo '--- llvm-box sizes ---'
+          du -h build/emception/llvm/* || true
+          du -h build/emception/packages/*.pack.br 2>/dev/null | sort -h | tail -20
+
+      - name: Package runtime
+        run: |
+          cd emception/build
+          tar -czf ../../llvm-box-arm.tar.gz emception/
+          cd ../..
+          ls -lh llvm-box-arm.tar.gz
+
+      - name: Upload as Release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: web-toolchain-arm-${{ github.run_number }}
+          name: Web toolchain (llvm-box with ARM) — run ${{ github.run_number }}
+          body: |
+            Emception build with LLVM ARM backend enabled.
+
+            - Emception ref: `${{ github.event.inputs.emception_ref }}` (`${{ env.emception_sha }}`)
+            - LLVM_TARGETS_TO_BUILD: `${{ github.event.inputs.llvm_targets }}`
+            - Built from CI run #${{ github.run_number }}
+
+            Untar `llvm-box-arm.tar.gz` to get the full Emception runtime:
+            `emception/llvm/llvm-box.{mjs,wasm}`, `emception/packages/*.pack.br`,
+            `emception/packs.mjs`, and the supporting module glue.
+
+            Consumed by `web/compiler.js` at runtime in the pico-poe IDE.
+          files: |
+            llvm-box-arm.tar.gz
+          fail_on_unmatched_files: true

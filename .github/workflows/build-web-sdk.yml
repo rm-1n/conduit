@@ -1,0 +1,143 @@
+# Prebuilds the Pico SDK components the browser IDE links against: static
+# libraries, startup objects, preprocessed linker script, and the public
+# headers tree. Output is packaged as a tarball and attached to a GitHub
+# Release so web/compiler.js can fetch it on first Build click.
+#
+# Runs on-demand only (workflow_dispatch). The resulting artifact is stable
+# across most pico-poe code changes — only needs regeneration when the SDK
+# version or the list of linked libraries changes.
+
+name: build-web-sdk
+
+on:
+  workflow_dispatch:
+    inputs:
+      pico_sdk_version:
+        description: 'Pico SDK tag to pin (e.g. 2.2.0)'
+        required: false
+        default: '2.2.0'
+      picotool_version:
+        description: 'picotool tag to pin (e.g. 2.2.0-a4)'
+        required: false
+        default: '2.2.0-a4'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write # needed to create a release
+    env:
+      PICO_SDK_PATH: ${{ github.workspace }}/pico-sdk
+      PICOTOOL_PATH: ${{ github.workspace }}/picotool-install
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install arm-none-eabi toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build \
+            gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi \
+            build-essential pkg-config libusb-1.0-0-dev
+
+      - name: Clone Pico SDK
+        run: |
+          git clone --depth 1 --branch "${{ github.event.inputs.pico_sdk_version }}" \
+            https://github.com/raspberrypi/pico-sdk.git "$PICO_SDK_PATH"
+          git -C "$PICO_SDK_PATH" submodule update --init --recursive
+
+      - name: Build and install picotool
+        run: |
+          git clone --depth 1 --branch "${{ github.event.inputs.picotool_version }}" \
+            https://github.com/raspberrypi/picotool.git picotool-src
+          cmake -S picotool-src -B picotool-build -G Ninja \
+            -DPICO_SDK_PATH="$PICO_SDK_PATH" \
+            -DCMAKE_INSTALL_PREFIX="$PICOTOOL_PATH"
+          cmake --build picotool-build -j"$(nproc)"
+          cmake --install picotool-build
+
+      - name: Configure firmware build
+        run: |
+          cmake -S firmware -B firmware/build -G Ninja \
+            -DPICO_BOARD=pico2 \
+            -Dpicotool_DIR="$PICOTOOL_PATH"/picotool
+
+      - name: Build firmware
+        # This builds the full pico-poe app, which forces the Pico SDK to
+        # build all of its static libraries. We don't ship the pico-poe app
+        # binary — we extract the SDK .a + .o files below.
+        run: cmake --build firmware/build -j"$(nproc)"
+
+      - name: Collect SDK artifacts
+        # Stage the pieces web/compiler.js needs at link time into a flat
+        # directory, then tarball it. Paths here follow the Pico SDK 2.2.0
+        # layout and must be revisited if the SDK layout changes.
+        run: |
+          OUT="$GITHUB_WORKSPACE/web-sdk-stage"
+          mkdir -p "$OUT"/{lib,startup,linker,headers}
+
+          # Static libraries pulled in by a minimal GPIO-only app
+          find firmware/build -name "*.a" -print -exec cp {} "$OUT"/lib/ \;
+
+          # Startup / crt0 / boot-stage-2 objects. Copy everything the app
+          # ELF depends on at link time that isn't in a .a; inspecting the
+          # CMake link line is the reliable way but a grep suffices here.
+          find firmware/build -name 'crt0*.o' -exec cp {} "$OUT"/startup/ \;
+          find firmware/build -name 'boot_stage2*.o' -exec cp {} "$OUT"/startup/ \;
+          find firmware/build -name 'bs2_default_padded_checksummed*.o' -exec cp {} "$OUT"/startup/ \;
+          find firmware/build -name 'pico_poe_slower_boot2*.o' -exec cp {} "$OUT"/startup/ \;
+
+          # Linker script. The SDK preprocesses memmap_*.ld via a custom
+          # target; we copy the generated .ld alongside its originals.
+          find "$PICO_SDK_PATH" -name 'memmap_default.ld' -exec cp {} "$OUT"/linker/ \;
+          find firmware/build -name '*.ld' -exec cp {} "$OUT"/linker/ \;
+
+          # Public headers. The browser clang needs -isystem paths pointing
+          # at SDK public headers; we ship the full tree (it compresses well).
+          rsync -a --include='*/' --include='*.h' --exclude='*' \
+            "$PICO_SDK_PATH/src/" "$OUT/headers/pico-sdk/"
+
+          echo '--- staged sizes ---'
+          du -sh "$OUT"/{lib,startup,linker,headers}
+          ls "$OUT"/lib | head
+
+      - name: Record SDK version manifest
+        run: |
+          OUT="$GITHUB_WORKSPACE/web-sdk-stage"
+          cat > "$OUT"/manifest.json <<EOF
+          {
+            "pico_sdk_version": "${{ github.event.inputs.pico_sdk_version }}",
+            "picotool_version": "${{ github.event.inputs.picotool_version }}",
+            "pico_board": "pico2",
+            "run": "${{ github.run_number }}",
+            "git_sha": "${{ github.sha }}"
+          }
+          EOF
+          cat "$OUT"/manifest.json
+
+      - name: Package SDK bundle
+        run: |
+          tar -czf web-sdk.tar.gz -C web-sdk-stage .
+          ls -lh web-sdk.tar.gz
+
+      - name: Upload as Release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: web-sdk-${{ github.run_number }}
+          name: Pico SDK bundle for web IDE — run ${{ github.run_number }}
+          body: |
+            Pico SDK static libs, startup objects, linker script, and public
+            headers, prebuilt with arm-none-eabi-gcc. Consumed by the browser
+            IDE's Clang+LLD WASM at link time.
+
+            - Pico SDK: `${{ github.event.inputs.pico_sdk_version }}`
+            - picotool: `${{ github.event.inputs.picotool_version }}`
+            - PICO_BOARD: `pico2`
+            - CI run: #${{ github.run_number }}
+          files: |
+            web-sdk.tar.gz
+          fail_on_unmatched_files: true

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pico-poe"
+version = "1.0.0"
+description = "CLI tool for managing PICO-POE devices"
+requires-python = ">=3.9"
+dependencies = [
+    "click>=8.0",
+    "httpx>=0.24",
+]
+
+[project.scripts]
+pico-poe = "pico_poe_cli.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pico_poe_cli*"]

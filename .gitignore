@@ -1,16 +1,31 @@
-# KiCad-focused ignore rules for this repository.
-# Keep source/project files tracked (schematics, PCB, symbols, footprints, 3D models)
-# and ignore local state, autosaves, generated backups, and OS junk.
+# PICO-POE repository ignore rules.
+#
+# Tracked: source (firmware/, web/*.{html,css,js}, tools/), KiCad project
+# files (schematics, PCB, BOM-source), CI workflows, top-level docs, and
+# the per-dir .gitignore that keeps firmware/keys/ as a tracked directory
+# without its secret contents.
+#
+# Heavy or generated artefacts (firmware build/, the WASM clang+lld bundle,
+# the Pico SDK web bundle) are produced by GitHub Actions and not committed.
+# See .github/workflows/build-llvm-box-arm.yml and build-web-sdk.yml.
 
-# OS junk
+# ---- OS junk ---------------------------------------------------------------
 .DS_Store
+._*
+Thumbs.db
 
-# KiCad local state / machine-specific files
-*.kicad_prl
-*.lck
+# ---- Editor / IDE ---------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .history
 
-# KiCad temporary/autosave files
+# ---- KiCad: machine-local state, autosaves, derived exports --------------
+*.kicad_prl
+*.lck
+
 *.000
 *.bak
 *.bck
@@ -20,15 +35,12 @@
 *-save.pro
 *-save.kicad_pcb
 _autosave-*
-*~
 ~*
 #auto_saved_files#
 fp-info-cache
 
-# KiCad backups
 *-backups/
 
-# KiCad export/derived artifacts
 *.net
 *.dsn
 *.ses
@@ -36,3 +48,54 @@ hardware/**/*.csv
 hardware/**/*.xml
 **/production/*
 fabrication-toolkit-options.json
+
+# ---- Firmware build outputs ----------------------------------------------
+firmware/build/
+*.uf2
+*.elf
+*.bin
+*.hex
+*.map
+# The keys/ directory itself is tracked (so the layout is documented) but
+# its contents are excluded by firmware/keys/.gitignore. Re-allow that
+# per-dir gitignore so the directory survives in the worktree.
+!firmware/keys/.gitignore
+
+# ---- Python tooling (tools/pico-poe/ and any helper scripts) -------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Web IDE: heavy / generated assets -----------------------------------
+# The WASM clang+lld toolchain (~580 MB unpacked) is built by
+# .github/workflows/build-llvm-box-arm.yml and downloaded from a Release.
+# The pico-sdk web bundle (~10 MB) is built by build-web-sdk.yml.
+# Local builds populate web/assets/ — never commit it.
+web/assets/
+
+# Emception's own build state lives inside the submodule. Belt-and-suspenders
+# rule from this side too, since the submodule's gitignore is independent.
+web/lib/emception/build/
+web/lib/emception/upstream/
+
+# ---- Logs / scratch -------------------------------------------------------
+*.log
+
+# ---- Defensive: never commit Claude Code per-project state ---------------
+# Claude Code keeps its plans/memory/transcripts in ~/.claude/, not in the
+# project tree, but this guards against accidents (e.g. a misconfigured
+# hook writing into the repo).
+.claude/
+CLAUDE.local.md
+# also not commiting Memory
+CLAUDE.md

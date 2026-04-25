@@ -1,0 +1,52 @@
+Two Emception build-script tweaks needed for the pico-poe browser IDE:
+
+1. Enable the LLVM ARM backend in Emception's WASM build, so the resulting
+   clang can cross-compile C source for ARM Cortex-M33 (thumbv8m.main-none-eabi)
+   targets — used by the browser IDE to build RP2350 firmware.
+   The value is double-quoted so bash keeps the semicolon literal; cmake
+   then sees "WebAssembly;ARM" as a list.
+
+2. Make the native wasm-package helper compile on macOS. Upstream uses
+   `status.st_atim.tv_sec` / `status.st_mtim.tv_sec`, which are Linux
+   timespec field names; macOS calls them `st_atimespec`/`st_mtimespec`.
+   Defining the field aliases at compile time keeps the source unchanged
+   and still works on Linux (where `st_atim` is already the native name).
+
+Applied against the Emception submodule at web/lib/emception/ before running
+./build.sh (or ./build-with-docker.sh when going the CI route).
+
+diff --git a/build-llvm.sh b/build-llvm.sh
+--- a/build-llvm.sh
++++ b/build-llvm.sh
+@@ -43,7 +43,7 @@ if [ ! -d $LLVM_NATIVE/ ]; then
+         -S $LLVM_SRC/llvm/ \
+         -B $LLVM_NATIVE/ \
+         -DCMAKE_BUILD_TYPE=Release \
+-        -DLLVM_TARGETS_TO_BUILD=WebAssembly \
++        -DLLVM_TARGETS_TO_BUILD="WebAssembly;ARM" \
+         -DLLVM_ENABLE_PROJECTS="clang"
+ fi
+ cmake --build $LLVM_NATIVE/ -- llvm-tblgen clang-tblgen
+@@ -61,7 +61,7 @@ if [ ! -d $LLVM_BUILD/ ]; then
+         -S $LLVM_SRC/llvm/ \
+         -B $LLVM_BUILD/ \
+         -DCMAKE_BUILD_TYPE=Release \
+-        -DLLVM_TARGETS_TO_BUILD=WebAssembly \
++        -DLLVM_TARGETS_TO_BUILD="WebAssembly;ARM" \
+         -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
+         -DLLVM_ENABLE_DUMP=OFF \
+         -DLLVM_ENABLE_ASSERTIONS=OFF \
+diff --git a/tooling/wasm-package/compile.sh b/tooling/wasm-package/compile.sh
+--- a/tooling/wasm-package/compile.sh
++++ b/tooling/wasm-package/compile.sh
+@@ -13,4 +13,9 @@ SRC=$(realpath $SRC)
+ BUILD=$(realpath $BUILD)
+ WASM_UTILS=$(realpath $WASM_UTILS)
+
+-clang++ -O3 -I$WASM_UTILS -std=c++20 $WASM_UTILS/*.cpp $SRC/wasm-package.cpp -o $BUILD/wasm-package
++# On macOS, stat fields are named st_atimespec/st_mtimespec instead of the
++# Linux st_atim/st_mtim; alias them via -D so the source compiles unchanged.
++EXTRA_CXX=""
++case "$(uname)" in Darwin) EXTRA_CXX="-Dst_atim=st_atimespec -Dst_mtim=st_mtimespec" ;; esac
++
++clang++ -O3 $EXTRA_CXX -I$WASM_UTILS -std=c++20 $WASM_UTILS/*.cpp $SRC/wasm-package.cpp -o $BUILD/wasm-package

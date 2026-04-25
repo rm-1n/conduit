@@ -1,0 +1,69 @@
+/*
+ * Copyright (c) Rob Scott, with portions copyrighted as below
+ *
+ * Copyright (c) 2021 Sandeep Mistry
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Modified for PICO-POE board pin mapping.
+ */
+
+// GPIO assignments for PICO-POE board
+.define public PICO_RMII_ETHERNET_SM_RX       1
+.define public PICO_RMII_ETHERNET_SM_TX       0
+.define public PICO_RMII_ETHERNET_RX_PIN      6  // rx pin start: RX0(GP6), RX1(GP7), CRS_DV(GP8)
+.define public PICO_RMII_ETHERNET_TX_PIN     10  // tx pin start: TX0(GP10), TX1(GP11), TX_EN(GP12)
+.define public PICO_RMII_ETHERNET_MDIO_PIN   14
+.define public PICO_RMII_ETHERNET_MDC_PIN    15
+.define public PICO_RMII_ETHERNET_RETCLK_PIN 21
+
+// Enable generation of MDIO clock
+.define public GENERATE_MDIO_CLK 0
+
+// Enable LAN8720a reset via GPIO (GP28)
+.define public PICO_RMII_ETHERNET_RST_PIN     28
+
+// PIO program: Use generated RMII clk from transmit PIO code
+// Assumes that we're running at 100 MHz, 2 times faster than RMII clk
+.define public GENERATE_RMII_CLK 1
+.program rmii_ethernet_phy_rx_data
+.wrap_target
+start:
+    wait 1 pin 2      ; Wait for CR_DV assertion
+    wait 1 pin 1 [2]  ; Wait for Start of Frame Delimiter, align to sample clk
+sample:
+    in pins, 2        ; accumulate di-bits
+    jmp PIN, sample   ; as long as CRS_DV is asserted (on a byte boundary)
+    irq set 0         ; Signal end of active packet
+.wrap
+
+% c-sdk {
+
+static inline void rmii_ethernet_phy_rx_init(PIO pio, uint sm, uint offset, uint pin, float div) {
+
+    // Make RX[1:0], CRS_DV inputs
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 3, false);
+
+    pio_sm_config c = rmii_ethernet_phy_rx_data_program_get_default_config(offset);
+
+    sm_config_set_in_pins(&c, pin);
+
+    // Set jump pin to CR_DV
+    sm_config_set_jmp_pin(&c, pin+2);
+
+    // Set up pins
+    pio_gpio_init(pio, pin);      // RX0
+    pio_gpio_init(pio, pin + 1);  // RX1
+    pio_gpio_init(pio, pin + 2);  // CRS (data valid)
+
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+    sm_config_set_in_shift(&c, true, true, 8);
+
+    // Run at given RMII clock multiplier
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

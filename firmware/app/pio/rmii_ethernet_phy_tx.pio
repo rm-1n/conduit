@@ -1,0 +1,119 @@
+/*
+ * Copyright (c) 2025 Rob Scott, with portions copyrighted as below
+ *
+ * Copyright (c) 2021 Sandeep Mistry
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+
+.program rmii_ethernet_phy_tx_data
+
+// Generate RMII clock from PIO program
+.side_set 1   // RMII clk pin
+
+    // Generate preamble: Assert DV, and Tx<1> - 0, with Tx<0> - 1
+    // Preamble is seven bytes of 0x55, followed by one byte of 0x57
+    // Each byte is four RMII clocks, so preamble is 32 RMII clocks
+    // Thus, we send 31 dibits of 0b00, 1 dibit of 0b11
+
+preamb:
+    set pins, 0b101  side 0       // Assert DV, Tx<1:0> 0b01
+//    set x, 29        side 1       // Remaining preamble: 30 0b01 dibits
+
+///*
+    out x, 8         side 1
+    in x, 8          side 0
+    out x, 8         side 1
+    in x, 24         side 0
+    set x, 27        side 1      // Remaining clocks for preamble
+//*/
+
+p_loop:
+    set y, 22        side 0       // Setup for IPG inner loop (23 2*RMII)
+    jmp x--, p_loop  side 1       // Do for 31 RMII clocks
+
+    set pins, 0b111  side 0       // Final preamble bit
+    mov x, ISR       side 1       // Get packet length from buffer
+
+/*
+    // Now transmit data until FIFO is empty 
+xmit:
+    out pins, 2      side 0       // Send two bits of TX data
+    jmp !osre, xmit  side 1       // Loop until all data sent
+*/
+
+///*
+    // Now transmit data until packet count exhausted
+xmit:
+    out pins, 2      side 0       // Send two bits of TX data
+    jmp x--, xmit    side 1       // Loop until all data sent
+//*/
+    // Do Inter Packet Gap (IPG) - 960 ns, 48 RMII dibit clks
+    // Delay 47 clocks here, then 1 clock for Tx queue status
+    // Loop count is: 23 * 2/RMII clks = 46
+ipg:
+    set pins, 0b000  side 0       // Set RMII TX bus to idle
+    nop              side 1
+    nop              side 0
+    jmp y--, ipg     side 1       // Do IPG wait, 2 RMII clocks per loop
+
+    nop              side 0
+    nop              side 1
+    
+public tx_start:                  // Entry point
+.wrap_target
+    mov x, status    side 0       // Get Tx not empty status
+    jmp !x, preamb   side 1       // Start preamble if there's work to do
+.wrap
+
+% c-sdk {
+
+static inline void rmii_ethernet_phy_tx_init(PIO pio, uint sm, uint offset,
+       uint pio_start, uint base_pin, uint retclk_pin, float div) {
+
+    // Use TX_[0,1,EN] in PIO mode
+    pio_gpio_init(pio, base_pin);
+    pio_gpio_init(pio, base_pin + 1);
+    pio_gpio_init(pio, base_pin + 2);
+
+    // Set TX_[0,1,EN] as output
+    pio_sm_set_consecutive_pindirs(pio, sm, base_pin, 3, true);
+
+    // Init config with default values
+    pio_sm_config c = rmii_ethernet_phy_tx_data_program_get_default_config(offset);
+
+    // Only use Tx<1:0> in output pin set
+    sm_config_set_out_pins(&c, base_pin, 2);
+
+    // Include Tx<1:0>, EN in set pin set
+    sm_config_set_set_pins(&c, base_pin, 3);
+
+    // Side set RMII clock 
+    pio_gpio_init(pio, retclk_pin);
+    sm_config_set_sideset_pins(&c, retclk_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, retclk_pin, 1, true);
+
+    // Make TX FIFO eight entries deep
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    // TX data is byte sized
+    sm_config_set_out_shift(&c, true, true, 8);
+
+    // Shift ISR data from MSB to LSB
+    sm_config_set_in_shift(&c, true, false, 0);
+
+    // Run at 100 MHz
+    sm_config_set_clkdiv(&c, div);
+
+    // Calculate absolute starting address of PIO program
+    uint32_t abs_start = offset + pio_start;
+    pio_sm_init(pio, sm, abs_start, &c);
+
+    // Set "mov x, status" threshold to Tx FIFO level 1 
+    hw_clear_bits(&pio->sm[sm].execctrl, PIO_SM0_EXECCTRL_STATUS_N_BITS); 
+    hw_set_bits(&pio->sm[sm].execctrl, 1 << PIO_SM0_EXECCTRL_STATUS_N_LSB);
+
+    // Start Tx clock
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

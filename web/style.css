@@ -1,0 +1,384 @@
+:root {
+  --bg: #0d1117;
+  --card: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text2: #8b949e;
+  --accent: #58a6ff;
+  --accent-hover: #79c0ff;
+  --green: #3fb950;
+  --red: #f85149;
+  --orange: #d29922;
+  --radius: 6px;
+  --topbar-h: 56px;
+  --upload-h: 0px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f8fa;
+    --card: #ffffff;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text2: #656d76;
+    --accent: #0969da;
+    --accent-hover: #0550ae;
+    --green: #1a7f37;
+    --red: #cf222e;
+    --orange: #9a6700;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+.hidden { display: none !important; }
+
+/* ---- Top bar ---- */
+#app.ide-only {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+}
+
+.topbar {
+  height: var(--topbar-h);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 1rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: fit-content;
+}
+.brand h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: 0.02em; }
+.brand-sub { color: var(--text2); font-size: 0.8rem; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.toolbar-label {
+  color: var(--text2);
+  font-size: 0.8rem;
+  margin-right: 0.15rem;
+}
+.sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 0.25rem;
+}
+
+.status-chip {
+  color: var(--text2);
+  font-size: 0.8rem;
+  padding: 0 0.5rem;
+  min-width: 6ch;
+}
+
+/* ---- Inputs, buttons ---- */
+input[type="text"], input[type="password"], select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 0.35rem 0.55rem;
+  font-size: 0.85rem;
+  outline: none;
+  font-family: inherit;
+}
+input[type="text"]:focus, input[type="password"]:focus, select:focus {
+  border-color: var(--accent);
+}
+
+#ide-quick-ip { width: 14ch; }
+#ide-auth-token { width: 11ch; }
+#ide-device-select { min-width: 18ch; max-width: 28ch; }
+
+button {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-weight: 500;
+  font-family: inherit;
+}
+button:hover { background: var(--card); border-color: var(--text2); }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text2);
+}
+.btn-ghost:hover { color: var(--text); }
+
+.btn-mini {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+}
+
+/* ---- Upload progress strip (under topbar, across whole width) ---- */
+.upload-status {
+  flex: 0 0 auto;
+  padding: 0.35rem 1rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.upload-status .progress-bar { flex: 1 1 auto; margin: 0; }
+.upload-status #ide-upload-msg { color: var(--text2); font-size: 0.8rem; min-width: 24ch; }
+
+.progress-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.2s;
+}
+
+/* ---- Main 2x2 layout ---- */
+.ide-layout {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-gap: 1px;
+  background: var(--border);
+  min-height: 0;
+}
+
+.pane {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.editor-pane { grid-column: 1; grid-row: 1; }
+.side-panes {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-rows: 0.8fr 1.6fr 1fr;
+  grid-gap: 1px;
+  background: var(--border);
+  min-height: 0;
+}
+.log-pane       { grid-row: 1; }
+.telemetry-pane { grid-row: 2; }
+.console-pane   { grid-row: 3; }
+
+/* Telemetry pane internals */
+.chart-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  background: var(--card);
+}
+#ide-chart-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.cmd-strip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+  font-size: 0.78rem;
+}
+.cmd-strip .cmd-label {
+  color: var(--text2);
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cmd-strip .cmd-num {
+  width: 4em;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.cmd-strip .cmd-text {
+  width: 8em;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.cmd-strip .cmd-text-wide { width: 12em; }
+.cmd-strip .cmd-select {
+  background: var(--bg);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 0.72rem;
+}
+.cmd-strip .cmd-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 0.2rem;
+}
+.cmd-log {
+  flex: 1 1 14em;
+  min-width: 8em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  min-height: 32px;
+}
+.pane-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text2);
+  font-weight: 600;
+}
+.pane-hint {
+  color: var(--text2);
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+.pane-header .btn-mini { margin-left: auto; }
+.pane-header .pane-hint + .btn-mini { margin-left: 0; }
+
+/* Monaco fills the editor pane. */
+#ide-source.ide-monaco {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text2);
+  overflow: hidden;
+}
+#ide-source.ide-monaco .monaco-editor { padding: 0; }
+
+/* Build log + runtime console share the same pre styling (mono, scrollable). */
+#ide-log, #ide-console {
+  flex: 1 1 auto;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  min-height: 0;
+}
+#ide-log { color: var(--text2); }
+
+.terminal {
+  background: #0a0d12;
+  color: #c4d1de;
+}
+@media (prefers-color-scheme: light) {
+  .terminal { background: #1b1f24; color: #d0d7de; }
+}
+
+code {
+  background: var(--card);
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+/* Narrow viewport: stack side panes under editor. */
+@media (max-width: 960px) {
+  .ide-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(260px, 1fr) minmax(360px, 1fr);
+  }
+  .editor-pane { grid-column: 1; grid-row: 1; }
+  .side-panes {
+    grid-column: 1;
+    grid-row: 2;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+  .log-pane       { grid-row: 1; grid-column: 1; }
+  .telemetry-pane { grid-row: 1; grid-column: 2; }
+  .console-pane   { grid-row: 2; grid-column: 1 / span 2; }
+}
+@media (max-width: 620px) {
+  .topbar { flex-wrap: wrap; height: auto; padding: 0.5rem; }
+  .toolbar { flex-wrap: wrap; }
+  .side-panes {
+    grid-template-columns: 1fr;
+    grid-template-rows: 0.8fr 1.6fr 1fr;
+  }
+  .log-pane       { grid-row: 1; grid-column: 1; }
+  .telemetry-pane { grid-row: 2; grid-column: 1; }
+  .console-pane   { grid-row: 3; grid-column: 1; }
+}
