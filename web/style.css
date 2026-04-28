@@ -213,18 +213,28 @@ button[aria-pressed="true"], button.is-active {
   color: var(--accent-hover);
 }
 
-/* ---- Upload progress strip ---- */
+/* ---- Upload progress strip — lives at the bottom of the build-log
+   pane (web/index.html). Hidden until ide.js drops the .hidden class
+   on it. Borrows the pane-header's chrome (top border + subdued bg)
+   so it reads as part of the same surface. */
 .upload-status {
   flex: 0 0 auto;
-  padding: 0.4rem 1rem;
+  padding: 0.35rem 0.75rem;
   background: var(--card);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem;
 }
-.upload-status .progress-bar { flex: 1 1 auto; margin: 0; }
-.upload-status #ide-upload-msg { color: var(--text2); font-size: 0.78rem; min-width: 24ch; }
+.upload-status .progress-bar  { flex: 1 1 auto; margin: 0; }
+.upload-status #ide-upload-msg {
+  color: var(--text2);
+  font-size: 0.74rem;
+  min-width: 18ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .progress-bar {
   height: 4px;
@@ -451,15 +461,18 @@ code {
    the telemetry pane outright via the topbar toggle. */
 .plots-container {
   flex: 1 1 auto;
-  min-height: 200px;
+  min-height: 220px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   background: var(--bg-soft);
 }
 .plot {
-  flex: 1 1 200px;
-  min-height: 180px;
+  flex: 1 1 220px;
+  /* Ensures the trace area stays legible when several plots stack —
+     below this we let .plots-container's overflow-y kick in and add a
+     scrollbar instead of squeezing every plot into invisibility. */
+  min-height: 220px;
   display: flex;
   flex-direction: column;
   border-bottom: 1px solid var(--border);
@@ -526,12 +539,9 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   background: var(--bg);
   outline: none;
 }
-.plot-info {
-  color: var(--text3);
-  font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.72rem;
-}
+/* .plot-info was removed — recording-volume info is now shown once at
+   the telemetry pane header (#ide-telemetry-stats), since the data is
+   centrally owned by the dataStore and not by individual plots. */
 .chart-wrap {
   flex: 1 1 auto;
   min-height: 0;
@@ -561,20 +571,21 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
 }
 .u-title { color: var(--text); }
 
-/* Legend in normal flow below the chart — uPlot accounts for it in the
-   overall height, so the canvas above shrinks to make room rather than
-   getting overlaid. Compact, single-row when possible.  */
+/* Legend in normal flow below the chart — uPlot doesn't include the
+   legend in its `height` arg (only the canvas + axes), so .chart-wrap
+   has to leave room for it. CHROME_H in chart.js is sized to match
+   this padding; bump them together if you change either. */
 .u-legend {
   background: var(--card-soft);
   border-top: 1px solid var(--border-soft);
   color: var(--text);
   font-size: 0.7rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  padding: 3px 8px;
+  padding: 1px 8px;
   text-align: left;
 }
 .u-legend table { border-collapse: collapse; margin: 0 auto; }
-.u-legend th, .u-legend td { padding: 1px 6px; }
+.u-legend th, .u-legend td { padding: 0 6px; line-height: 1.25; }
 .u-legend tr { display: inline-table; vertical-align: middle; }
 .u-legend .u-marker { width: 10px; height: 2px; }
 .u-legend .u-series th { color: var(--text2); font-weight: 500; text-align: left; }
@@ -683,13 +694,13 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
    as Build log / Runtime console headers. */
 .telemetry-console {
   /* Fixed height range (not %-based) so the plots-container above
-     gets a deterministic share of the pane. At max-height: 35% the
-     console grew with the pane and starved the chart on tall windows. */
+     gets a deterministic share of the pane. Compact: header (~30px) +
+     two-line body (~36px) — events scroll inside. */
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 100px;
-  max-height: 220px;
+  min-height: 64px;
+  max-height: 90px;
   border-top: 1px solid var(--border);
   background: var(--bg);
   overflow: hidden;

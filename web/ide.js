@@ -704,6 +704,13 @@ void pico_poe_loop(void) {
     // Wrapping in try/finally guarantees we resume even on upload errors.
     const tlm = window.PicoPoE && window.PicoPoE.telemetry;
     if (tlm && tlm.pause) tlm.pause();
+    // Same treatment for the runtime console — without this, its
+    // /api/log fetch sits half-open through the reboot and the LED
+    // stays misleadingly green for ~10 s after the device drops off
+    // the network. pauseStream flips it to 'updating…' immediately;
+    // resumeStream after commit drops cursor + reconnects.
+    const con = window.PicoPoE && window.PicoPoE.console;
+    if (con && con.pauseStream) con.pauseStream();
 
     let result;
     try {
@@ -722,17 +729,12 @@ void pico_poe_loop(void) {
         },
       });
     } finally {
-      // Resume the telemetry stream now that the device is committed and
-      // (re)online. resume() also resets cursor/currentRun so we tail
-      // from the new firmware's fresh ring counter — no stale-cursor
-      // wedge, no diagonal across the OTA in the chart.
+      // Resume both streams now that the device is committed and
+      // (re)online. resume() / resumeStream() also reset cursor/run
+      // state so we tail from the new firmware's fresh ring counter —
+      // no stale-cursor wedge, no diagonal across the OTA in the chart.
       if (tlm && tlm.resume) tlm.resume();
-    }
-
-    // After a reboot the device's log cursor resets, so tell the console
-    // to forget its cursor and re-seed to "now" on the next poll.
-    if (window.PicoPoE && window.PicoPoE.console) {
-      window.PicoPoE.console.resetCursor();
+      if (con && con.resumeStream) con.resumeStream();
     }
 
     // Refresh the device dropdown's cached entry with whatever post-OTA

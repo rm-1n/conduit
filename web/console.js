@@ -33,6 +33,12 @@
   const PENDING_MAX_CHARS  = 100_000;
   const PERSIST_BATCH_MAX  = 50;     // flush to IndexedDB after N records or…
   const PERSIST_BATCH_MS   = 250;    // …after M ms idle, whichever hits first.
+  // Connect-phase timeout — same pattern as telemetry.js. A freshly
+  // rebooted device that accepts the TCP but doesn't reply would
+  // otherwise leave runStream stuck on `await fetch(...)` indefinitely
+  // (the log stream may legitimately be silent for minutes once
+  // connected, so we DON'T add a stall watchdog post-headers).
+  const CONNECT_TIMEOUT_MS = 5000;
   // Prefix regex: "[<digits>]\t<msg>". The greedy `(.*)$` captures the entire
   // rest of the line, including any literal "[...]\t" the user may have
   // written inside their format string.
@@ -49,7 +55,9 @@
   let cursor = null;            // firmware byte-cursor; persists across reconnects
   let knownIp = null;
   let stopped = false;
-  let paused = false;
+  let paused = false;           // user "Pause output" toggle — display-only
+  let streamPaused = false;     // external OTA pause — stops the fetch entirely
+  let streamPauseWaiter = null; // promise resolver to wake streamLoop on resume
   let pendingBuf = '';          // incoming display text while paused
   let lastStateText = '';
   let lastStateCls = '';
@@ -202,20 +210,27 @@
       msg = line;
     }
 
-    // First record of a run: anchor wall-clock and open the run metadata.
+    // First record of a run: anchor wall-clock and open the run
+    // metadata. Don't await IDB on the hot path — Firefox's IDB has
+    // been observed to hang startRun() indefinitely (no resolve, no
+    // reject), wedging the entire console. Mint streamEpoch from
+    // Date.now() and persist run metadata in the background. See the
+    // matching comment in telemetry.js drain() for the full story.
     if (!currentRun) {
       const anchor = (wallMsAnchor != null) ? wallMsAnchor : Date.now();
       const offset = anchor - (uptimeUs / 1000);
-      const store = window.PicoPoE && window.PicoPoE.logStore;
-      const streamEpoch = store
-        ? await store.startRun({
-            deviceIp: knownIp || '',
-            wallMsAnchor: anchor,
-            uptimeUsAnchor: uptimeUs,
-            wallMsOffset: offset,
-          }).catch(() => Date.now())
-        : Date.now();
+      const streamEpoch = Date.now();
       currentRun = { streamEpoch, wallMsOffset: offset, lastUptimeUs: uptimeUs };
+      const store = window.PicoPoE && window.PicoPoE.logStore;
+      if (store && store.startRun) {
+        store.startRun({
+          streamEpoch,
+          deviceIp: knownIp || '',
+          wallMsAnchor: anchor,
+          uptimeUsAnchor: uptimeUs,
+          wallMsOffset: offset,
+        }).catch(() => { /* non-fatal — run-index entry is for export only */ });
+      }
     }
 
     const wallMs = currentRun.wallMsOffset + (uptimeUs / 1000);
@@ -253,17 +268,47 @@
     const since = cursor === null ? 0 : cursor;
     const url = `http://${ip}/api/log?since=${since}&stream=1`;
     wallMsAnchor = Date.now();  // consumed by the first record of this run
-    const res = await fetch(url, { mode: 'cors', cache: 'no-store', signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
+    // Track first-byte arrival so the connect-timeout below can decide
+    // whether to abort. Logs may be silent for long periods after the
+    // connect lands — we ONLY want the timeout to fire if the response
+    // never started, not if the device is just quiet.
+    let firstByteSeen = false;
+    const connectTimer = setTimeout(() => {
+      if (!firstByteSeen && activeAbort && !signal.aborted) {
+        try { activeAbort.abort(); } catch (_) {}
+      }
+    }, CONNECT_TIMEOUT_MS);
+
+    let res;
+    try {
+      res = await fetch(url, { mode: 'cors', cache: 'no-store', signal });
+    } catch (e) {
+      clearTimeout(connectTimer);
+      throw e;
+    }
+    if (!res.ok) { clearTimeout(connectTimer); throw new Error(`HTTP ${res.status}`); }
+
+    // Same defensive cursor handling as telemetry.js: only adopt the
+    // server-reported cursor when the header is actually exposed.
+    // If absent (CORS quirk on an error response, etc), keep the
+    // existing cursor — falling back to 0 would make the next
+    // &since= request too low and the device would replay already-
+    // received bytes.
     const startHdr = res.headers.get('X-Log-Cursor');
-    const startCursor = startHdr === null ? 0 : Number(startHdr);
-    cursor = Number.isFinite(startCursor) ? startCursor : 0;
+    if (startHdr !== null) {
+      const startCursor = Number(startHdr);
+      if (Number.isFinite(startCursor)) cursor = startCursor;
+    } else if (cursor == null) {
+      cursor = 0;
+    }
 
     if (consoleEl.textContent.startsWith('── connecting')) {
       consoleEl.textContent = '';
     }
     setState('connected', 'ok');
+    firstByteSeen = true;
+    clearTimeout(connectTimer);
 
     const reader = res.body.getReader();
     const dec = new TextDecoder('utf-8', { fatal: false });
@@ -286,6 +331,18 @@
 
   async function streamLoop() {
     while (!stopped) {
+      // External pause (OTA flow). Block here until resume() — the
+      // alternative was leaving the /api/log fetch open across the
+      // device's reboot, which keeps the LED green even though the
+      // device is unreachable for ~10 s. Distinct from `paused` (the
+      // user "Pause output" button), which only freezes the display.
+      if (streamPaused) {
+        setState('updating…', '');
+        await new Promise((r) => { streamPauseWaiter = r; });
+        streamPauseWaiter = null;
+        if (stopped) break;
+        continue;
+      }
       const ip = getIp();
       if (ip !== knownIp) {
         knownIp = ip;
@@ -382,7 +439,30 @@
         stopped = true;
         persistFlush();
         if (activeAbort) activeAbort.abort();
+        if (streamPauseWaiter) { streamPauseWaiter(); streamPauseWaiter = null; }
         if (ipWatchHandle) { clearInterval(ipWatchHandle); ipWatchHandle = null; }
+      },
+      // External "pause the whole stream" for OTA flows. ide.js calls
+      // pauseStream() before kicking the upload so the LED flips to
+      // 'updating…' (off color) instead of staying green through the
+      // device's reboot. resumeStream() drops the cursor (the new
+      // firmware's log byte-counter starts at 0) and wakes streamLoop;
+      // the next loop iteration reconnects, runStream's setState on
+      // header receive flips the LED back to green — or, if the device
+      // never came back, the catch path in streamLoop sets red.
+      pauseStream() {
+        if (streamPaused) return;
+        streamPaused = true;
+        if (activeAbort) activeAbort.abort();
+        persistFlush();
+      },
+      resumeStream() {
+        if (!streamPaused) return;
+        streamPaused = false;
+        cursor = null;
+        currentRun = null;
+        lastUptimeUs = null;
+        if (streamPauseWaiter) { streamPauseWaiter(); streamPauseWaiter = null; }
       },
       setPaused,
       isPaused() { return paused; },

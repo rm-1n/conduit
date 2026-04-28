@@ -75,17 +75,20 @@
     return dbPromise;
   }
 
-  // Record a new run's metadata. Returns the streamEpoch which callers use
-  // as the partition key for append().
-  async function startRun({ deviceIp, wallMsAnchor, uptimeUsAnchor, wallMsOffset }) {
+  // Record a new run's metadata. Returns the streamEpoch which callers
+  // use as the partition key for append(). If the caller passes a
+  // streamEpoch we honor it (so callers can pre-mint the ID and persist
+  // in the background without awaiting); otherwise we derive from
+  // wallMsAnchor.
+  async function startRun({ streamEpoch, deviceIp, wallMsAnchor, uptimeUsAnchor, wallMsOffset }) {
     const db = await open();
-    const streamEpoch = wallMsAnchor; // unique enough; ties are impossibly rare
+    const epoch = (streamEpoch != null) ? streamEpoch : wallMsAnchor;
     await new Promise((resolve, reject) => {
       const t = db.transaction([STORE_RUNS], 'readwrite');
       t.onerror = () => reject(t.error);
       t.oncomplete = () => resolve();
       t.objectStore(STORE_RUNS).put({
-        stream_epoch: streamEpoch,
+        stream_epoch: epoch,
         device_ip: deviceIp || '',
         wall_ms_anchor: wallMsAnchor,
         uptime_us_anchor: uptimeUsAnchor,
@@ -94,7 +97,7 @@
         schema: {},  // populated by setRunSchema as channels register
       });
     });
-    return streamEpoch;
+    return epoch;
   }
 
   // Update the schema map for an existing run. Called by telemetry.js

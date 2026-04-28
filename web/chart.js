@@ -1,50 +1,48 @@
 // chart.js — uPlot-backed live telemetry charts.
 //
-// Multi-instance: each Chart owns its own buffer + uPlot canvas + controls,
-// stacked vertically inside the telemetry pane. Telemetry pushes fan out
-// to every Chart, which decides whether to ingest based on its own
-// channel filter. The classic single-plot UX is preserved by default —
-// one chart starts mounted, showing every channel.
+// Architecture: plots are PURE DISPLAYS over the central in-memory time-
+// series store (window.PicoPoE.dataStore). Each Chart owns a uPlot
+// canvas + per-plot view config (window length, channel filter, legend
+// visibility, per-plot zoom-cutoff) but NOT the underlying samples.
+// Every render slices the dataStore for the requested wall-clock window
+// and pushes a fresh frame into uPlot.
+//
+// Why: previously each plot maintained its own ring buffer (xs[],
+// series[name].values[]). Adding a second plot at t=5min and a third at
+// t=8min produced three plots showing different ranges of the same data
+// (4.19 MB / 797 KB / 320 KB in the prior screenshot) — confusing,
+// because the data is identical; only WHEN-the-plot-was-added differed.
+// dataStore is the single source of truth; the recording-volume readout
+// lives ONCE in the telemetry-pane header (#ide-telemetry-stats).
 //
 // External API (kept stable so telemetry.js doesn't need to change):
-//   window.PicoPoE.chart.push({ name, n, values, wallMs, ... })  // → all charts
-//   window.PicoPoE.chart.clear()                                  // → all charts
-//   window.PicoPoE.chart.reset()                                  // → all charts
-//   window.PicoPoE.chart.gap()                                    // → all charts
+//   window.PicoPoE.chart.push({ name, n, dtype, wallMs, values })
+//                                                      → notify all charts
+//   window.PicoPoE.chart.clear()                       → all charts (per-plot cutoff)
+//   window.PicoPoE.chart.reset()                       → all charts (full rebuild)
+//   window.PicoPoE.chart.gap()                         → no-op (gaps detected from wallMs deltas)
 //
 // Multi-plot API:
 //   window.PicoPoE.charts.list()              → Chart[]
-//   window.PicoPoE.charts.add(opts?)          → Chart   // create + register
+//   window.PicoPoE.charts.add(opts?)          → Chart
 //   window.PicoPoE.charts.remove(id)          → bool
-//   window.PicoPoE.charts.persist()           → ()      // save layout
-//
-// Why uPlot: purpose-built for high-density time-series tail. Renders
-// 100k+ points smoothly at 60 fps, ~30 KB min+gz. Loaded from a CDN.
-//
-// Per-chart data model:
-//   xs[]            — time axis in seconds (unix epoch). Same-tick records
-//                     (multiple transmit() in one device loop iter) collapse
-//                     to a single x-index via TICK_TOLERANCE_S.
-//   series[name]    — { idx, values, color } where values is null-padded
-//                     to xs.length.
-//   channelFilter   — null = accept all; Set<string> = accept only those.
+//   window.PicoPoE.charts.persist()           → ()
 
 (function () {
   'use strict';
 
   // ---------------------------------------------------------------------
-  // Module-level constants + helpers (stateless, shared across charts).
+  // Module-level constants + helpers
   // ---------------------------------------------------------------------
 
-  const BUFFER_DURATION_S  = 5 * 60;
-  const TRIM_AFTER_PUSHES  = 256;
-  const SETDATA_MIN_MS     = 33;
-  const DEFAULT_WINDOW_S   = 10;
-  const TICK_TOLERANCE_S   = 0.0005;
-  const GAP_THRESHOLD_S    = 0.5;
-  // Reserved chrome height inside each chart for the uPlot bottom-axis +
-  // legend (lives below the canvas, overflows .chart-wrap).
-  const CHROME_H = 56;
+  const SETDATA_MIN_MS    = 33;          // throttle uPlot.setData → ~30 fps
+  const DEFAULT_WINDOW_S  = 10;
+  const GAP_THRESHOLD_S   = 0.5;
+  // Reserved height inside .chart-wrap for uPlot's legend (which sits
+  // BELOW the canvas and isn't part of uPlot's `height` opt). Sized to
+  // match .u-legend padding/line-height in style.css — bump together if
+  // either changes.
+  const CHROME_H = 28;
 
   const PALETTE = [
     '#58a6ff', '#3fb950', '#ff7b72', '#d29922',
@@ -53,8 +51,8 @@
   ];
   const colorFor = (i) => PALETTE[i % PALETTE.length];
 
-  function bisectFirst(arr, target) {
-    let lo = 0, hi = arr.length;
+  function bisectFirst(arr, target, len) {
+    let lo = 0, hi = (len != null) ? len : arr.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
       if (arr[mid] < target) lo = mid + 1;
@@ -100,6 +98,39 @@
   }
 
   // ---------------------------------------------------------------------
+  // Central recording-volume readout — one element, fed by dataStore.
+  // ---------------------------------------------------------------------
+
+  let centralStatsEl = null;
+  let centralStatsPending = false;
+
+  function scheduleCentralStats() {
+    if (centralStatsPending) return;
+    centralStatsPending = true;
+    requestAnimationFrame(() => {
+      centralStatsPending = false;
+      updateCentralStats();
+    });
+  }
+
+  function updateCentralStats() {
+    if (!centralStatsEl) centralStatsEl = document.getElementById('ide-telemetry-stats');
+    if (!centralStatsEl) return;
+    const ds = window.PicoPoE && window.PicoPoE.dataStore;
+    if (!ds) { centralStatsEl.textContent = ''; return; }
+    const s = ds.stats();
+    if (s.channels === 0 || s.samples === 0) {
+      centralStatsEl.textContent = '';
+      return;
+    }
+    const span = (s.sessionStartWallMs != null && s.sessionEndWallMs != null)
+      ? (s.sessionEndWallMs - s.sessionStartWallMs) / 1000 : 0;
+    centralStatsEl.textContent =
+      `${s.channels} ch · ${s.samples.toLocaleString()} pts · ` +
+      `${fmtBytes(s.approxBytes)} · ${fmtDuration(span)}`;
+  }
+
+  // ---------------------------------------------------------------------
   // Chart class — one instance per plot widget.
   // ---------------------------------------------------------------------
 
@@ -107,36 +138,35 @@
 
   class Chart {
     constructor(opts = {}) {
-      this.id        = opts.id      || `plot-${Date.now()}-${nextChartSeq++}`;
-      this.title     = opts.title   || (nextChartSeq <= 2 ? 'Plot' : `Plot ${nextChartSeq - 1}`);
-      this.windowS   = opts.windowS || DEFAULT_WINDOW_S;
-      // null = accept every channel; Array<string> = whitelist.
+      this.id      = opts.id    || `plot-${Date.now()}-${nextChartSeq++}`;
+      this.title   = opts.title || (nextChartSeq <= 2 ? 'Plot' : `Plot ${nextChartSeq - 1}`);
+      this.windowS = opts.windowS || DEFAULT_WINDOW_S;
+      // null = accept every channel; Set<string> = whitelist.
       this.channelFilter = Array.isArray(opts.channels) && opts.channels.length > 0
         ? new Set(opts.channels) : null;
-      // Per-series visibility state restored from persistence — keys are
-      // channel names, values are boolean. Anything missing defaults to
-      // visible. Driven by the legend chip clicks.
+      // Per-series visibility restored from persistence — keys are the
+      // legend-row label (channel name OR `${name}[${k}]` for vector
+      // components). Anything missing defaults to visible.
       this.seriesShow = opts.seriesShow ? new Map(Object.entries(opts.seriesShow))
                                         : new Map();
 
-      // Buffer state.
-      this.xs = [];
-      this.series = new Map();
-      this.gapIdx = new Set();
-      this.lastT = 0;
+      // Channel metadata (NOT samples). dataStore owns the bytes.
+      // name → { color, n, dtype }.
+      this.knownChannels = new Map();
+
+      // Per-plot "clear" cutoff — only this plot hides earlier samples;
+      // dataStore is unaffected (so other plots and the HDF5 export keep
+      // seeing the full session). null = no cutoff.
+      this.clearedSinceMs = null;
 
       // Render state.
       this.uplot = null;
       this.paused = false;
       this.userZoomed = false;
-      this.pushesSinceTrim = 0;
       this.lastSetDataMs = 0;
       this.setDataPending = false;
-      this.infoPending = false;
       this.rebuildScheduled = false;
 
-      // DOM. parent is the container that holds all plots; the Chart
-      // builds + appends its own .plot subtree.
       this.parent = opts.parent || document.getElementById('ide-plots');
       this._buildDom();
     }
@@ -146,56 +176,65 @@
     // ------------------------------------------------------------------
 
     push(rec) {
-      if (!rec || !rec.values) return;
+      if (!rec || !rec.name) return;
       if (this.channelFilter && !this.channelFilter.has(rec.name)) return;
-      const tSec = (rec.wallMs || Date.now()) / 1000;
-      if (rec.n === 1) {
-        this._pushSample(rec.name, tSec, rec.values[0]);
-      } else {
-        for (let k = 0; k < rec.n; k++) {
-          this._pushSample(`${rec.name}[${k}]`, tSec, rec.values[k]);
-        }
-      }
-      if (++this.pushesSinceTrim >= TRIM_AFTER_PUSHES) {
-        this.pushesSinceTrim = 0;
-        this._trim();
+      // Register the channel + (re)schedule a uPlot rebuild if its shape
+      // is new. The rebuild adds the necessary series rows; the next
+      // _syncToUplot draws them.
+      const known = this.knownChannels.get(rec.name);
+      if (!known) {
+        this.knownChannels.set(rec.name, {
+          n: rec.n, dtype: rec.dtype,
+          color: colorFor(this.knownChannels.size),
+        });
+        this._scheduleRebuild();
+      } else if (known.n !== rec.n || known.dtype !== rec.dtype) {
+        // Shape drift mid-session — replace and rebuild.
+        known.n = rec.n; known.dtype = rec.dtype;
+        this._scheduleRebuild();
       }
       this._syncToUplot();
     }
 
+    // Per-plot "clear": set a cutoff at the most recent sample time. Only
+    // affects what THIS chart renders — dataStore + other plots untouched.
+    // The user can drag-zoom or change window to bring older samples back
+    // into view if they want; clearing doesn't destroy anything.
     clear() {
-      this.xs.length = 0;
-      for (const s of this.series.values()) s.values.length = 0;
-      this.gapIdx.clear();
-      this.lastT = 0;
-      if (this.uplot) this.uplot.setData(this._dataArr());
-      this._updateInfo();
-    }
-
-    reset() {
-      this.xs.length = 0;
-      this.series.clear();
-      this.gapIdx.clear();
-      this.lastT = 0;
-      this.userZoomed = false;
-      this._rebuildUplot();
-      this._updateInfo();
-    }
-
-    gap() {
-      if (this.xs.length === 0) return;
-      this.gapIdx.add(this.xs.length);
-      this.xs.push(this.xs[this.xs.length - 1] + 1e-3);
-      for (const s of this.series.values()) s.values.push(null);
+      const ds = window.PicoPoE && window.PicoPoE.dataStore;
+      this.clearedSinceMs = (ds && ds.sessionEndWallMs != null)
+        ? ds.sessionEndWallMs : Date.now();
       this._syncToUplot();
     }
+
+    // Full reset — drop known-channel registry, rebuild uPlot from scratch
+    // (no series → placeholder shows). Called on OTA / device switch
+    // alongside dataStore.resetSession() so the chart starts blank for
+    // the new firmware.
+    reset() {
+      this.knownChannels.clear();
+      this.clearedSinceMs = null;
+      this.userZoomed = false;
+      if (this.uplot) { try { this.uplot.destroy(); } catch (_) {} this.uplot = null; }
+      const placeholder = document.createElement('div');
+      placeholder.className = 'chart-placeholder';
+      placeholder.textContent = 'waiting for telemetry…';
+      this.mount.innerHTML = '';
+      this.mount.appendChild(placeholder);
+    }
+
+    // No-op: gaps are derived on the read path from wallMs deltas
+    // (> GAP_THRESHOLD_S → null inserted between samples). Callers that
+    // historically forced a gap don't need to do anything anymore.
+    gap() { /* no-op */ }
 
     destroy() {
       if (this.uplot) { try { this.uplot.destroy(); } catch (_) {} this.uplot = null; }
+      if (this.ro)    { try { this.ro.disconnect(); }   catch (_) {} this.ro = null; }
       if (this.root && this.root.parentNode) this.root.parentNode.removeChild(this.root);
     }
 
-    // Snapshot of persistable config for the layout store.
+    // Snapshot for the layout store.
     serialize() {
       const seriesShow = {};
       for (const [k, v] of this.seriesShow) seriesShow[k] = v;
@@ -218,12 +257,8 @@
       this.root = document.createElement('div');
       this.root.className = 'plot';
       this.root.dataset.id = this.id;
-      // draggable is toggled on by the drag-handle's mousedown so we
-      // don't accidentally drag the plot when grabbing a control.
       this.root.draggable = false;
 
-      // Header: drag handle + title input + window select + per-plot
-      // pause/clear/delete.
       this.header = document.createElement('div');
       this.header.className = 'plot-header';
 
@@ -232,9 +267,6 @@
       this.dragHandle.title = 'Drag to reorder plots';
       this.dragHandle.setAttribute('aria-label', 'Drag to reorder');
       if (icons) this.dragHandle.innerHTML = icons.svg('drag_indicator', { size: 14 });
-      // Mouse-down arms the drag; the actual reorder is HTML5 DnD on
-      // the .plot root. Touchstart is a no-op for now (touch DnD has
-      // its own quirks; nice-to-have, not blocking).
       this.dragHandle.addEventListener('mousedown', () => { this.root.draggable = true; });
       this.dragHandle.addEventListener('mouseup',   () => { this.root.draggable = false; });
       this.root.addEventListener('dragstart', (ev) => {
@@ -247,7 +279,6 @@
         this.root.draggable = false;
         this.root.classList.remove('dragging');
         document.body.classList.remove('plot-dragging');
-        // Clear any drop-indicator from siblings.
         for (const el of this.parent.querySelectorAll('.plot.drop-above, .plot.drop-below')) {
           el.classList.remove('drop-above', 'drop-below');
         }
@@ -257,25 +288,18 @@
       this.titleInput.type = 'text';
       this.titleInput.className = 'plot-title';
       this.titleInput.value = this.title;
-      this.titleInput.title = 'Plot title (used in HDF5 export)';
+      this.titleInput.title = 'Plot title';
       this.titleInput.addEventListener('input', () => {
         this.title = this.titleInput.value;
         emitLayoutChange();
       });
 
-      this.infoEl = document.createElement('span');
-      this.infoEl.className = 'plot-info';
-
       this.windowSel = document.createElement('select');
       this.windowSel.className = 'cmd-select';
       this.windowSel.title = 'Time window';
-      for (const [val, label] of [[10000, '10 s'], [30000, '30 s'],
-                                   [60000, '60 s'], [300000, '5 min']]) {
-        const opt = document.createElement('option');
-        opt.value = val; opt.textContent = label;
-        if (val === this.windowS * 1000) opt.selected = true;
-        this.windowSel.appendChild(opt);
-      }
+      this._windowPresets = [[10000, '10 s'], [30000, '30 s'],
+                             [60000, '60 s'], [300000, '5 min']];
+      this._refreshWindowOptions();
       this.windowSel.addEventListener('change', () => {
         this.windowS = (Number(this.windowSel.value) || 10000) / 1000;
         this.userZoomed = false;
@@ -303,8 +327,8 @@
       this.clearBtn = document.createElement('button');
       this.clearBtn.type = 'button';
       this.clearBtn.className = 'btn-ghost btn-mini btn-icon';
-      this.clearBtn.title = 'Clear plot history';
-      this.clearBtn.setAttribute('aria-label', 'Clear plot history');
+      this.clearBtn.title = 'Clear this plot (data store + other plots unaffected)';
+      this.clearBtn.setAttribute('aria-label', 'Clear this plot');
       if (icons) icons.set(this.clearBtn, 'delete', { size: 14 });
       this.clearBtn.addEventListener('click', () => this.clear());
 
@@ -318,15 +342,11 @@
 
       this.header.appendChild(this.dragHandle);
       this.header.appendChild(this.titleInput);
-      this.header.appendChild(this.infoEl);
       this.header.appendChild(this.windowSel);
       this.header.appendChild(this.pauseBtn);
       this.header.appendChild(this.clearBtn);
       this.header.appendChild(this.deleteBtn);
 
-      // Canvas mount. Channel show/hide is driven by uPlot's built-in
-      // legend (clickable series labels under the canvas) — no separate
-      // chip row needed.
       this.mount = document.createElement('div');
       this.mount.className = 'chart-wrap';
       const placeholder = document.createElement('div');
@@ -338,7 +358,6 @@
       this.root.appendChild(this.mount);
       this.parent.appendChild(this.root);
 
-      // Resize uPlot when this plot's container size changes.
       this.ro = new ResizeObserver(() => {
         if (!this.uplot || !this.mount) return;
         const h = Math.max(60, this.mount.clientHeight - CHROME_H);
@@ -346,130 +365,153 @@
       });
       this.ro.observe(this.mount);
 
-      // Double-click to release any in-flight drag-zoom.
+      // Double-click resets the visible window to the largest preset
+      // (5 min) — the single discoverable affordance for "show me
+      // everything I've recorded" after a series of zoom-ins.
       this.mount.addEventListener('dblclick', () => {
-        if (!this.userZoomed) return;
-        this.userZoomed = false;
+        this.windowS = 300;
+        this._refreshWindowOptions();
         this._syncToUplot();
         this._applyXScale();
+        emitLayoutChange();
       });
     }
 
-    _isSeriesVisible(name) {
-      return this.seriesShow.has(name) ? !!this.seriesShow.get(name) : true;
+    _isSeriesVisible(label) {
+      return this.seriesShow.has(label) ? !!this.seriesShow.get(label) : true;
     }
 
-    // ------------------------------------------------------------------
-    // Series / data ingest
-    // ------------------------------------------------------------------
-
-    _ensureSeries(name) {
-      let s = this.series.get(name);
-      if (s) return s;
-      const newIdx = this.series.size + 1;
-      const padded = new Array(this.xs.length);
-      for (let i = 0; i < this.xs.length; i++) padded[i] = null;
-      s = { idx: newIdx, values: padded, color: colorFor(this.series.size) };
-      this.series.set(name, s);
-      // Debounce: rapid back-to-back registrations (SIN then COS) coalesce
-      // into a single uPlot rebuild with both series populated.
-      this._scheduleRebuild();
-      return s;
-    }
-
-    _pushSample(name, tSec, v) {
-      const s = this._ensureSeries(name);
-      let xi;
-      const xs = this.xs;
-      if (xs.length > 0 && Math.abs(xs[xs.length - 1] - tSec) < TICK_TOLERANCE_S) {
-        xi = xs.length - 1;
-      } else {
-        if (xs.length > 0 && Math.abs(tSec - xs[xs.length - 1]) > GAP_THRESHOLD_S) {
-          this.gapIdx.add(xs.length);
-          xs.push(xs[xs.length - 1] + 1e-3);
-          for (const ss of this.series.values()) ss.values.push(null);
-        }
-        xi = xs.length;
-        xs.push(tSec);
-        this.lastT = tSec;
-        for (const ss of this.series.values()) ss.values.push(null);
-      }
-      s.values[xi] = v;
-    }
-
-    _trim() {
-      if (this.xs.length === 0) return;
-      const cutoff = this.lastT - BUFFER_DURATION_S;
-      let drop = 0;
-      while (drop < this.xs.length && this.xs[drop] < cutoff) drop++;
-      if (drop > 0) {
-        this.xs.splice(0, drop);
-        for (const s of this.series.values()) s.values.splice(0, drop);
-        if (this.gapIdx.size > 0) {
-          const kept = [];
-          for (const idx of this.gapIdx) {
-            const next = idx - drop;
-            if (next >= 0) kept.push(next);
-          }
-          this.gapIdx.clear();
-          for (const idx of kept) this.gapIdx.add(idx);
-        }
+    // Rebuild the window-selector <option> set so the dropdown always
+    // shows the current windowS as a selected entry — when the user
+    // drag-zooms to an off-preset value (say 2.4 s), we splice in a
+    // synthetic "Custom (2.4s)" option and select it. Picking any
+    // preset replaces the synthetic option on the next refresh.
+    _refreshWindowOptions() {
+      if (!this.windowSel) return;
+      const currentMs = Math.round(this.windowS * 1000);
+      const presetMs = this._windowPresets.map((p) => p[0]);
+      this.windowSel.innerHTML = '';
+      const items = presetMs.includes(currentMs)
+        ? this._windowPresets
+        : [...this._windowPresets, [currentMs, `Custom (${this.windowS.toFixed(1)}s)`]];
+      for (const [val, label] of items) {
+        const opt = document.createElement('option');
+        opt.value = val; opt.textContent = label;
+        if (val === currentMs) opt.selected = true;
+        this.windowSel.appendChild(opt);
       }
     }
 
     // ------------------------------------------------------------------
-    // uPlot setup + render
+    // uPlot setup
     // ------------------------------------------------------------------
+
+    // The flat list of legend labels — channel name for scalar channels,
+    // `${name}[${k}]` for each component of a vector channel. Order
+    // matches the columns in the data array returned by
+    // _buildRenderData() (after the leading x array).
+    _seriesLabels() {
+      const out = [];
+      for (const [name, meta] of this.knownChannels) {
+        if (meta.n === 1) out.push(name);
+        else for (let k = 0; k < meta.n; k++) out.push(`${name}[${k}]`);
+      }
+      return out;
+    }
 
     _scheduleRebuild() {
       if (this.rebuildScheduled) return;
       this.rebuildScheduled = true;
+      // 50 ms debounce — back-to-back registrations (e.g. SIN then COS in
+      // the same tick) coalesce into one rebuild instead of N.
       setTimeout(() => {
         this.rebuildScheduled = false;
         this._rebuildUplot();
       }, 50);
     }
 
-    _buildOpts() {
+    _buildOpts(initialData) {
       const w = (this.mount && this.mount.clientWidth)  || 600;
       const fullH = (this.mount && this.mount.clientHeight) || 200;
       const h = Math.max(60, fullH - CHROME_H);
       const stroke = getCssVar('--text2', '#8b949e');
       const grid   = getCssVar('--border-soft', '#20252b');
       const tick   = getCssVar('--border', '#2a3038');
-      const seriesArr = [
-        { label: 'time', value: (u, t) => fmtClockMs(t) },
-        ...[...this.series.entries()].map(([name, s]) => ({
-          label: name,
-          stroke: s.color,
-          width: 1.25,
-          spanGaps: false,
-          points: { show: false },
-          show: this._isSeriesVisible(name),
-          value: (u, v) => fmtVal(v),
-        })),
-      ];
-      const lastT = this.lastT;
+
+      // Series array — built off knownChannels in registration order.
+      const seriesArr = [{ label: 'time', value: (u, t) => fmtClockMs(t) }];
+      let colorIdx = 0;
+      for (const [name, meta] of this.knownChannels) {
+        if (meta.n === 1) {
+          seriesArr.push({
+            label: name, stroke: meta.color, width: 1.25,
+            spanGaps: false, points: { show: false },
+            show:  this._isSeriesVisible(name),
+            value: (u, v) => fmtVal(v),
+          });
+        } else {
+          for (let k = 0; k < meta.n; k++) {
+            const lbl = `${name}[${k}]`;
+            // Vector components share the channel base color modulated by
+            // index — slightly varied so the legend can tell them apart.
+            seriesArr.push({
+              label: lbl, stroke: colorFor(colorIdx + k), width: 1.25,
+              spanGaps: false, points: { show: false },
+              show:  this._isSeriesVisible(lbl),
+              value: (u, v) => fmtVal(v),
+            });
+          }
+        }
+        colorIdx += meta.n;
+      }
+
+      // x-axis: relative-to-now seconds labels are easier to read for
+      // streaming data than absolute clock times. Right edge = now.
+      // Reads sessionEndWallMs LIVE each time uPlot redraws the axis —
+      // this keeps every plot's labels consistent (e.g. "0s ... -5s")
+      // regardless of when each plot was created. Previously we
+      // captured lastT at chart-build time and plots added later
+      // showed labels offset against earlier plots' references.
+      const livePresent = () => {
+        const ds = window.PicoPoE && window.PicoPoE.dataStore;
+        return (ds && ds.sessionEndWallMs != null) ? ds.sessionEndWallMs / 1000 : 0;
+      };
+
       return {
         width: w, height: h,
         pxAlign: 1,
         cursor: {
-          drag:  { x: true, y: false, setScale: true },
+          // setScale:false — uPlot would otherwise zoom to exactly the
+          // dragged range, freezing the right edge wherever the user
+          // released. We only want the drag's WIDTH (as the new
+          // windowS) and keep auto-scrolling at "now". The setSelect
+          // hook below extracts the width and re-applies scale via
+          // _applyXScale, which always anchors max=lastT.
+          drag:  { x: true, y: false, setScale: false },
           focus: { prox: 16 },
         },
         hooks: {
           setSelect: [(u) => {
-            if (u.select && u.select.width > 0) this.userZoomed = true;
+            if (!u.select || u.select.width <= 0) return;
+            const a = u.posToVal(u.select.left, 'x');
+            const b = u.posToVal(u.select.left + u.select.width, 'x');
+            const newWindowS = Math.max(0.1, b - a);
+            // Clear the visible selection rectangle now that we've
+            // captured its width — leaving it set would paint a stale
+            // box on the next redraw.
+            u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false);
+            this.windowS = newWindowS;
+            this._refreshWindowOptions();
+            this._syncToUplot();
+            this._applyXScale();
+            emitLayoutChange();
           }],
-          // Persist legend-driven show/hide so reload restores it.
-          // uPlot calls setSeries with idx/null for the cursor focus
-          // path too — only persist when `opts.show` is the change.
           setSeries: [(u, idx, opts) => {
             if (idx == null || !opts || !('show' in opts)) return;
             const seriesCfg = u.series[idx];
-            const name = seriesCfg && seriesCfg.label;
-            if (!name) return;
-            this.seriesShow.set(name, !!opts.show);
+            const lbl = seriesCfg && seriesCfg.label;
+            if (!lbl) return;
+            this.seriesShow.set(lbl, !!opts.show);
             emitLayoutChange();
           }],
         },
@@ -479,10 +521,13 @@
           {
             stroke, grid: { stroke: grid, width: 1 }, ticks: { stroke: tick, width: 1 },
             space: 60,
-            values: (u, splits) => splits.map((s) => {
-              const dt = s - lastT;
-              return dt === 0 ? '0s' : `${dt.toFixed(dt > -10 ? 1 : 0)}s`;
-            }),
+            values: (u, splits) => {
+              const lastT = livePresent();
+              return splits.map((s) => {
+                const dt = s - lastT;
+                return dt === 0 ? '0s' : `${dt.toFixed(dt > -10 ? 1 : 0)}s`;
+              });
+            },
           },
           {
             stroke, grid: { stroke: grid, width: 1 }, ticks: { stroke: tick, width: 1 },
@@ -493,127 +538,39 @@
       };
     }
 
-    _dataArr() {
-      const d = [this.xs];
-      for (const s of this.series.values()) d.push(s.values);
-      return d;
-    }
-
-    _buildRenderData() {
-      const xs = this.xs;
-      const n = xs.length;
-      if (n === 0) return [[]];
-      const winMax = this.lastT;
-      const winMin = winMax - this.windowS;
-      const startIdx = bisectFirst(xs, winMin);
-      const visibleCount = n - startIdx;
-      if (visibleCount === 0) return this._dataArr();
-
-      const px = (this.mount && this.mount.clientWidth) || 600;
-      const target = px * 2;
-      if (visibleCount <= target) {
-        const xSlice = xs.slice(startIdx);
-        const out = [xSlice];
-        for (const s of this.series.values()) out.push(s.values.slice(startIdx));
-        return out;
-      }
-
-      // Per-extreme decimation — see the comment block in the previous
-      // version for the rationale (kept verbatim in spirit, condensed).
-      const numBuckets = px;
-      const bucketWidth = visibleCount / numBuckets;
-      const seriesArr = [...this.series.values()];
-      const xOut = [];
-      const seriesOut = seriesArr.map(() => []);
-
-      for (let b = 0; b < numBuckets; b++) {
-        const a = startIdx + Math.floor(b * bucketWidth);
-        const z = Math.min(startIdx + Math.floor((b + 1) * bucketWidth), n);
-
-        let bucketHasGap = false;
-        for (let i = a; i < z; i++) {
-          if (this.gapIdx.has(i)) { bucketHasGap = true; break; }
-          if (i > a && (xs[i] - xs[i - 1]) > GAP_THRESHOLD_S) {
-            bucketHasGap = true; break;
-          }
-        }
-        if (bucketHasGap) {
-          const xCenter = xs[Math.min(a + ((z - a) >> 1), n - 1)];
-          xOut.push(xCenter);
-          for (let si = 0; si < seriesArr.length; si++) seriesOut[si].push(null);
-          continue;
-        }
-
-        const posSet = new Set();
-        for (let si = 0; si < seriesArr.length; si++) {
-          const s = seriesArr[si];
-          let mn = Infinity, mx = -Infinity, iMn = -1, iMx = -1;
-          for (let i = a; i < z; i++) {
-            const v = s.values[i];
-            if (v == null) continue;
-            if (v < mn) { mn = v; iMn = i; }
-            if (v > mx) { mx = v; iMx = i; }
-          }
-          if (iMn >= 0) posSet.add(iMn);
-          if (iMx >= 0) posSet.add(iMx);
-        }
-        if (posSet.size === 0) {
-          const xCenter = xs[Math.min(a + ((z - a) >> 1), n - 1)];
-          xOut.push(xCenter);
-          for (let si = 0; si < seriesArr.length; si++) seriesOut[si].push(null);
-          continue;
-        }
-
-        const positions = [...posSet].sort((p, q) => p - q);
-        for (const pos of positions) {
-          xOut.push(xs[pos]);
-          for (let si = 0; si < seriesArr.length; si++) {
-            seriesOut[si].push(seriesArr[si].values[pos]);
-          }
-        }
-      }
-      return [xOut, ...seriesOut];
-    }
-
     _rebuildUplot() {
       if (!this.mount || !window.uPlot) return;
-      if (this.series.size === 0) return;
+      if (this.knownChannels.size === 0) return;
       if (this.uplot) { try { this.uplot.destroy(); } catch (_) {} this.uplot = null; }
       const placeholder = this.mount.querySelector('.chart-placeholder');
       if (placeholder) placeholder.parentNode.removeChild(placeholder);
       for (const stray of this.mount.querySelectorAll('.uplot')) {
         stray.parentNode.removeChild(stray);
       }
-      this.uplot = new uPlot(this._buildOpts(), this._dataArr(), this.mount);
+      const data = this._buildRenderData();
+      this.uplot = new uPlot(this._buildOpts(data), data, this.mount);
       this._applyXScale();
     }
 
     _applyXScale() {
-      if (!this.uplot || this.xs.length === 0 || this.userZoomed) return;
-      const max = this.lastT;
-      const minWanted = max - this.windowS;
-      let min = minWanted;
-      const startIdx = bisectFirst(this.xs, minWanted);
-      if (startIdx < this.xs.length && this.xs[startIdx] - minWanted > 0.010) {
-        min = this.xs[startIdx];
-      }
+      if (!this.uplot || this.userZoomed) return;
+      const ds = window.PicoPoE && window.PicoPoE.dataStore;
+      const lastTms = ds && ds.sessionEndWallMs;
+      if (lastTms == null) return;
+      const max = lastTms / 1000;
+      const min = max - this.windowS;
       this.uplot.setScale('x', { min, max });
     }
 
-    _scheduleInfoUpdate() {
-      if (this.infoPending) return;
-      this.infoPending = true;
-      requestAnimationFrame(() => {
-        this.infoPending = false;
-        this._updateInfo();
-      });
-    }
-
     _syncToUplot() {
-      this._scheduleInfoUpdate();
+      // Keep the central readout in sync with whatever just landed.
+      scheduleCentralStats();
       if (!this.uplot) return;
       if (this.paused) return;
-      if (this.uplot.series.length - 1 !== this.series.size) return;
+      // Don't sync mid-rebuild — the new uPlot's series shape may not
+      // match the current registry yet.
+      const expectedSeriesCount = 1 + this._seriesLabels().length;
+      if (this.uplot.series.length !== expectedSeriesCount) return;
       const now = performance.now();
       if (now - this.lastSetDataMs < SETDATA_MIN_MS) {
         if (!this.setDataPending) {
@@ -633,17 +590,220 @@
       this._applyXScale();
     }
 
-    _updateInfo() {
-      if (!this.infoEl) return;
-      if (this.series.size === 0 || this.xs.length === 0) {
-        this.infoEl.textContent = 'no data';
-        return;
+    // ------------------------------------------------------------------
+    // Data slicing (the new core — replaces _pushSample / _trim / _dataArr)
+    // ------------------------------------------------------------------
+
+    // Returns the [xs, ...ys] data array uPlot expects. Pulls fresh
+    // slices from dataStore for each known channel within the current
+    // window. xs is in seconds (uPlot convention); gaps are inserted as
+    // null breakpoints when consecutive samples are more than
+    // GAP_THRESHOLD_S apart.
+    _buildRenderData() {
+      const ds = window.PicoPoE && window.PicoPoE.dataStore;
+      if (!ds || this.knownChannels.size === 0) {
+        // Empty placeholder — uPlot needs at least one column.
+        const labels = this._seriesLabels();
+        const out = [[]];
+        for (let i = 0; i < labels.length; i++) out.push([]);
+        return out;
       }
-      const bytes = this.xs.length * 8 * (1 + this.series.size);
-      const span  = this.xs[this.xs.length - 1] - this.xs[0];
-      this.infoEl.textContent =
-        `${this.series.size} ch · ${fmtBytes(bytes)} · ${fmtDuration(span)}`;
+
+      const lastTms = ds.sessionEndWallMs;
+      if (lastTms == null) {
+        const labels = this._seriesLabels();
+        const out = [[]];
+        for (let i = 0; i < labels.length; i++) out.push([]);
+        return out;
+      }
+
+      let winMinMs = lastTms - this.windowS * 1000;
+      if (this.clearedSinceMs != null && this.clearedSinceMs > winMinMs) {
+        winMinMs = this.clearedSinceMs;
+      }
+      const winMaxMs = lastTms + 1;   // inclusive of lastTms
+
+      // Slice each registered channel. Vector channels expand to one
+      // entry per component; for the common single-channel-per-plot case
+      // (where every entry shares the same wallMs array — they all came
+      // from the same dataStore.slice), we fall through to a fast path
+      // that skips the union-merge.
+      const sliced = []; // [{ wallMs, values }]
+      for (const [name, meta] of this.knownChannels) {
+        const slice = ds.slice(name, { fromWallMs: winMinMs, toWallMs: winMaxMs });
+        if (slice.count === 0) {
+          // Push empty entries so the column count still matches the
+          // legend. uPlot tolerates empty arrays.
+          if (meta.n === 1) sliced.push({ wallMs: null, values: null });
+          else for (let k = 0; k < meta.n; k++) sliced.push({ wallMs: null, values: null });
+          continue;
+        }
+        if (meta.n === 1) {
+          sliced.push({ wallMs: slice.wallMs, values: slice.values });
+        } else {
+          for (let k = 0; k < meta.n; k++) {
+            // Strided view of the kth component. Float64 destination is
+            // safe for any source dtype — uPlot wants Numbers anyway.
+            const sub = new Float64Array(slice.count);
+            const src = slice.values;
+            for (let i = 0; i < slice.count; i++) sub[i] = src[i * meta.n + k];
+            sliced.push({ wallMs: slice.wallMs, values: sub });
+          }
+        }
+      }
+
+      // Determine the canonical wallMs array for the unified x axis.
+      // Fast path: every populated slice points at the same wallMs
+      // buffer (true when the chart only knows about ONE channel —
+      // typical case — OR when multiple channels were transmitted in
+      // sync at exactly the same wallMs sequence).
+      let sharedWall = null;
+      for (const s of sliced) {
+        if (!s.wallMs) continue;
+        if (sharedWall == null) sharedWall = s.wallMs;
+        else if (s.wallMs !== sharedWall) { sharedWall = null; break; }
+      }
+
+      let xMs, yArrays;
+      if (sharedWall) {
+        xMs = sharedWall;
+        yArrays = sliced.map((s) => s.values || []);
+      } else {
+        // Multi-channel union path: streams have different timelines so
+        // we merge into a single x axis. Sparse fills use zero-order
+        // hold (carry-forward) so each series's line stays continuous
+        // across timestamps that belong to OTHER streams — without
+        // carry-forward, every other sample would be null and uPlot's
+        // spanGaps:false would draw nothing.
+        const merged = mergeTimelines(sliced);
+        xMs = merged.xMs;
+        yArrays = merged.yArrays;
+      }
+
+      const n = xMs.length;
+      if (n === 0) return [[], ...yArrays.map(() => [])];
+
+      // Convert ms → seconds (uPlot expects seconds on time scales).
+      // We don't inject null breakpoints for wallMs gaps here — that
+      // tripped up the decimator (every bucket containing a leading-
+      // edge sparse-fill null got flagged as a gap, blanking the
+      // chart). Real network/OTA gaps are typically followed by a
+      // chart.reset() anyway; if we want explicit gap rendering later,
+      // wire uPlot's per-series `gaps` callback instead.
+      const xSec = new Float64Array(n);
+      for (let i = 0; i < n; i++) xSec[i] = xMs[i] / 1000;
+
+      return decimateForCanvas([xSec, ...yArrays],
+                               (this.mount && this.mount.clientWidth) || 600);
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Helpers — timeline merge, decimation
+  // ---------------------------------------------------------------------
+
+  // K-way merge for multiple channels with different sample timelines
+  // sharing one plot. Output: unified xMs Float64Array + per-stream y
+  // arrays where every cell holds the most recently observed value for
+  // that stream (zero-order hold). Cells before that stream's first
+  // sample stay null, so uPlot's spanGaps:false leaves the series
+  // invisible until it has data — but once it produces a sample, the
+  // line stays continuous across union timestamps owned by OTHER streams
+  // instead of going null/value/null/value (which would render as nothing
+  // visible at typical canvas resolutions).
+  function mergeTimelines(sliced) {
+    const k = sliced.length;
+    const idx = new Array(k).fill(0);
+    const xs = sliced.map((s) => s.wallMs || new Float64Array(0));
+    const ys = sliced.map((s) => s.values || []);
+    const lastSeen = new Array(k).fill(null);
+
+    let total = 0;
+    for (const arr of xs) total += arr.length;
+    const xMs = new Float64Array(total);
+    const yArrays = sliced.map(() => new Array(total));
+    let w = 0;
+
+    for (;;) {
+      // Find the smallest current head across active streams.
+      let bestT = Infinity, bestStreams = null;
+      for (let i = 0; i < k; i++) {
+        if (idx[i] >= xs[i].length) continue;
+        const t = xs[i][idx[i]];
+        if (t < bestT) { bestT = t; bestStreams = [i]; }
+        else if (t === bestT) bestStreams.push(i);
+      }
+      if (bestStreams == null) break;
+      xMs[w] = bestT;
+      for (const i of bestStreams) {
+        lastSeen[i] = ys[i][idx[i]];
+        idx[i]++;
+      }
+      // Carry-forward (or null if not yet seen) for every series at this
+      // union slot, including the contributors — they get the value we
+      // just stored in lastSeen.
+      for (let i = 0; i < k; i++) yArrays[i][w] = lastSeen[i];
+      w++;
+    }
+
+    return {
+      xMs: w === total ? xMs : xMs.slice(0, w),
+      yArrays: yArrays.map((arr) => w === total ? arr : arr.slice(0, w)),
+    };
+  }
+
+  // Per-bucket extreme decimation — when the visible region has many
+  // more samples than pixels, downsample so the polyline draw is cheap
+  // without losing visible peaks. Returns the input untouched if the
+  // count is already manageable. Operates on the post-gap-injection
+  // arrays so gap nulls survive (they end up in their own bucket).
+  function decimateForCanvas(data, pxWidth) {
+    const xs = data[0];
+    const n = xs.length;
+    if (n === 0) return data;
+    const target = pxWidth * 2;
+    if (n <= target) return data;
+
+    const numBuckets = pxWidth;
+    const bucketWidth = n / numBuckets;
+    const ySrcs = data.slice(1);
+    const xOut = [];
+    const yOuts = ySrcs.map(() => []);
+
+    for (let b = 0; b < numBuckets; b++) {
+      const a = Math.floor(b * bucketWidth);
+      const z = Math.min(Math.floor((b + 1) * bucketWidth), n);
+      // Nulls are no longer treated as gap markers — with carry-forward
+      // they only appear at the leading edge of a series (before its
+      // first sample). The min/max scan below skips them naturally.
+
+      // Collect the indices of the min and max value across every series
+      // in this bucket — they're the visually-load-bearing samples.
+      const positions = new Set();
+      for (let s = 0; s < ySrcs.length; s++) {
+        const ys = ySrcs[s];
+        let mn = Infinity, mx = -Infinity, iMn = -1, iMx = -1;
+        for (let i = a; i < z; i++) {
+          const v = ys[i];
+          if (v == null) continue;
+          if (v < mn) { mn = v; iMn = i; }
+          if (v > mx) { mx = v; iMx = i; }
+        }
+        if (iMn >= 0) positions.add(iMn);
+        if (iMx >= 0) positions.add(iMx);
+      }
+      if (positions.size === 0) {
+        xOut.push(xs[Math.min(a + ((z - a) >> 1), n - 1)]);
+        for (const yo of yOuts) yo.push(null);
+        continue;
+      }
+      const sorted = [...positions].sort((p, q) => p - q);
+      for (const pos of sorted) {
+        xOut.push(xs[pos]);
+        for (let s = 0; s < ySrcs.length; s++) yOuts[s].push(ySrcs[s][pos]);
+      }
+    }
+    return [xOut, ...yOuts];
   }
 
   // ---------------------------------------------------------------------
@@ -689,9 +849,6 @@
     emitLayoutChange();
     return true;
   }
-  // Move chart `srcId` to the slot just BEFORE `beforeId`, or to the
-  // end if beforeId is null. Reorders both the charts array and the
-  // DOM order so the next persisted layout matches what the user sees.
   function reorderChart(srcId, beforeId) {
     const fromIdx = charts.findIndex((c) => c.id === srcId);
     if (fromIdx < 0) return;
@@ -699,14 +856,11 @@
     const toIdx  = beforeId == null ? charts.length
                                     : charts.findIndex((x) => x.id === beforeId);
     charts.splice(toIdx < 0 ? charts.length : toIdx, 0, c);
-    // Re-append in new order — appendChild moves existing nodes.
     const parent = c.parent;
     for (const x of charts) parent.appendChild(x.root);
     emitLayoutChange();
   }
 
-  // The "no plots" placeholder lives inside the container; show/hide
-  // it as charts come and go. The user can re-add via the topbar `+`.
   function updateEmptyState() {
     const parent = document.getElementById('ide-plots');
     if (!parent) return;
@@ -724,8 +878,7 @@
   }
 
   // ---------------------------------------------------------------------
-  // Init: restore saved plots (or create one default), wire the
-  // `+ add plot` button, expose the public façade.
+  // Init
   // ---------------------------------------------------------------------
 
   function init() {
@@ -744,24 +897,18 @@
       addChart({ title: 'Plot' });
     }
     updateEmptyState();
+    updateCentralStats();
 
     const addBtn = document.getElementById('ide-add-plot');
     if (addBtn) {
       addBtn.addEventListener('click', () => addChart({ title: 'Plot' }));
     }
 
-    // Reorder via HTML5 drag-and-drop. Each .plot is the drag source
-    // (armed by its drag handle's mousedown — see the Chart ctor).
-    // The container is the drop target; on dragover we mark the
-    // sibling the cursor is hovering over with .drop-above /
-    // .drop-below so the user gets a positional cue, and on drop we
-    // resolve to the BEFORE-which sibling and call reorderChart().
     parent.addEventListener('dragover', (ev) => {
       const id = ev.dataTransfer && ev.dataTransfer.types.includes('text/picopoe-plot');
       if (!id) return;
       ev.preventDefault();
       ev.dataTransfer.dropEffect = 'move';
-      // Clear previous indicators.
       for (const el of parent.querySelectorAll('.plot.drop-above, .plot.drop-below')) {
         el.classList.remove('drop-above', 'drop-below');
       }
@@ -811,7 +958,7 @@
     push:  (rec) => { for (const c of charts) c.push(rec); },
     clear: ()    => { for (const c of charts) c.clear(); },
     reset: ()    => { for (const c of charts) c.reset(); },
-    gap:   ()    => { for (const c of charts) c.gap(); },
+    gap:   ()    => { /* no-op — see Chart.gap() */ },
   };
   window.PicoPoE.charts = {
     list:    () => charts.slice(),
@@ -820,30 +967,11 @@
     persist: saveLayout,
   };
 
-  // Diagnostic: dump every chart's state. Same exit shape as before but
-  // wrapped per-chart so the test scripts can iterate.
-  window.PICOPOE_TLM_DUMP = () => {
-    return charts.map((c) => {
-      const round = (v) => (typeof v === 'number' && Number.isFinite(v))
-        ? +v.toFixed(6) : v;
-      const head = (arr, n) => arr.slice(0, n).map(round);
-      const tail = (arr, n) => arr.slice(-n).map(round);
-      const out = {
-        id: c.id, title: c.title, windowS: c.windowS,
-        xs_length: c.xs.length, lastT: c.lastT,
-        gapIdx_size: c.gapIdx.size,
-        paused: c.paused, userZoomed: c.userZoomed,
-        series: {},
-      };
-      for (const [name, s] of c.series) {
-        out.series[name] = {
-          color: s.color, idx: s.idx,
-          values_first10: head(s.values, 10),
-          values_last5:   tail(s.values, 5),
-          visible: c._isSeriesVisible(name),
-        };
-      }
-      return out;
-    });
-  };
+  // Diagnostic: dump every chart's view config (no buffers anymore).
+  window.PICOPOE_TLM_DUMP = () => charts.map((c) => ({
+    id: c.id, title: c.title, windowS: c.windowS,
+    paused: c.paused, userZoomed: c.userZoomed,
+    clearedSinceMs: c.clearedSinceMs,
+    knownChannels: [...c.knownChannels.keys()],
+  }));
 })();
