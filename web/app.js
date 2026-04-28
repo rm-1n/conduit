@@ -115,8 +115,33 @@ async function probeAndRemember(ip, opts) {
   return result;
 }
 
+// Patch a single field-set into the cached entry for `ip`. Used after
+// /api/upload + commit to reflect the new version + partition without
+// waiting for the next periodic scan. Adds the device if it's not in
+// the list yet (rare — typically the dropdown already knows about it
+// since you just OTA'd it).
+function updateKnownDevice(ip, patch) {
+  if (!ip || !patch) return;
+  try {
+    const s = JSON.parse(localStorage.getItem('picopoe') || '{}');
+    const existing = Array.isArray(s.knownDevices) ? s.knownDevices : [];
+    let found = false;
+    const next = existing.map((d) => {
+      if (d.ip !== ip) return d;
+      found = true;
+      return { ...d, ...patch };
+    });
+    if (!found) next.unshift({ ip, ...patch });
+    s.knownDevices = next;
+    s.knownDevicesTs = Date.now();
+    localStorage.setItem('picopoe', JSON.stringify(s));
+  } catch (_) { return; }
+  window.dispatchEvent(new CustomEvent('picopoe:devices-updated'));
+}
+
 window.PicoPoE = window.PicoPoE || {};
 window.PicoPoE.scanHost = scanHost;
 window.PicoPoE.startScan = startScan;
 window.PicoPoE.getKnownDevices = getKnownDevices;
 window.PicoPoE.probeAndRemember = probeAndRemember;
+window.PicoPoE.updateKnownDevice = updateKnownDevice;

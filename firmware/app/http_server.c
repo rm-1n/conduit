@@ -432,6 +432,15 @@ static void handle_log(struct tcp_pcb *pcb, http_conn_t *conn) {
         // then keep the connection open — http_poll drains new bytes onto
         // the wire each tick. Disable Nagle so a single short log line
         // (≪ MSS) doesn't sit in the send buffer waiting for company.
+        //
+        // Clamp `since` to current total: after a device reboot the
+        // browser may carry an old cursor that's far past the now-zeroed
+        // ring counter. Storing that stale value as conn->log_since wedges
+        // the stream — http_poll calls log_buffer_read which clamps its
+        // local since but never writes back, so conn->log_since stays
+        // huge and zero-byte reads spin forever until total catches up.
+        uint32_t total = log_buffer_total_written();
+        if (since > total) since = total;
         send_log_stream_headers(pcb, since);
         conn->log_since = since;
         conn->state = CONN_STATE_STREAMING;
@@ -509,6 +518,11 @@ static void handle_data(struct tcp_pcb *pcb, http_conn_t *conn) {
     if (!have_since) since = data_buffer_total_written();
 
     if (stream) {
+        // Clamp `since` to current total — see handle_log for the full
+        // explanation of why a stale browser-side cursor would wedge the
+        // stream after a device reboot.
+        uint32_t total = data_buffer_total_written();
+        if (since > total) since = total;
         send_data_stream_headers(pcb, since);
         conn->log_since = since;          // reused field; holds data-ring cursor
         conn->data_stream = true;
@@ -802,12 +816,24 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
         if (total == conn->log_since) return ERR_OK;
         u16_t avail = tcp_sndbuf(pcb);
         if (avail == 0) return ERR_OK;  // wait for ACK; retry next poll
-        static uint8_t out[2048];
+        // Sized to absorb a full slow-timer tick of telemetry at 40 KB/s
+        // (4 KB per 100 ms) with comfortable headroom for ACK/window
+        // dynamics. Smaller buffers force the data ring to backlog and
+        // eventually overflow → dropped samples → browser sees voids.
+        static uint8_t out[8192];
         size_t cap = (avail < sizeof(out)) ? avail : sizeof(out);
         uint32_t next = conn->log_since;
         size_t n = conn->data_stream
             ? data_buffer_read(conn->log_since, out, cap, &next)
             : log_buffer_read(conn->log_since, out, cap, &next);
+        // Always advance log_since to whatever the ring reader resolved
+        // to — even on n==0. If conn->log_since was past total (stale
+        // browser cursor across a reboot), data_buffer_read clamped its
+        // local since to total and returned 0; without writing back, we'd
+        // spin here until total caught up to the stale value (~10 minutes
+        // at 250 Hz). Pair with the entry-side clamp in handle_data /
+        // handle_log so the very first poll already starts at a sane cursor.
+        conn->log_since = next;
         if (n == 0) return ERR_OK;
         err_t e = tcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
         if (e == ERR_MEM) return ERR_OK;  // sndbuf race — retry next poll
@@ -817,7 +843,8 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
             return ERR_OK;
         }
         tcp_output(pcb);
-        conn->log_since = next;
+        // log_since already advanced above (kept idempotent across the
+        // n==0 early-return).
     }
     return ERR_OK;
 }

@@ -1,159 +1,154 @@
-// log_export.js — HDF5 export for the IndexedDB log store.
+// log_export.js — main-thread side of the HDF5 export.
 //
-// Lazy-loads h5wasm on the first call to downloadHdf5(). h5wasm ships as
-// an ES module + inlined WASM, fetched on demand from jsdelivr (see
-// H5WASM_VERSION below); the 4 MB glue is never fetched unless the user
-// actually clicks "Download". Override via window.PICOPOE_H5WASM_URL for
-// air-gapped or self-hosted deployments.
+// This file is the thin glue that:
+//   1. Pulls each channel's slice out of the in-memory data store
+//      (window.PicoPoE.dataStore).
+//   2. Hands the typed-array buffers off to log_export_worker.js via
+//      postMessage with TRANSFERABLE buffers (no structured-clone copy
+//      of the payload — the worker reclaims ownership).
+//   3. Awaits the worker's reply, augments the summary with main-side
+//      timings and the rendered filename/size, and triggers the browser
+//      download.
 //
-// Output layout (flat, pandas-friendly):
-//   /stream_epoch  int64[N]      — which run each row belongs to
-//   /uptime_us     int64[N]      — device microseconds since boot
-//   /wall_ms       float64[N]    — wall-clock estimate (ms since epoch)
-//   /msg           vlen utf8[N]  — the log message, trimmed of trailing "\n"
-//   attrs on root:
-//     runs_json    utf-8 string  — JSON-serialized run metadata array
-//     exported_iso                — when the file was generated
-//     asset_version               — PICOPOE_ASSET_VERSION at export time
+// The actual h5wasm load + create_dataset writes happen inside the
+// worker so a multi-megabyte export doesn't block the main thread / the
+// telemetry plotting loop. See web/log_export_worker.js.
+//
+// Output layout — one group per telemetry channel:
+//   /telemetry/<NAME>/values     <dtype>[M] or <dtype>[M, n] (vector)
+//   /telemetry/<NAME>/uptime_us  float64[M] — device microseconds since boot
+//   /telemetry/<NAME>/wall_ms    float64[M] — wall-clock estimate (ms since epoch)
+//   attrs on /telemetry/<NAME>: dtype, n, record_count
+//   attrs on root: exported_iso, asset_version,
+//                  telemetry_channel_count, telemetry_record_count
+//
+// Logs are intentionally not exported — analysis use-case is the
+// telemetry stream.
 //
 // Python:
-//   import h5py, json, pandas as pd
+//   import h5py
 //   with h5py.File('run.h5') as f:
-//       df = pd.DataFrame({
-//         'stream_epoch': f['stream_epoch'][:],
-//         'uptime_us':    f['uptime_us'][:],
-//         'wall_ms':      f['wall_ms'][:],
-//         'msg':          [b.decode() for b in f['msg'][:]],
-//       })
-//       runs = json.loads(f.attrs['runs_json'])
+//       sin_t = f['telemetry/SIN/wall_ms'][:]
+//       sin_v = f['telemetry/SIN/values'][:]
 
 (function () {
   'use strict';
 
-  // Load h5wasm from a CDN — keeps the 4 MB glue out of the repo and out
-  // of GitHub Pages deploys (web/assets/ is fully gitignored). jsdelivr
-  // serves npm packages with correct CORS headers and preserves the
-  // module's relative `import './hdf5_util.js'` so a single import here
-  // pulls in both files.
-  //
-  // To pin a different version, change H5WASM_VERSION below (or set
-  // window.PICOPOE_H5WASM_URL before this script loads to override the
-  // whole URL — useful for local mirroring or air-gapped deploys).
-  // Bumping: confirm the new release still exports { File, ready, FS,
-  // Module } from dist/esm/hdf5_hl.js. The file size of hdf5_util.js
-  // jumped from ~4 MB to ~5 MB across 0.7.x → 0.8.x; not a concern, just
-  // expect cold-load to take longer.
-  const H5WASM_VERSION = '0.8.1';
-  const H5WASM_MODULE =
-    (typeof window !== 'undefined' && window.PICOPOE_H5WASM_URL) ||
-    `https://cdn.jsdelivr.net/npm/h5wasm@${H5WASM_VERSION}/dist/esm/hdf5_hl.js`;
-
-  let h5wasmPromise = null;
-
-  async function loadH5wasm() {
-    if (h5wasmPromise) return h5wasmPromise;
-    h5wasmPromise = (async () => {
-      // Dynamic import so the multi-MB glue isn't fetched on page load.
-      // `FS` and `Module` are NOT in the default export — they're live
-      // bindings on the namespace object and go from null to the actual
-      // Emscripten values once `ready` resolves.
-      const ns = await import(H5WASM_MODULE);
-      if (ns.ready && typeof ns.ready.then === 'function') await ns.ready;
-      return {
-        File: ns.File,
-        Group: ns.Group,
-        Dataset: ns.Dataset,
-        ready: ns.ready,
-        FS: ns.FS,         // live binding: populated after `ready`
-        Module: ns.Module, // live binding: populated after `ready`
-        ns,                // keep the namespace so callers can re-read FS later
-      };
-    })().catch((e) => {
-      h5wasmPromise = null;
-      throw new Error(
-        `Failed to load h5wasm from ${H5WASM_MODULE}. ` +
-        `If you're offline or behind a firewall, set window.PICOPOE_H5WASM_URL ` +
-        `to a self-hosted hdf5_hl.js (its sibling hdf5_util.js must be at the ` +
-        `same path — the loader does a relative import). ` +
-        `Underlying error: ${e && e.message || e}`);
-    });
-    return h5wasmPromise;
-  }
-
-  // Gather everything in the store into parallel typed arrays. We iterate
-  // once to count rows, then allocate; keeping it as one pass would be
-  // possible with array growth, but two passes keeps memory use predictable
-  // for a multi-MB export.
-  async function collectRecords() {
-    const store = window.PicoPoE && window.PicoPoE.logStore;
-    if (!store) throw new Error('log store not initialised');
-
-    // First pass: count.
-    let n = 0;
-    for await (const _ of store.allRecords()) n++;
-    if (n === 0) throw new Error('No records to export — the log store is empty.');
-
-    // Second pass: fill arrays.
-    const streamEpoch = new BigInt64Array(n);
-    const uptimeUs    = new BigInt64Array(n);
-    const wallMs      = new Float64Array(n);
-    const msgs        = new Array(n);
-    let i = 0;
-    for await (const rec of store.allRecords()) {
-      streamEpoch[i] = BigInt(rec.stream_epoch);
-      uptimeUs[i]    = BigInt(rec.uptime_us);
-      wallMs[i]      = Number(rec.wall_ms);
-      msgs[i]        = rec.msg || '';
-      i++;
+  // The Worker URL gets the same ?v= cache-bust as the rest of the
+  // assets — cribbed off any <script src="...?v=N"> tag so we don't have
+  // to bump it independently.
+  function workerUrl() {
+    if (typeof document === 'undefined') return 'log_export_worker.js';
+    const tags = document.querySelectorAll('script[src*="log_export.js"]');
+    for (const t of tags) {
+      const m = t.getAttribute('src').match(/\?v=([^&]+)/);
+      if (m) return `log_export_worker.js?v=${m[1]}`;
     }
-
-    const runs = await store.allRuns();
-    return { n, streamEpoch, uptimeUs, wallMs, msgs, runs };
+    return 'log_export_worker.js';
   }
 
-  async function buildHdf5Bytes() {
-    const h5 = await loadH5wasm();
-    const { n, streamEpoch, uptimeUs, wallMs, msgs, runs } =
-      await collectRecords();
+  let workerInst = null;
+  let nextReqId = 1;
+  const pending = new Map();   // reqId → { resolve, reject, onProgress }
 
-    const fname = `pico-poe-${Date.now()}.h5`;
-    const FS = h5.FS;
-    // Ensure any stale copy from a previous export is gone.
-    try { FS.unlink(fname); } catch (_) {}
-    const f = new h5.File(fname, 'w');
-    try {
-      // Numeric columns — h5wasm picks '<i8' / '<f8' from the typed arrays.
-      f.create_dataset({ name: 'stream_epoch', data: streamEpoch });
-      f.create_dataset({ name: 'uptime_us',    data: uptimeUs });
-      f.create_dataset({ name: 'wall_ms',      data: wallMs });
-      // Variable-length utf-8 strings. h5wasm's 'S' dtype with a plain
-      // string[] payload creates HDF5_VLEN_STRINGS; h5py reads as bytes.
-      f.create_dataset({
-        name: 'msg',
-        data: msgs,
-        dtype: 'S',
+  function ensureWorker() {
+    if (workerInst) return workerInst;
+    workerInst = new Worker(workerUrl(), { type: 'module' });
+    workerInst.onmessage = (ev) => {
+      const msg = ev.data || {};
+      const p = pending.get(msg.reqId);
+      if (!p) return;
+      if (msg.type === 'progress') {
+        try { p.onProgress(msg); } catch (_) {}
+      } else if (msg.type === 'done') {
+        pending.delete(msg.reqId);
+        p.resolve({ bytes: msg.bytes, summary: msg.summary });
+      } else if (msg.type === 'error') {
+        pending.delete(msg.reqId);
+        p.reject(new Error(msg.message));
+      }
+    };
+    workerInst.onerror = (e) => {
+      // A worker-level error (e.g. failed to load h5wasm) tears down the
+      // worker. Fail every pending request and let the next call respawn.
+      const err = new Error(e.message || 'log_export worker crashed');
+      for (const p of pending.values()) p.reject(err);
+      pending.clear();
+      try { workerInst.terminate(); } catch (_) {}
+      workerInst = null;
+    };
+    return workerInst;
+  }
+
+  async function buildHdf5Bytes(opts = {}) {
+    const cutoffWallMs = opts.cutoffWallMs;
+    const fromWallMs   = opts.fromWallMs;   // optional lower bound; default = session start
+    const onProgress   = opts.onProgress || (() => {});
+    const tStart = performance.now();
+
+    onProgress({ stage: 'telemetry', pct: 0, label: 'slicing channels…' });
+    const tTlm0 = performance.now();
+    const ds = window.PicoPoE && window.PicoPoE.dataStore;
+    if (!ds) throw new Error('data store not loaded');
+    const channelsMeta = ds.listChannels();
+    const sliceFrom = (fromWallMs != null)
+      ? fromWallMs
+      : (ds.sessionStartWallMs != null ? ds.sessionStartWallMs : -Infinity);
+    const sliceTo = (cutoffWallMs != null) ? cutoffWallMs : Infinity;
+
+    // Build the wire payload — one entry per non-empty channel. We send
+    // the underlying ArrayBuffers as TRANSFERABLES so the worker takes
+    // ownership; the main thread loses access after postMessage. That's
+    // fine: the data store is unaffected (slice copy:true gave us our
+    // own arrays), and we never re-read them.
+    const payload = [];
+    const transfers = [];
+    for (let ci = 0; ci < channelsMeta.length; ci++) {
+      const meta = channelsMeta[ci];
+      onProgress({ stage: 'telemetry',
+                   pct: 5 + (ci / Math.max(channelsMeta.length, 1)) * 50,
+                   label: `slicing ${meta.name} (${ci + 1}/${channelsMeta.length})…` });
+      const slice = ds.slice(meta.name,
+                             { fromWallMs: sliceFrom, toWallMs: sliceTo, copy: true });
+      if (slice.count === 0) continue;
+      payload.push({
+        name: meta.name, dtype: meta.dtype, n: meta.n, M: slice.count,
+        valuesType:  slice.values.constructor.name,
+        valuesBuf:   slice.values.buffer,
+        uptimeUsBuf: slice.uptimeUs.buffer,
+        wallMsBuf:   slice.wallMs.buffer,
       });
-
-      f.create_attribute('runs_json', JSON.stringify(runs));
-      f.create_attribute('exported_iso', new Date().toISOString());
-      f.create_attribute('asset_version',
-                         String(window.PICOPOE_ASSET_VERSION || ''));
-      // guess_metadata doesn't know how to handle BigInt scalars — use a
-       // plain Number (safe up to 2^53 rows, i.e. ~9 PB of log bytes).
-       f.create_attribute('record_count', n);
-
-      f.flush();
-    } finally {
-      f.close();
+      transfers.push(slice.values.buffer, slice.uptimeUs.buffer, slice.wallMs.buffer);
     }
+    const tTlm = performance.now() - tTlm0;
 
-    const bytes = FS.readFile(fname);  // Uint8Array
-    try { FS.unlink(fname); } catch (_) {}
-    return bytes;
+    onProgress({ stage: 'build', pct: 60, label: 'handing to worker…' });
+    const w = ensureWorker();
+    const reqId = nextReqId++;
+    const result = await new Promise((resolve, reject) => {
+      pending.set(reqId, { resolve, reject, onProgress });
+      w.postMessage({
+        type: 'build', reqId,
+        channels: payload,
+        assetVersion: String(window.PICOPOE_ASSET_VERSION || ''),
+        h5wasmUrl: window.PICOPOE_H5WASM_URL || null,
+      }, transfers);
+    });
+
+    // Augment the worker's summary with the main-thread slice timing
+    // and the overall wall time.
+    const summary = result.summary;
+    summary.timings = summary.timings || {};
+    summary.timings.telemetryMs = Math.round(tTlm);
+    summary.timings.totalMs     = Math.round(performance.now() - tStart);
+    return { bytes: result.bytes, summary };
   }
 
-  async function downloadHdf5() {
-    const bytes = await buildHdf5Bytes();
+  async function downloadHdf5(opts = {}) {
+    const { bytes, summary } = await buildHdf5Bytes(opts);
+    if (!bytes || bytes.byteLength < 1024) {
+      throw new Error('Nothing to export yet — let some data accumulate first.');
+    }
     const blob = new Blob([bytes], { type: 'application/x-hdf5' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -161,19 +156,25 @@
     const stamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}` +
                   `${String(d.getDate()).padStart(2,'0')}-${String(d.getHours()).padStart(2,'0')}` +
                   `${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
+    const filename = `pico-poe-${stamp}.h5`;
     a.href = url;
-    a.download = `pico-poe-${stamp}.h5`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // Revoke after the next tick so the download is flushed to disk first.
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return { ...summary, filename, sizeBytes: bytes.byteLength };
   }
+
+  // Spin the worker up eagerly on a hint from the UI (typically when the
+  // Download button first appears). Lets the h5wasm fetch happen during
+  // idle time instead of after the click.
+  function warmup() { ensureWorker(); }
 
   window.PicoPoE = window.PicoPoE || {};
   window.PicoPoE.logExport = {
     downloadHdf5,
-    loadH5wasm,   // expose for warm-up if the UI wants to prefetch
-    collectRecords,
+    buildHdf5Bytes,
+    warmup,
   };
 })();

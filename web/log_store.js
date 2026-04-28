@@ -91,9 +91,32 @@
         uptime_us_anchor: uptimeUsAnchor,
         wall_ms_offset: wallMsOffset,
         started_wall_ms: Date.now(),
+        schema: {},  // populated by setRunSchema as channels register
       });
     });
     return streamEpoch;
+  }
+
+  // Update the schema map for an existing run. Called by telemetry.js
+  // every time /api/data_schema yields new entries; the latest snapshot
+  // wins. Used by log_export.js to label the per-channel HDF5 groups.
+  async function setRunSchema(streamEpoch, schema) {
+    if (streamEpoch == null || !schema) return;
+    const db = await open();
+    await new Promise((resolve, reject) => {
+      const t = db.transaction([STORE_RUNS], 'readwrite');
+      t.onerror = () => reject(t.error);
+      t.oncomplete = () => resolve();
+      const s = t.objectStore(STORE_RUNS);
+      const req = s.get(streamEpoch);
+      req.onsuccess = () => {
+        const run = req.result;
+        if (!run) return;
+        // Merge — never drop ids that registered earlier in the run.
+        run.schema = Object.assign({}, run.schema || {}, schema);
+        s.put(run);
+      };
+    });
   }
 
   // Bulk append. records is an array of
@@ -123,29 +146,21 @@
   }
 
   // Async iterator over records; yields in insertion order within a run.
+  // Same getAll-then-yield pattern as allDataRecords (see comment there)
+  // — cursor-across-await deadlocks on busy stores.
   async function *allRecords({ streamEpoch } = {}) {
     const db = await open();
-    const t = db.transaction([STORE_RECORDS], 'readonly');
-    const s = t.objectStore(STORE_RECORDS);
-    const src = (streamEpoch != null)
-      ? s.index('by_run_time').openCursor(IDBKeyRange.bound(
-          [streamEpoch, 0], [streamEpoch, Number.MAX_SAFE_INTEGER]))
-      : s.openCursor();
-    // Wrap cursor in an async-iterable shim. We buffer 1 at a time.
-    while (true) {
-      const rec = await new Promise((resolve, reject) => {
-        src.onerror = () => reject(src.error);
-        src.onsuccess = () => {
-          const cur = src.result;
-          if (!cur) { resolve(null); return; }
-          const v = cur.value;
-          cur.continue();
-          resolve(v);
-        };
-      });
-      if (!rec) break;
-      yield rec;
-    }
+    const records = await new Promise((resolve, reject) => {
+      const t = db.transaction([STORE_RECORDS], 'readonly');
+      const s = t.objectStore(STORE_RECORDS);
+      const req = (streamEpoch != null)
+        ? s.index('by_run_time').getAll(IDBKeyRange.bound(
+            [streamEpoch, 0], [streamEpoch, Number.MAX_SAFE_INTEGER]))
+        : s.getAll();
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => resolve(req.result || []);
+    });
+    for (const rec of records) yield rec;
   }
 
   async function allRuns() {
@@ -249,30 +264,63 @@
   }
 
   // Iterate all data records for a run, optionally filtered to one msg_id.
+  //
+  // Implementation: chunked getAll() driven by the (msg_id, uptime_us)
+  // index. Each chunk opens its own short-lived readonly transaction
+  // that fetches at most CHUNK records, then advances the lower bound
+  // to one past the last seen uptime. Reasons for the chunking:
+  //   - One-shot getAll() for a long run (e.g. 35s × 1 kHz = 35k+
+  //     records per channel) sometimes trips Chrome's IDB UnknownError
+  //     ("operation failed for reasons unrelated to the database
+  //     itself") because the result set materialises a giant array of
+  //     structured-cloned objects (each holding a Uint8Array payload).
+  //   - The previous cursor-across-await pattern was racy and could
+  //     deadlock when the transaction auto-committed mid-iteration.
+  // Chunked getAll keeps each transaction short and bounds peak memory.
+  // Caller MUST pass msgId for the chunked path (the [stream_epoch,
+  // msg_id, uptime_us] composite key only paginates correctly within a
+  // single msg_id — uptime_us repeats across channels). When msgId is
+  // omitted we fall back to a single getAll for the whole run.
   async function *allDataRecords({ streamEpoch, msgId } = {}) {
     if (streamEpoch == null) return;
     const db = await open();
-    const t = db.transaction([STORE_DATA], 'readonly');
-    const s = t.objectStore(STORE_DATA);
-    const idx = s.index('by_run_msg_time');
-    const lo = (msgId != null) ? [streamEpoch, msgId, 0] : [streamEpoch, 0, 0];
-    const hi = (msgId != null)
-      ? [streamEpoch, msgId, Number.MAX_SAFE_INTEGER]
-      : [streamEpoch, 65535, Number.MAX_SAFE_INTEGER];
-    const src = idx.openCursor(IDBKeyRange.bound(lo, hi));
-    while (true) {
-      const rec = await new Promise((resolve, reject) => {
-        src.onerror = () => reject(src.error);
-        src.onsuccess = () => {
-          const cur = src.result;
-          if (!cur) { resolve(null); return; }
-          const v = cur.value;
-          cur.continue();
-          resolve(v);
-        };
+    const CHUNK = 5000;
+    if (msgId == null) {
+      // Whole-run scan — kept for diagnostics. Use cautiously on big
+      // stores; the export path always passes msgId so it never lands
+      // here.
+      const records = await new Promise((resolve, reject) => {
+        const t = db.transaction([STORE_DATA], 'readonly');
+        const s = t.objectStore(STORE_DATA);
+        const idx = s.index('by_run');
+        const req = idx.getAll(streamEpoch);
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => resolve(req.result || []);
       });
-      if (!rec) break;
-      yield rec;
+      for (const rec of records) yield rec;
+      return;
+    }
+    let lowerUptime = 0;
+    for (;;) {
+      const records = await new Promise((resolve, reject) => {
+        const t = db.transaction([STORE_DATA], 'readonly');
+        const s = t.objectStore(STORE_DATA);
+        const idx = s.index('by_run_msg_time');
+        const lo = [streamEpoch, msgId, lowerUptime];
+        const hi = [streamEpoch, msgId, Number.MAX_SAFE_INTEGER];
+        const req = idx.getAll(IDBKeyRange.bound(lo, hi), CHUNK);
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => resolve(req.result || []);
+      });
+      if (records.length === 0) break;
+      for (const rec of records) yield rec;
+      if (records.length < CHUNK) break;
+      // Advance past the last uptime — uptime_us is unique within a
+      // single (stream_epoch, msg_id), so +1 doesn't skip valid rows.
+      lowerUptime = records[records.length - 1].uptime_us + 1;
+      // Yield to the event loop so the page stays responsive during
+      // a long iteration (lots of chunks).
+      await new Promise((r) => setTimeout(r, 0));
     }
   }
 
@@ -302,7 +350,7 @@
 
   window.PicoPoE = window.PicoPoE || {};
   window.PicoPoE.logStore = {
-    open, startRun, append, allRecords, allRuns, deleteRun, clear, stats,
-    evictUntilUnder, appendData, allDataRecords,
+    open, startRun, setRunSchema, append, allRecords, allRuns,
+    deleteRun, clear, stats, evictUntilUnder, appendData, allDataRecords,
   };
 })();

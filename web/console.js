@@ -103,9 +103,8 @@
     if (!stateEl) return;
     if (paused) return;
     stateEl.textContent = text;
-    stateEl.style.color = cls === 'err' ? 'var(--red)'
-                       : cls === 'ok'  ? 'var(--green)'
-                       : '';
+    stateEl.setAttribute('data-state',
+      cls === 'ok' ? 'ok' : cls === 'err' ? 'err' : 'off');
   }
 
   // Low-level render: append text to the DOM console, respect pause,
@@ -133,19 +132,26 @@
 
   function updatePauseState() {
     if (pauseBtn) {
-      pauseBtn.textContent = paused
-        ? (pendingBuf.length > 0 ? `Resume (${pendingBuf.length} B)` : 'Resume')
-        : 'Pause';
+      // Pause toggle uses an icon-only button now; the play_arrow
+      // glyph means "click to resume", pause means "click to pause".
+      // Pending-byte count goes in the title since there's no label.
+      const icons = window.PicoPoE && window.PicoPoE.icons;
+      if (icons) icons.set(pauseBtn, paused ? 'play_arrow' : 'pause', { size: 14 });
+      const baseTitle = paused ? 'Resume' : 'Pause';
+      pauseBtn.title = paused && pendingBuf.length > 0
+        ? `${baseTitle} (${pendingBuf.length} B buffered)`
+        : baseTitle;
+      pauseBtn.setAttribute('aria-label', baseTitle);
+      pauseBtn.classList.toggle('is-active', paused);
     }
     if (!stateEl) return;
     if (paused) {
       stateEl.textContent = 'paused';
-      stateEl.style.color = '';
+      stateEl.setAttribute('data-state', 'off');
     } else {
       stateEl.textContent = lastStateText;
-      stateEl.style.color = lastStateCls === 'err' ? 'var(--red)'
-                         : lastStateCls === 'ok'  ? 'var(--green)'
-                         : '';
+      stateEl.setAttribute('data-state',
+        lastStateCls === 'ok' ? 'ok' : lastStateCls === 'err' ? 'err' : 'off');
     }
   }
 
@@ -339,35 +345,28 @@
       pendingBuf = '';
       updatePauseState();
     });
-    if (pauseBtn) pauseBtn.addEventListener('click', () => setPaused(!paused));
+    if (pauseBtn) {
+      pauseBtn.addEventListener('click', () => setPaused(!paused));
+      // Paint the initial glyph — updatePauseState normally only runs
+      // on toggle, so without this the button starts visually empty
+      // (no icon, just a thin frame) until the user first clicks it.
+      updatePauseState();
+    }
     if (tsToggleBtn) {
+      // Icon-only button — aria-pressed drives the visual highlight via
+      // CSS; the glyph (clock) doesn't change between states.
       tsToggleBtn.addEventListener('click', () => {
         showTimestamps = !showTimestamps;
-        tsToggleBtn.textContent = showTimestamps ? 'Hide times' : 'Show times';
         tsToggleBtn.setAttribute('aria-pressed', showTimestamps ? 'true' : 'false');
+        tsToggleBtn.title = showTimestamps ? 'Hide on-device timestamps'
+                                           : 'Show on-device timestamps';
       });
-      tsToggleBtn.textContent = showTimestamps ? 'Hide times' : 'Show times';
+      tsToggleBtn.setAttribute('aria-pressed', showTimestamps ? 'true' : 'false');
     }
-    if (downloadBtn) downloadBtn.addEventListener('click', async () => {
-      const exporter = window.PicoPoE && window.PicoPoE.logExport;
-      if (!exporter) {
-        alert('log exporter not loaded');
-        return;
-      }
-      try {
-        downloadBtn.disabled = true;
-        downloadBtn.textContent = 'Preparing…';
-        // Flush in-flight batch so nothing pending is missing from the file.
-        persistFlush();
-        await exporter.downloadHdf5();
-      } catch (e) {
-        console.error('[console] HDF5 export failed:', e);
-        alert(`HDF5 export failed: ${e.message || e}`);
-      } finally {
-        downloadBtn.disabled = false;
-        downloadBtn.textContent = 'Download';
-      }
-    });
+    // Download button moved to the telemetry pane (ide-telemetry-download)
+    // so it can produce a single bundle covering BOTH telemetry and the
+    // runtime log. Wired in ide.js, which calls into our flushPersist()
+    // before invoking the exporter.
 
     watchIp();
     streamLoop();
@@ -390,10 +389,12 @@
       setShowTimestamps(v) {
         showTimestamps = !!v;
         if (tsToggleBtn) {
-          tsToggleBtn.textContent = showTimestamps ? 'Hide times' : 'Show times';
           tsToggleBtn.setAttribute('aria-pressed', showTimestamps ? 'true' : 'false');
         }
       },
+      // Used by the relocated Download flow — flush in-flight batches
+      // so the on-disk HDF5 includes the freshest console bytes.
+      flushPersist() { persistFlush(); },
     };
   }
 

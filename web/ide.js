@@ -17,14 +17,56 @@
   const BLINK_TEMPLATE = `#include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include <math.h>
-#include "pico_poe_user.h"   // log(), transmit(), poe_command_register()
+#include "pico_poe_user.h"   // log(), transmit(), on_command()
 
 #define LED_PIN 25
 
-// Runs once after boot. Wire up your pins + peripherals here.
+// Shared state between the loop (core 0) and command callbacks (core 1).
+// volatile is enough for single 32-bit values on RP2350; reach for
+// stdatomic.h for multi-field state.
+static volatile uint32_t blink_period_ticks = 500;
+static volatile float    sine_amplitude     = 1.0f;
+
+// Command callback: POST /api/cmd?name=set_blink&value=<ticks>
+// Try it: bottom-right "Cmd" row → name=set_blink, args=value=200
+//
+// Callbacks run on the network stack's TCP-callback context. Keep them
+// fast — flip a flag here, do the heavy work in pico_poe_loop().
+//
+// Return NULL on success (the framework replies {"ok":true,"value":<v>})
+// or a static error string (HTTP 400, {"ok":false,"error":"..."}).
+static const char *on_set_blink(int32_t period) {
+    if (period < 10 || period > 10000) return "period must be in [10, 10000] ticks";
+    blink_period_ticks = (uint32_t)period;
+    log("[cmd] blink period -> %d ticks\\n", (int)period);
+    return NULL;
+}
+
+// Command callback: POST /api/cmd?name=set_amp&value=<float>
+// Scales the SIN telemetry channel — you'll see the live chart respond.
+static const char *on_set_amp(float value) {
+    if (value < 0.0f || value > 5.0f) return "value must be in [0.0, 5.0]";
+    sine_amplitude = value;
+    log("[cmd] sine amplitude -> %.3f\\n", (double)value);
+    return NULL;
+}
+
+// Runs once after boot. Wire up your pins + peripherals here, and
+// register any custom commands.
 void pico_poe_setup(void) {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
+
+    // Built-in commands (gpio_init/write/read/toggle, adc_read) are
+    // always available. Add your own with on_command(name, T, cb) —
+    // same shape as transmit(name, T, ptr). T is one of the scalar
+    // typedefs (I8, U8, I16, U16, I32, U32, I64, U64, F32, F64) and
+    // cb's argument type must match T's element type. The framework
+    // parses ?value=<v> into that type, calls cb, and replies with
+    // {"ok":true,"value":<v>} (or {"ok":false,"error":"..."}).
+    on_command("set_blink", I32, on_set_blink);
+    on_command("set_amp",   F32, on_set_amp);
+
     log("hello from pico_poe_setup()\\n");
 }
 
@@ -39,16 +81,18 @@ void pico_poe_loop(void) {
     static bool led_on = false;
     ticks++;
 
-    // Blink: toggle the LED every ~500 ms.
-    if (ticks % 500 == 0) {
+    // Blink: toggle the LED every \`blink_period_ticks\` (≈ms). The
+    // period is mutable from the IDE — try \`set_blink period=100\`.
+    if (ticks % blink_period_ticks == 0) {
         led_on = !led_on;
         gpio_put(LED_PIN, led_on);
         log("tick=%u, led=%s\\n", ticks, led_on ? "on" : "off");
     }
 
     // Stream a sine wave to the chart pane — one F32 sample per tick.
+    // Amplitude is mutable via \`set_amp value=...\` (1000 = 1.0).
     F32 sin_val;
-    sin_val[0] = sinf((float)ticks * 0.01f);
+    sin_val[0] = sine_amplitude * sinf((float)ticks * 0.01f);
     transmit("SIN", F32, sin_val);
 
     // Vector example — a synthetic 3-axis "sensor". Use a typedef once,
@@ -71,7 +115,7 @@ void pico_poe_loop(void) {
   //   - Otherwise → user has edits we don't want to lose; keep the saved
   //     source but warn in the build log so they know how to reset.
   const SOURCE_STORAGE_KEY = 'picopoe_source_v2';
-  const TEMPLATE_VERSION = 3;
+  const TEMPLATE_VERSION = 4;
 
   let editorMounted = false;
 
@@ -147,6 +191,232 @@ void pico_poe_loop(void) {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Resizable panes — drag the dividers between editor / side-panes
+  // (vertical) and between build-log / telemetry / console (horizontal).
+  // Sizes persist as percentages in localStorage so the layout survives
+  // reload. Each divider has a `data-target` attr naming the CSS custom
+  // property it controls (--editor-w / --log-h / --tel-h); the math is
+  // generic so adding more panes later just means another divider in
+  // the DOM with a new --var name.
+  // ---------------------------------------------------------------------
+
+  const LAYOUT_KEY = 'picopoe.layout';
+  const DEFAULT_MIN_PANE_PX = 120;   // per-resizer min, override via data-min-px
+
+  function loadLayout() {
+    try { return JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}'); }
+    catch (_) { return {}; }
+  }
+  function saveLayout(obj) {
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(obj)); }
+    catch (_) {}
+  }
+
+  function setupResizers() {
+    const root = document.documentElement;
+    const layout = loadLayout();
+    // Restore any previously-saved CSS-var sizes before binding drag.
+    for (const [k, v] of Object.entries(layout)) {
+      if (typeof k === 'string' && k.startsWith('--') &&
+          typeof v === 'string' && v.endsWith('%')) {
+        root.style.setProperty(k, v);
+      }
+    }
+
+    for (const r of document.querySelectorAll('.resizer')) {
+      r.addEventListener('mousedown', (e) => beginDrag(r, e));
+      // Keyboard accessibility: arrow keys nudge by 2% per press.
+      r.addEventListener('keydown', (ev) => onResizerKey(r, ev));
+    }
+
+    // Hide / show the telemetry pane via the topbar toggle. The
+    // hidden state collapses the whole right column (resizer + pane)
+    // and persists across reloads. The icon flips between two glyphs
+    // following the standard right-sidebar convention: when the panel
+    // is OPEN the arrow points right (toward the panel = "push it
+    // closed against the right edge"); when CLOSED the arrow points
+    // left (away from the right edge = "pull the panel back out").
+    const toggleBtn = document.getElementById('ide-toggle-telemetry');
+    const main = document.getElementById('ide-main-layout');
+    const icons = window.PicoPoE && window.PicoPoE.icons;
+    if (toggleBtn && main) {
+      const apply = (hidden) => {
+        main.classList.toggle('telemetry-hidden', !!hidden);
+        toggleBtn.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+        toggleBtn.title = hidden ? 'Show telemetry pane' : 'Hide telemetry pane';
+        if (icons) icons.set(toggleBtn, hidden ? 'panel_close' : 'panel_open',
+                             { size: 18 });
+        // Tell uPlot + anyone else with a ResizeObserver that the
+        // viewport effectively changed.
+        window.dispatchEvent(new Event('resize'));
+      };
+      apply(!!layout.telemetryHidden);
+      toggleBtn.addEventListener('click', () => {
+        const next = !main.classList.contains('telemetry-hidden');
+        apply(next);
+        const l = loadLayout();
+        l.telemetryHidden = next;
+        saveLayout(l);
+      });
+    }
+
+    // Static icons in pane headers. Pause/play toggles flip their own
+    // glyph from inside chart.js / console.js on state changes; here
+    // we just paint the steady-state icons.
+    if (icons) {
+      icons.set(document.getElementById('ide-log-clear'),    'delete',   { size: 14 });
+      icons.set(document.getElementById('ide-console-clear'),'delete',   { size: 14 });
+      icons.set(document.getElementById('ide-console-ts'),   'schedule', { size: 14 });
+      icons.set(document.getElementById('ide-add-plot'),     'add',      { size: 14 });
+      icons.set(document.getElementById('ide-telemetry-download'),
+                'download', { size: 14 });
+    }
+
+    // Relocated Download button — single bundle of everything the
+    // browser has captured (across sessions): runtime log AND every
+    // telemetry channel, packed into one HDF5. Flushes both persist
+    // queues first so the file reflects the latest samples instead of
+    // whatever last hit the timed flush.
+    const dlBtn = document.getElementById('ide-telemetry-download');
+    if (dlBtn) {
+      dlBtn.addEventListener('click', async () => {
+        const exporter = window.PicoPoE && window.PicoPoE.logExport;
+        const nc = window.PicoPoE && window.PicoPoE.netcon;
+        if (!exporter) {
+          if (nc) nc.err('Download failed: log exporter not loaded');
+          return;
+        }
+        // Snapshot the click time. The exporter filters out anything
+        // with wall_ms > cutoff so a long-running session can't keep
+        // the export window open indefinitely (and the file matches
+        // exactly what the user saw at click time).
+        const cutoffWallMs = Date.now();
+        const prog = nc && nc.progress
+          ? nc.progress(`Export → cutoff ${new Date(cutoffWallMs).toLocaleTimeString()}`)
+          : { update() {}, done() {}, fail() {} };
+        try {
+          dlBtn.disabled = true;
+          dlBtn.title = 'Preparing HDF5…';
+          // Push any in-flight batches to IndexedDB before reading.
+          if (window.PicoPoE.console   && window.PicoPoE.console.flushPersist)
+            window.PicoPoE.console.flushPersist();
+          if (window.PicoPoE.telemetry && window.PicoPoE.telemetry.flushPersist)
+            window.PicoPoE.telemetry.flushPersist();
+          const summary = await exporter.downloadHdf5({
+            cutoffWallMs,
+            onProgress: ({ pct, label }) => prog.update(pct, label),
+          });
+          const sizeKb = (summary.sizeBytes / 1024).toFixed(1);
+          const t = summary.timings || {};
+          // Recording window — original wall-clock times of the
+          // earliest and latest sample landed in the file. Lets the
+          // user verify the file really covers what they expected
+          // without having to crack the HDF5 open.
+          const fmtTs = (ms) => {
+            if (ms == null) return '—';
+            const d = new Date(ms);
+            return d.toLocaleTimeString() + '.' +
+                   String(d.getMilliseconds()).padStart(3, '0');
+          };
+          const recordedWindow = (summary.firstWallMs != null && summary.lastWallMs != null)
+            ? `recorded ${fmtTs(summary.firstWallMs)} → ${fmtTs(summary.lastWallMs)} ` +
+              `(${(summary.durationMs / 1000).toFixed(1)}s) · `
+            : '';
+          prog.done(
+            `Saved ${summary.filename} — ` +
+            `${summary.telemetryRecords} sample` +
+            `${summary.telemetryRecords === 1 ? '' : 's'} ` +
+            `across ${summary.telemetryChannels} channel` +
+            `${summary.telemetryChannels === 1 ? '' : 's'} · ` +
+            recordedWindow +
+            `${sizeKb} KB · h5wasm ${t.h5wasmMs}ms / tlm ${t.telemetryMs}ms / ` +
+            `build ${t.buildMs}ms · ${t.totalMs}ms total`
+          );
+        } catch (e) {
+          console.error('[ide] HDF5 export failed:', e);
+          prog.fail(`Download failed: ${e.message || e}`);
+        } finally {
+          dlBtn.disabled = false;
+          dlBtn.title = 'Download recording (telemetry + log) as HDF5';
+        }
+      });
+    }
+  }
+
+  function beginDrag(r, e) {
+    e.preventDefault();
+    const axis = r.dataset.axis;                       // 'x' or 'y'
+    const target = r.dataset.target;                   // CSS custom property name
+    const anchor = r.dataset.anchor || 'left';         // 'left'/'top' or 'right'/'bottom'
+    const minPx = Number(r.dataset.minPx) || DEFAULT_MIN_PANE_PX;
+    const containerSel = r.dataset.container
+      || (axis === 'x' ? '.ide-layout' : '.main-area');
+    const container = document.querySelector(containerSel);
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const span = axis === 'x' ? rect.width : rect.height;
+    const startPos = axis === 'x' ? rect.left : rect.top;
+
+    const minPct = (minPx / span) * 100;
+    const maxPct = 100 - minPct;
+
+    r.classList.add('dragging');
+    document.body.classList.add('resizing', axis === 'x' ? 'resizing-v' : 'resizing-h');
+
+    const onMove = (ev) => {
+      const cursorPos = axis === 'x' ? ev.clientX : ev.clientY;
+      // Right- (or bottom-) anchored: target % is the size of the pane
+      // on the FAR side of the resizer (e.g. telemetry width = how
+      // much room the right column gets). Left/top anchored: target %
+      // is the size of the pane on the NEAR side (editor width).
+      let pct = (anchor === 'right' || anchor === 'bottom')
+        ? ((startPos + span - cursorPos) / span) * 100
+        : ((cursorPos - startPos) / span) * 100;
+      if (pct < minPct) pct = minPct;
+      if (pct > maxPct) pct = maxPct;
+      document.documentElement.style.setProperty(target, pct.toFixed(2) + '%');
+      window.dispatchEvent(new Event('resize'));
+    };
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup',   onUp);
+      r.classList.remove('dragging');
+      document.body.classList.remove('resizing', 'resizing-v', 'resizing-h');
+      const layout = loadLayout();
+      layout[target] = document.documentElement.style.getPropertyValue(target);
+      saveLayout(layout);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup',   onUp);
+  }
+
+  function onResizerKey(r, ev) {
+    const axis = r.dataset.axis;
+    const target = r.dataset.target;
+    const anchor = r.dataset.anchor || 'left';
+    // Map arrow direction to "shrink target pane" vs "grow target pane",
+    // accounting for which side of the resizer the target lives on.
+    const grow = (anchor === 'right' || anchor === 'bottom')
+      ? (axis === 'x' ? ev.key === 'ArrowLeft' : ev.key === 'ArrowUp')
+      : (axis === 'x' ? ev.key === 'ArrowRight' : ev.key === 'ArrowDown');
+    const shrink = (anchor === 'right' || anchor === 'bottom')
+      ? (axis === 'x' ? ev.key === 'ArrowRight' : ev.key === 'ArrowDown')
+      : (axis === 'x' ? ev.key === 'ArrowLeft' : ev.key === 'ArrowUp');
+    if (!grow && !shrink) return;
+    ev.preventDefault();
+    const cur = parseFloat(getComputedStyle(document.documentElement)
+      .getPropertyValue(target)) || 50;
+    const next = grow ? Math.min(95, cur + 2) : Math.max(5, cur - 2);
+    document.documentElement.style.setProperty(target, next + '%');
+    window.dispatchEvent(new Event('resize'));
+    const layout = loadLayout();
+    layout[target] = next + '%';
+    saveLayout(layout);
+  }
+
   function initIde() {
     console.log('[ide.js] demo polish; v=' +
                 (window.PICOPOE_ASSET_VERSION || 'unknown'));
@@ -204,9 +474,10 @@ void pico_poe_loop(void) {
           opt.textContent = parts.join(' — ');
           deviceSelect.appendChild(opt);
         }
-        const match = Array.from(deviceSelect.options).find((o) => o.value === prevValue);
-        deviceSelect.value = match ? prevValue : known[0].ip;
       }
+      const match = Array.from(deviceSelect.options).find((o) => o.value === prevValue);
+      if (match) deviceSelect.value = prevValue;
+      else if (known.length > 0) deviceSelect.value = known[0].ip;
     }
     refreshDeviceList();
     window.addEventListener('picopoe:devices-updated', refreshDeviceList);
@@ -267,6 +538,8 @@ void pico_poe_loop(void) {
 
     document.getElementById('ide-btn-build').addEventListener('click', onBuild);
     document.getElementById('ide-btn-build-upload').addEventListener('click', onBuildUpload);
+
+    setupResizers();
 
     // Clear buttons for the two output panes.
     const clearLogBtn = document.getElementById('ide-log-clear');
@@ -421,25 +694,69 @@ void pico_poe_loop(void) {
     msg.textContent = 'Uploading…';
     setStatus('Uploading…');
 
-    const result = await window.PicoPoE.updateFirmware({
-      ip, token, data: uf2,
-      onProgress: ({ pct, loaded, total }) => {
-        bar.style.width = `${pct}%`;
-        msg.textContent = `Uploading… ${Math.round(pct)}% (${loaded}/${total} B)`;
-      },
-      onStage: (stage, detail) => {
-        logLine(detail && typeof detail === 'string' ? `[${stage}] ${detail}` : `[${stage}]`);
-        if (stage === 'precheck') msg.textContent = 'Checking device…';
-        else if (stage === 'waiting') msg.textContent = `Waiting for reboot… ${typeof detail === 'string' ? detail : ''}`;
-        else if (stage === 'verifying') msg.textContent = 'Verifying…';
-        else if (stage === 'commit') msg.textContent = 'Committing (TBYB)…';
-      },
-    });
+    // Pause the telemetry stream for the OTA window. Reasons:
+    //  1. The /api/upload POST and our /api/data?stream=1 GET compete for
+    //     the device's single lwIP HTTP slot — concurrent traffic causes
+    //     half-dead TCP states and chart jitter.
+    //  2. Across the reboot the stream's TCP connection sits in a long
+    //     "half-closed" state in the browser; without an explicit abort
+    //     the next reconnect can take 10+ s.
+    // Wrapping in try/finally guarantees we resume even on upload errors.
+    const tlm = window.PicoPoE && window.PicoPoE.telemetry;
+    if (tlm && tlm.pause) tlm.pause();
+
+    let result;
+    try {
+      result = await window.PicoPoE.updateFirmware({
+        ip, token, data: uf2,
+        onProgress: ({ pct, loaded, total }) => {
+          bar.style.width = `${pct}%`;
+          msg.textContent = `Uploading… ${Math.round(pct)}% (${loaded}/${total} B)`;
+        },
+        onStage: (stage, detail) => {
+          logLine(detail && typeof detail === 'string' ? `[${stage}] ${detail}` : `[${stage}]`);
+          if (stage === 'precheck') msg.textContent = 'Checking device…';
+          else if (stage === 'waiting') msg.textContent = `Waiting for reboot… ${typeof detail === 'string' ? detail : ''}`;
+          else if (stage === 'verifying') msg.textContent = 'Verifying…';
+          else if (stage === 'commit') msg.textContent = 'Committing (TBYB)…';
+        },
+      });
+    } finally {
+      // Resume the telemetry stream now that the device is committed and
+      // (re)online. resume() also resets cursor/currentRun so we tail
+      // from the new firmware's fresh ring counter — no stale-cursor
+      // wedge, no diagonal across the OTA in the chart.
+      if (tlm && tlm.resume) tlm.resume();
+    }
 
     // After a reboot the device's log cursor resets, so tell the console
     // to forget its cursor and re-seed to "now" on the next poll.
     if (window.PicoPoE && window.PicoPoE.console) {
       window.PicoPoE.console.resetCursor();
+    }
+
+    // Refresh the device dropdown's cached entry with whatever post-OTA
+    // status we got back. Without this the dropdown keeps showing the
+    // pre-upload version + partition until the next periodic scan, which
+    // is confusing because the chip you just successfully OTA'd reads
+    // as if nothing happened.
+    if (result.post && result.post.version) {
+      window.PicoPoE.updateKnownDevice(ip, {
+        version:   result.post.version,
+        partition: result.post.partition,
+        mac:       result.post.mac,
+        board_id:  result.post.board_id,
+      });
+    } else if (result.pre && result.pre.version) {
+      // Rollback / unreachable: write the pre-state so the dropdown
+      // still reflects what's actually running, not the (uncommitted)
+      // attempted version.
+      window.PicoPoE.updateKnownDevice(ip, {
+        version:   result.pre.version,
+        partition: result.pre.partition,
+        mac:       result.pre.mac,
+        board_id:  result.pre.board_id,
+      });
     }
 
     switch (result.outcome) {

@@ -67,6 +67,9 @@
   let stopped = false;
   let activeAbort = null;
   let ipWatchHandle = null;
+  let firstStream = true;       // distinguish initial connect from reconnects
+  let paused = false;           // external pause (e.g. during OTA upload)
+  let pauseWaiter = null;       // promise resolver to wake streamLoop on resume()
 
   // Schema: id → name. Refreshed on connect, on reboot, and when an
   // unknown id appears (rate-limited).
@@ -86,31 +89,21 @@
   function setState(text, cls) {
     if (!stateEl) return;
     stateEl.textContent = text;
-    stateEl.style.color = cls === 'err' ? 'var(--red)'
-                       : cls === 'ok'  ? 'var(--green)'
-                       : '';
+    // CSS .status-dot[data-state] paints the colored dot; cls is 'ok' /
+    // 'err' / null. We keep null → 'off' (gray) for the disconnected state.
+    stateEl.setAttribute('data-state',
+      cls === 'ok' ? 'ok' : cls === 'err' ? 'err' : 'off');
   }
 
-  function persistFlush() {
-    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
-    if (persistBatch.length === 0) return;
-    const batch = persistBatch;
-    persistBatch = [];
-    const store = window.PicoPoE && window.PicoPoE.logStore;
-    if (!store || !store.appendData) return;
-    store.appendData(batch).catch((e) => {
-      if (!persistFlush._warned) {
-        persistFlush._warned = true;
-        console.warn('[telemetry] logStore.appendData failed:', e);
-      }
-    });
-  }
-
-  function enqueuePersist(rec) {
-    persistBatch.push(rec);
-    if (persistBatch.length >= PERSIST_BATCH_MAX) persistFlush();
-    else if (!persistTimer) persistTimer = setTimeout(persistFlush, PERSIST_BATCH_MS);
-  }
+  // Telemetry now writes straight into the in-memory data_store
+  // (per-channel TypedArrays). No more per-record IDB transactions —
+  // structured-clone of millions of small Uint8Arrays was the
+  // dominant cost behind both the export hangs and the live-plot
+  // dropouts. The chart still gets every record via chart.push;
+  // log_export reads directly from data_store at click time.
+  // persistFlush is kept as a no-op so callers (download flow) don't
+  // need a feature check.
+  function persistFlush() { /* in-memory append is synchronous; nothing to flush */ }
 
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -126,6 +119,15 @@
       const next = new Map();
       for (const k of Object.keys(obj)) next.set(Number(k), String(obj[k]));
       schema = next;
+      // Persist into the run metadata so the HDF5 export can label
+      // datasets by msg_id → name. We attach to the CURRENT run only —
+      // older runs keep whatever schema was captured at their time.
+      if (currentRun && currentRun.streamEpoch != null) {
+        const store = window.PicoPoE && window.PicoPoE.logStore;
+        if (store && store.setRunSchema) {
+          store.setRunSchema(currentRun.streamEpoch, obj).catch(() => {});
+        }
+      }
     } catch (_) { /* non-fatal */ }
   }
 
@@ -181,6 +183,11 @@
       if (currentRun && lastUptimeUs !== null && uptimeUs + 1_000_000 < lastUptimeUs) {
         persistFlush();
         currentRun = null;
+        // Tell the chart to break the trace — the next sample will land
+        // at a wallMs that may differ noticeably from the buffer's last
+        // pre-reboot value, and we don't want a diagonal across the seam.
+        const chart = window.PicoPoE && window.PicoPoE.chart;
+        if (chart && chart.gap) chart.gap();
         // Schema may also have changed across reboot.
         refreshSchema(ip, true).catch(() => {});
       }
@@ -218,15 +225,11 @@
         values[k] = readElem(pdv, k * esz, dtype);
       }
 
-      // Persist the raw bytes (so HDF5 export can losslessly round-trip).
-      enqueuePersist({
-        stream_epoch: currentRun.streamEpoch,
-        msg_id: msgId,
-        uptime_us: uptimeUs,
-        wall_ms: wallMs,
-        dtype, n,
-        bytes: payload,
-      });
+      // In-memory time-series store (HDF5 export reads from here).
+      const ds = window.PicoPoE && window.PicoPoE.dataStore;
+      if (ds && ds.append) {
+        ds.append({ name, dtype, n, uptimeUs, wallMs, values });
+      }
 
       // Forward to the chart.
       const chart = window.PicoPoE && window.PicoPoE.chart;
@@ -242,16 +245,35 @@
   }
 
   async function runStream(ip, signal) {
-    const since = cursor === null ? 0 : cursor;
-    const url = `http://${ip}/api/data?since=${since}&stream=1`;
+    // Cursor-resume across (re)connects so brief network blips don't
+    // lose telemetry — the device replays from `since` if the ring still
+    // holds the bytes. Requires firmware ≥ v1.1.3 which clamps a stale
+    // `since > total` (post-reboot) at the entry point and writes back
+    // `conn->log_since` on zero-byte reads; without those fixes, a stale
+    // cursor would wedge the stream for ~10 minutes until total caught
+    // up. On a fresh page, cursor is null → omit `since` (live-tail).
+    const sinceParam = (cursor != null) ? `&since=${cursor}` : '';
+    const url = `http://${ip}/api/data?stream=1${sinceParam}`;
     wallMsAnchor = Date.now();
     parseBuf = new Uint8Array(0);
+
+    // Every reconnect (not the very first) gets a chart gap. Catches both
+    // OTA reboots (where uptime regresses) AND brief network blips (where
+    // it doesn't). Cheap and idempotent — gapIdx in the chart dedupes.
+    if (!firstStream) {
+      const chart = window.PicoPoE && window.PicoPoE.chart;
+      if (chart && chart.gap) chart.gap();
+    }
+    firstStream = false;
 
     await refreshSchema(ip, true);
 
     const res = await fetch(url, { mode: 'cors', cache: 'no-store', signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
+    // Trust the server-reported cursor: if our requested `since` was past
+    // total (post-reboot), v1.1.3+ clamps it and reports the real cursor
+    // here, which we then advance from with each received chunk.
     const startHdr = res.headers.get('X-Data-Cursor');
     const startCursor = startHdr === null ? 0 : Number(startHdr);
     cursor = Number.isFinite(startCursor) ? startCursor : 0;
@@ -277,6 +299,16 @@
 
   async function streamLoop() {
     while (!stopped) {
+      if (paused) {
+        // Block here until resume(). The pauseWaiter promise wakes us
+        // immediately rather than waiting out a sleep, so the chart
+        // catches up the moment the IDE finishes its OTA.
+        setState('paused', '');
+        await new Promise((r) => { pauseWaiter = r; });
+        pauseWaiter = null;
+        if (stopped) break;
+        continue;
+      }
       const ip = getIp();
       if (ip !== knownIp) {
         knownIp = ip;
@@ -288,6 +320,10 @@
         schema = new Map();
         const chart = window.PicoPoE && window.PicoPoE.chart;
         if (chart && chart.reset) chart.reset();
+        // New device session — wipe the in-memory time-series store
+        // so the next export only contains data from this device.
+        const ds = window.PicoPoE && window.PicoPoE.dataStore;
+        if (ds && ds.resetSession) ds.resetSession();
       }
       if (!ip) {
         setState('no device', '');
@@ -331,9 +367,66 @@
         stopped = true;
         persistFlush();
         if (activeAbort) activeAbort.abort();
+        if (pauseWaiter) { pauseWaiter(); pauseWaiter = null; }
         if (ipWatchHandle) { clearInterval(ipWatchHandle); ipWatchHandle = null; }
       },
+      // Used by ide.js around Build & Upload: stop tailing the device
+      // before the OTA so we don't fight upload.js for the device's lwIP
+      // resources, and so reboot-time half-dead TCP doesn't show up as
+      // chart artifacts. Resume after the new firmware is committed.
+      pause() {
+        if (paused) return;
+        paused = true;
+        // Drop the live stream + force a chart gap so the resume after
+        // OTA reads as a clean break instead of a diagonal across the
+        // upload duration.
+        if (activeAbort) activeAbort.abort();
+        const chart = window.PicoPoE && window.PicoPoE.chart;
+        if (chart && chart.gap) chart.gap();
+        persistFlush();
+      },
+      resume() {
+        if (!paused) return;
+        paused = false;
+        // Reset cursor + run state so the post-reboot stream starts
+        // cleanly at the device's new total. Also reset the in-memory
+        // data store — OTA implies a fresh device session and the
+        // export semantics are "session start → now".
+        cursor = null;
+        currentRun = null;
+        lastUptimeUs = null;
+        parseBuf = new Uint8Array(0);
+        const ds = window.PicoPoE && window.PicoPoE.dataStore;
+        if (ds && ds.resetSession) ds.resetSession();
+        // Drop the chart entirely — series Map AND uPlot instance — and
+        // let the next push() re-register and reconstruct uPlot fresh.
+        // chart.clear() (which only empties the value arrays and keeps
+        // the uPlot instance alive) leaves residual cursor / scale /
+        // draw-cache state inside uPlot that visibly composites against
+        // the first few new datapoints as a V-shape artifact at the
+        // leftmost edge of the new run. chart.reset() destroys the
+        // instance instead — the placeholder text reappears for the
+        // ~100 ms it takes for the first sample to arrive, then a fresh
+        // uPlot is built with no carryover. The full record stream is
+        // still preserved in IndexedDB for the HDF5 export — this only
+        // drops the live chart's display history.
+        const chart = window.PicoPoE && window.PicoPoE.chart;
+        if (chart && chart.reset) chart.reset();
+        // firstStream stays false so a future network blip (not OTA)
+        // still inserts a chart.gap() — only the OTA path nukes the ring.
+        if (pauseWaiter) { pauseWaiter(); pauseWaiter = null; }
+      },
+      isPaused() { return paused; },
       schemaSnapshot() { return new Map(schema); },
+      // Force any pending persist batch to IndexedDB. Used by the
+      // download flow so the on-disk file includes the most recent
+      // samples, not just whatever last hit the timed flush.
+      flushPersist() { persistFlush(); },
+      // The streamEpoch the current run is persisting under. Used by
+      // the export to include the active run even if its row in the
+      // runs table is missing or out of sync with the records (e.g.,
+      // when startRun fell back to Date.now() after an IDB hiccup).
+      currentStreamEpoch() { return currentRun ? currentRun.streamEpoch : null; },
     };
   }
 

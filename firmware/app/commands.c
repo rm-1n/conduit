@@ -1,35 +1,26 @@
 #include "commands.h"
+#include "data_buffer.h"        // poe_dtype_t
 
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "hardware/gpio.h"
-#include "hardware/adc.h"
-
-// GPIOs reserved by on-board peripherals. Refusing to touch these avoids
-// destroying the network link or the PoE detect input from a stray HTTP
-// request. Source of truth:
-//   firmware/app/pio/rmii_ethernet_phy_rx.pio (RX/TX/MDIO/MDC/REFCLK/RST)
-//   firmware/include/pico_poe_config.h (PoE status pin)
-#define POE_GPIO_RESERVED_MASK ( \
-      (1u <<  6) /* RMII RX0 */  | (1u <<  7) /* RMII RX1 */  | (1u <<  8) /* RMII CRS_DV */ \
-    | (1u << 10) /* RMII TX0 */  | (1u << 11) /* RMII TX1 */  | (1u << 12) /* RMII TX_EN  */ \
-    | (1u << 14) /* RMII MDIO*/  | (1u << 15) /* RMII MDC  */ | (1u << 21) /* RMII REFCLK*/ \
-    | (1u << 27) /* PoE status*/ | (1u << 28) /* RMII RST  */ )
-
-#define POE_GPIO_MAX 29  // RP2350 has GP0..GP29 usable from the user side
+#include <inttypes.h>
 
 #define POE_CMD_MAX 24
 
+// A command entry has either a low-level handler (raw args+out) OR a
+// typed callback (parsed value, NULL/error-string return). Mutually
+// exclusive: typed entries set handler=NULL and let commands_dispatch
+// route through invoke_typed.
 typedef struct {
     const char *name;
-    poe_cmd_handler_t handler;
+    poe_cmd_handler_t handler;     // NULL when typed_cb is set
+    void              *typed_cb;   // cast back via typed_dtype
+    poe_dtype_t        typed_dtype;
 } cmd_entry_t;
 
 static cmd_entry_t g_cmds[POE_CMD_MAX];
 static uint8_t     g_cmd_count = 0;
-static bool        g_adc_inited = false;
 
 // --- arg parsing ---------------------------------------------------------
 
@@ -83,6 +74,32 @@ long poe_cmd_arg_long(const char *args, const char *key, long fallback) {
     return n;
 }
 
+float poe_cmd_arg_float(const char *args, const char *key, float fallback) {
+    size_t vlen = 0;
+    const char *v = find_value(args, key, &vlen);
+    if (!v || vlen == 0 || vlen >= 32) return fallback;
+    char buf[32];
+    memcpy(buf, v, vlen);
+    buf[vlen] = '\0';
+    char *endp = NULL;
+    float n = strtof(buf, &endp);
+    if (endp == buf) return fallback;
+    return n;
+}
+
+double poe_cmd_arg_double(const char *args, const char *key, double fallback) {
+    size_t vlen = 0;
+    const char *v = find_value(args, key, &vlen);
+    if (!v || vlen == 0 || vlen >= 32) return fallback;
+    char buf[32];
+    memcpy(buf, v, vlen);
+    buf[vlen] = '\0';
+    char *endp = NULL;
+    double n = strtod(buf, &endp);
+    if (endp == buf) return fallback;
+    return n;
+}
+
 size_t poe_cmd_arg_str(const char *args, const char *key,
                        char *out, size_t out_max) {
     if (!out || out_max == 0) return 0;
@@ -95,21 +112,7 @@ size_t poe_cmd_arg_str(const char *args, const char *key,
     return vlen;
 }
 
-// --- pin guard ----------------------------------------------------------
-
-static bool gpio_pin_allowed(int pin, char *err, size_t err_max) {
-    if (pin < 0 || pin > POE_GPIO_MAX) {
-        snprintf(err, err_max, "pin %d out of range 0..%d", pin, POE_GPIO_MAX);
-        return false;
-    }
-    if (POE_GPIO_RESERVED_MASK & (1u << pin)) {
-        snprintf(err, err_max, "pin %d is reserved (RMII / PoE)", pin);
-        return false;
-    }
-    return true;
-}
-
-// --- built-in handlers --------------------------------------------------
+// --- error helper -------------------------------------------------------
 
 // Handler error path: write the bare message into `out` (the http layer
 // quotes it into {"ok":false,"error":"..."}), and return -1 so the
@@ -124,87 +127,153 @@ static int err_json(char *out, size_t out_max, const char *msg) {
     return -1;
 }
 
-static int handle_gpio_init(const char *args, char *out, size_t out_max) {
-    int pin = poe_cmd_arg_int(args, "pin", -1);
-    char err[64];
-    if (!gpio_pin_allowed(pin, err, sizeof(err))) return err_json(out, out_max, err);
-    char dir[8];
-    poe_cmd_arg_str(args, "dir", dir, sizeof(dir));
-    bool out_dir = (strcmp(dir, "out") == 0);
-    gpio_init((uint)pin);
-    gpio_set_dir((uint)pin, out_dir);
-    return snprintf(out, out_max, "{\"pin\":%d,\"dir\":\"%s\"}",
-                    pin, out_dir ? "out" : "in");
-}
-
-static int handle_gpio_write(const char *args, char *out, size_t out_max) {
-    int pin = poe_cmd_arg_int(args, "pin", -1);
-    int val = poe_cmd_arg_int(args, "value", -1);
-    char err[64];
-    if (!gpio_pin_allowed(pin, err, sizeof(err))) return err_json(out, out_max, err);
-    if (val != 0 && val != 1) return err_json(out, out_max, "value must be 0 or 1");
-    gpio_put((uint)pin, val != 0);
-    return snprintf(out, out_max, "{\"pin\":%d,\"value\":%d}", pin, val);
-}
-
-static int handle_gpio_read(const char *args, char *out, size_t out_max) {
-    int pin = poe_cmd_arg_int(args, "pin", -1);
-    char err[64];
-    if (!gpio_pin_allowed(pin, err, sizeof(err))) return err_json(out, out_max, err);
-    int v = gpio_get((uint)pin) ? 1 : 0;
-    return snprintf(out, out_max, "{\"pin\":%d,\"value\":%d}", pin, v);
-}
-
-static int handle_gpio_toggle(const char *args, char *out, size_t out_max) {
-    int pin = poe_cmd_arg_int(args, "pin", -1);
-    char err[64];
-    if (!gpio_pin_allowed(pin, err, sizeof(err))) return err_json(out, out_max, err);
-    int v = gpio_get((uint)pin) ? 0 : 1;
-    gpio_put((uint)pin, v);
-    return snprintf(out, out_max, "{\"pin\":%d,\"value\":%d}", pin, v);
-}
-
-static int handle_adc_read(const char *args, char *out, size_t out_max) {
-    // Channels: 0=GP26, 4=internal temp sensor. Channels 1..3 alias to
-    // pins also used by RMII/PoE — refuse them.
-    int ch = poe_cmd_arg_int(args, "channel", 0);
-    if (!(ch == 0 || ch == 4)) {
-        return err_json(out, out_max, "channel must be 0 (GP26) or 4 (temp)");
-    }
-    if (!g_adc_inited) {
-        adc_init();
-        adc_gpio_init(26);
-        adc_set_temp_sensor_enabled(true);
-        g_adc_inited = true;
-    }
-    adc_select_input((uint)ch);
-    uint16_t raw = adc_read();
-    return snprintf(out, out_max, "{\"channel\":%d,\"raw\":%u}", ch, (unsigned)raw);
-}
-
 // --- registration & dispatch -------------------------------------------
+
+// Find an existing slot by name, or claim a fresh one. Returns NULL if
+// the table is full and `name` isn't already registered.
+static cmd_entry_t *cmd_slot(const char *name) {
+    for (uint8_t i = 0; i < g_cmd_count; i++) {
+        if (g_cmds[i].name && strcmp(g_cmds[i].name, name) == 0) {
+            return &g_cmds[i];
+        }
+    }
+    if (g_cmd_count >= POE_CMD_MAX) return NULL;
+    cmd_entry_t *e = &g_cmds[g_cmd_count++];
+    e->name = name;
+    return e;
+}
 
 void poe_command_register(const char *name, poe_cmd_handler_t handler) {
     if (!name || !handler) return;
-    // Replace if already registered.
-    for (uint8_t i = 0; i < g_cmd_count; i++) {
-        if (g_cmds[i].name && strcmp(g_cmds[i].name, name) == 0) {
-            g_cmds[i].handler = handler;
-            return;
-        }
-    }
-    if (g_cmd_count >= POE_CMD_MAX) return;
-    g_cmds[g_cmd_count].name    = name;
-    g_cmds[g_cmd_count].handler = handler;
-    g_cmd_count++;
+    cmd_entry_t *e = cmd_slot(name);
+    if (!e) return;
+    e->handler     = handler;
+    e->typed_cb    = NULL;        // mark as low-level (handler wins)
+    e->typed_dtype = 0;
 }
 
+// Common path for typed registration. The element type info is needed
+// at dispatch time to parse the `value` query arg into the right C type
+// before calling the user's typed callback.
+static void register_typed(const char *name, void *cb, poe_dtype_t dtype) {
+    if (!name || !cb) return;
+    cmd_entry_t *e = cmd_slot(name);
+    if (!e) return;
+    e->handler     = NULL;        // typed path takes over
+    e->typed_cb    = cb;
+    e->typed_dtype = dtype;
+}
+
+void _poe_register_cb_i8 (const char *name, poe_cmd_cb_i8_t  cb) { register_typed(name, (void *)cb, POE_DTYPE_I8);  }
+void _poe_register_cb_u8 (const char *name, poe_cmd_cb_u8_t  cb) { register_typed(name, (void *)cb, POE_DTYPE_U8);  }
+void _poe_register_cb_i16(const char *name, poe_cmd_cb_i16_t cb) { register_typed(name, (void *)cb, POE_DTYPE_I16); }
+void _poe_register_cb_u16(const char *name, poe_cmd_cb_u16_t cb) { register_typed(name, (void *)cb, POE_DTYPE_U16); }
+void _poe_register_cb_i32(const char *name, poe_cmd_cb_i32_t cb) { register_typed(name, (void *)cb, POE_DTYPE_I32); }
+void _poe_register_cb_u32(const char *name, poe_cmd_cb_u32_t cb) { register_typed(name, (void *)cb, POE_DTYPE_U32); }
+void _poe_register_cb_i64(const char *name, poe_cmd_cb_i64_t cb) { register_typed(name, (void *)cb, POE_DTYPE_I64); }
+void _poe_register_cb_u64(const char *name, poe_cmd_cb_u64_t cb) { register_typed(name, (void *)cb, POE_DTYPE_U64); }
+void _poe_register_cb_f32(const char *name, poe_cmd_cb_f32_t cb) { register_typed(name, (void *)cb, POE_DTYPE_F32); }
+void _poe_register_cb_f64(const char *name, poe_cmd_cb_f64_t cb) { register_typed(name, (void *)cb, POE_DTYPE_F64); }
+
 void commands_init(void) {
-    poe_command_register("gpio_init",   handle_gpio_init);
-    poe_command_register("gpio_write",  handle_gpio_write);
-    poe_command_register("gpio_read",   handle_gpio_read);
-    poe_command_register("gpio_toggle", handle_gpio_toggle);
-    poe_command_register("adc_read",    handle_adc_read);
+    // No built-in commands. The device exposes only what user code
+    // registers via on_command(name, T, cb) — application-level
+    // intent ("set_target", "vent_open"), not generic peripheral
+    // pokes. Kept as a function so main.c's call site stays stable
+    // and a future maintainer can add cross-cutting handlers here
+    // without changing the wiring.
+}
+
+// Adapter for typed callbacks: parse the `value` query arg into the
+// element type, invoke cb, render success/error reply. Handler-style
+// return convention: >=0 bytes written on success, -1 on error (with
+// the bare error message in `out`, which the http layer JSON-escapes).
+static int invoke_typed(const cmd_entry_t *e, const char *args,
+                        char *out, size_t out_max) {
+    const char *err = NULL;
+    int written = 0;
+
+    switch (e->typed_dtype) {
+        case POE_DTYPE_I8: {
+            int8_t v = (int8_t)poe_cmd_arg_int(args, "value", 0);
+            err = ((poe_cmd_cb_i8_t)e->typed_cb)(v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%d}", (int)v);
+            break;
+        }
+        case POE_DTYPE_U8: {
+            uint8_t v = (uint8_t)poe_cmd_arg_int(args, "value", 0);
+            err = ((poe_cmd_cb_u8_t)e->typed_cb)(v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%u}", (unsigned)v);
+            break;
+        }
+        case POE_DTYPE_I16: {
+            int16_t v = (int16_t)poe_cmd_arg_int(args, "value", 0);
+            err = ((poe_cmd_cb_i16_t)e->typed_cb)(v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%d}", (int)v);
+            break;
+        }
+        case POE_DTYPE_U16: {
+            uint16_t v = (uint16_t)poe_cmd_arg_int(args, "value", 0);
+            err = ((poe_cmd_cb_u16_t)e->typed_cb)(v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%u}", (unsigned)v);
+            break;
+        }
+        case POE_DTYPE_I32: {
+            int32_t v = (int32_t)poe_cmd_arg_long(args, "value", 0);
+            err = ((poe_cmd_cb_i32_t)e->typed_cb)(v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%" PRId32 "}", v);
+            break;
+        }
+        case POE_DTYPE_U32: {
+            uint32_t v = (uint32_t)poe_cmd_arg_long(args, "value", 0);
+            err = ((poe_cmd_cb_u32_t)e->typed_cb)(v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%" PRIu32 "}", v);
+            break;
+        }
+        case POE_DTYPE_I64: {
+            // poe_cmd_arg_long returns long, which is 32-bit on Pico's
+            // arm-none-eabi by default. strtoll path covers true 64-bit.
+            size_t vlen = 0;
+            const char *vs = find_value(args, "value", &vlen);
+            int64_t v = 0;
+            if (vs && vlen && vlen < 24) {
+                char buf[24]; memcpy(buf, vs, vlen); buf[vlen] = '\0';
+                v = (int64_t)strtoll(buf, NULL, 0);
+            }
+            err = ((poe_cmd_cb_i64_t)e->typed_cb)(v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%" PRId64 "}", v);
+            break;
+        }
+        case POE_DTYPE_U64: {
+            size_t vlen = 0;
+            const char *vs = find_value(args, "value", &vlen);
+            uint64_t v = 0;
+            if (vs && vlen && vlen < 24) {
+                char buf[24]; memcpy(buf, vs, vlen); buf[vlen] = '\0';
+                v = (uint64_t)strtoull(buf, NULL, 0);
+            }
+            err = ((poe_cmd_cb_u64_t)e->typed_cb)(v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%" PRIu64 "}", v);
+            break;
+        }
+        case POE_DTYPE_F32: {
+            float v = poe_cmd_arg_float(args, "value", 0.0f);
+            err = ((poe_cmd_cb_f32_t)e->typed_cb)(v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%g}", (double)v);
+            break;
+        }
+        case POE_DTYPE_F64: {
+            double v = poe_cmd_arg_double(args, "value", 0.0);
+            err = ((poe_cmd_cb_f64_t)e->typed_cb)(v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%g}", v);
+            break;
+        }
+        default:
+            return err_json(out, out_max, "internal: unknown typed dtype");
+    }
+
+    if (err) return err_json(out, out_max, err);
+    return written;
 }
 
 int commands_dispatch(const char *name, const char *args,
@@ -212,9 +281,12 @@ int commands_dispatch(const char *name, const char *args,
     if (!name || !out || out_max == 0) return -1;
     for (uint8_t i = 0; i < g_cmd_count; i++) {
         if (strcmp(g_cmds[i].name, name) == 0) {
-            int n = g_cmds[i].handler(args ? args : "", out, out_max);
+            int n = g_cmds[i].handler
+                ? g_cmds[i].handler(args ? args : "", out, out_max)
+                : invoke_typed(&g_cmds[i], args ? args : "", out, out_max);
             return n < 0 ? -2 : n;
         }
     }
     return -1;
 }
+

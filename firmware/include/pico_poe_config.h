@@ -7,9 +7,9 @@
 
 // Firmware version (increment MINOR for each release, MAJOR for breaking changes)
 #define PICO_POE_VERSION_MAJOR  1
-#define PICO_POE_VERSION_MINOR  1
-#define PICO_POE_VERSION_PATCH  1
-#define PICO_POE_VERSION_STRING "1.1.1"
+#define PICO_POE_VERSION_MINOR  2
+#define PICO_POE_VERSION_PATCH  0
+#define PICO_POE_VERSION_STRING "1.2.0"
 
 // =============================================================================
 // Authentication

@@ -23,7 +23,13 @@
 // Payload is raw little-endian elements (RP2350 and typical browsers
 // agree). The browser uses DataView with littleEndian=true.
 
-#define DATA_BUFFER_SIZE       32768    // must be a power of two
+// 64 KB ring. With 1 kHz × 2 channels × 20 B/record = 40 KB/s steady
+// load, this is ~1.6 s of backlog tolerance — enough to absorb a
+// transient browser stall (IndexedDB flush, GC pause, tab background)
+// without triggering the drop-oldest clamp in data_buffer_read. The
+// throughput-side fixes (TCP_SND_BUF + http_server out[] bump) handle
+// steady state; this slack handles burst-stall recovery.
+#define DATA_BUFFER_SIZE       65536    // must be a power of two
 #define POE_DATA_MAX_NAMES     32
 #define POE_DATA_NAME_MAX      32
 #define POE_DATA_RECORD_HEADER 16

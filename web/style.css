@@ -1,31 +1,51 @@
 :root {
-  --bg: #0d1117;
-  --card: #161b22;
-  --border: #30363d;
-  --text: #e6edf3;
-  --text2: #8b949e;
-  --accent: #58a6ff;
+  --bg:           #0d1117;
+  --bg-soft:      #11161c;
+  --card:         #161b22;
+  --card-soft:    #1b2129;
+  --border:       #2a3038;
+  --border-soft:  #20252b;
+  --text:         #e6edf3;
+  --text2:        #8b949e;
+  --text3:        #6b7280;
+  --accent:       #58a6ff;
+  --accent-soft:  rgba(88, 166, 255, 0.15);
   --accent-hover: #79c0ff;
-  --green: #3fb950;
-  --red: #f85149;
-  --orange: #d29922;
-  --radius: 6px;
-  --topbar-h: 56px;
-  --upload-h: 0px;
+  --green:        #3fb950;
+  --green-soft:   rgba(63, 185, 80, 0.15);
+  --red:          #f85149;
+  --red-soft:     rgba(248, 81, 73, 0.15);
+  --orange:       #d29922;
+  --radius:       6px;
+  --radius-sm:    4px;
+  --topbar-h:     52px;
+  --upload-h:     0px;
+  --shadow-sm:    0 1px 0 rgba(0, 0, 0, 0.2);
+  --focus-ring:   0 0 0 2px rgba(88, 166, 255, 0.35);
+  --gutter:       1px;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f6f8fa;
-    --card: #ffffff;
-    --border: #d0d7de;
-    --text: #1f2328;
-    --text2: #656d76;
-    --accent: #0969da;
+    --bg:           #f6f8fa;
+    --bg-soft:      #eef1f5;
+    --card:         #ffffff;
+    --card-soft:    #f6f8fa;
+    --border:       #d0d7de;
+    --border-soft:  #e6ebf0;
+    --text:         #1f2328;
+    --text2:        #656d76;
+    --text3:        #8c959f;
+    --accent:       #0969da;
+    --accent-soft:  rgba(9, 105, 218, 0.12);
     --accent-hover: #0550ae;
-    --green: #1a7f37;
-    --red: #cf222e;
-    --orange: #9a6700;
+    --green:        #1a7f37;
+    --green-soft:   rgba(26, 127, 55, 0.12);
+    --red:          #cf222e;
+    --red-soft:     rgba(207, 34, 46, 0.12);
+    --orange:       #9a6700;
+    --shadow-sm:    0 1px 0 rgba(0, 0, 0, 0.04);
+    --focus-ring:   0 0 0 2px rgba(9, 105, 218, 0.35);
   }
 }
 
@@ -39,11 +59,13 @@ body {
   color: var(--text);
   line-height: 1.4;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .hidden { display: none !important; }
 
-/* ---- Top bar ---- */
+/* ---- App shell ---- */
 #app.ide-only {
   display: flex;
   flex-direction: column;
@@ -51,6 +73,7 @@ body {
   width: 100%;
 }
 
+/* ---- Top bar ---- */
 .topbar {
   height: var(--topbar-h);
   flex: 0 0 auto;
@@ -60,16 +83,36 @@ body {
   padding: 0 1rem;
   background: var(--card);
   border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .brand {
   display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.55rem;
   min-width: fit-content;
+  padding-right: 0.6rem;
+  border-right: 1px solid var(--border-soft);
 }
-.brand h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: 0.02em; }
-.brand-sub { color: var(--text2); font-size: 0.8rem; }
+.brand::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.brand h1 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.brand-sub {
+  color: var(--text2);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
 
 .toolbar {
   display: flex;
@@ -81,56 +124,67 @@ body {
 }
 .toolbar-label {
   color: var(--text2);
-  font-size: 0.8rem;
-  margin-right: 0.15rem;
+  font-size: 0.78rem;
+  margin-right: 0.1rem;
+  font-weight: 500;
 }
 .sep {
   width: 1px;
   height: 22px;
-  background: var(--border);
-  margin: 0 0.25rem;
+  background: var(--border-soft);
+  margin: 0 0.35rem;
 }
 
 .status-chip {
   color: var(--text2);
-  font-size: 0.8rem;
-  padding: 0 0.5rem;
+  font-size: 0.78rem;
+  padding: 0.25rem 0.55rem;
   min-width: 6ch;
+  border-radius: var(--radius-sm);
+  background: var(--card-soft);
+  border: 1px solid var(--border-soft);
 }
+.status-chip:empty { display: none; }
 
-/* ---- Inputs, buttons ---- */
-input[type="text"], input[type="password"], select {
+/* ---- Inputs ---- */
+input[type="text"], input[type="password"], input[type="number"], select {
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text);
-  padding: 0.35rem 0.55rem;
-  font-size: 0.85rem;
+  padding: 0.32rem 0.55rem;
+  font-size: 0.83rem;
   outline: none;
   font-family: inherit;
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
-input[type="text"]:focus, input[type="password"]:focus, select:focus {
+input:focus, select:focus {
   border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
+input::placeholder { color: var(--text3); }
 
 #ide-quick-ip { width: 14ch; }
 #ide-auth-token { width: 11ch; }
 #ide-device-select { min-width: 18ch; max-width: 28ch; }
 
+/* ---- Buttons ---- */
 button {
-  background: var(--bg);
+  background: var(--card);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.35rem 0.8rem;
-  font-size: 0.85rem;
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.85rem;
+  font-size: 0.83rem;
   cursor: pointer;
   font-weight: 500;
   font-family: inherit;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
 }
-button:hover { background: var(--card); border-color: var(--text2); }
+button:hover { background: var(--card-soft); border-color: var(--text2); }
+button:focus-visible { box-shadow: var(--focus-ring); border-color: var(--accent); }
 button:active { transform: translateY(1px); }
-button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
 .btn-primary {
   background: var(--accent);
@@ -144,17 +198,25 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   border-color: var(--border);
   color: var(--text2);
 }
-.btn-ghost:hover { color: var(--text); }
+.btn-ghost:hover { color: var(--text); background: var(--card-soft); }
 
 .btn-mini {
-  padding: 0.15rem 0.45rem;
-  font-size: 0.75rem;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.74rem;
+  border-radius: 3px;
 }
 
-/* ---- Upload progress strip (under topbar, across whole width) ---- */
+/* Aria-pressed toggles + custom .is-active treat-the-same. */
+button[aria-pressed="true"], button.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+/* ---- Upload progress strip ---- */
 .upload-status {
   flex: 0 0 auto;
-  padding: 0.35rem 1rem;
+  padding: 0.4rem 1rem;
   background: var(--card);
   border-bottom: 1px solid var(--border);
   display: flex;
@@ -162,31 +224,42 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   gap: 0.75rem;
 }
 .upload-status .progress-bar { flex: 1 1 auto; margin: 0; }
-.upload-status #ide-upload-msg { color: var(--text2); font-size: 0.8rem; min-width: 24ch; }
+.upload-status #ide-upload-msg { color: var(--text2); font-size: 0.78rem; min-width: 24ch; }
 
 .progress-bar {
   height: 4px;
-  background: var(--border);
+  background: var(--border-soft);
   border-radius: 2px;
   overflow: hidden;
 }
 .progress-fill {
   height: 100%;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
   border-radius: 2px;
   width: 0%;
   transition: width 0.2s;
 }
 
-/* ---- Main 2x2 layout ---- */
+/* ---- Main layout ----
+   Track sizes are driven by CSS custom properties (--telemetry-w,
+   --editor-h, --log-w) so the JS drag handlers can update them in
+   place. The 6px tracks between panes are the resizer DOM elements
+   themselves. */
 .ide-layout {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  grid-gap: 1px;
+  grid-template-columns: minmax(0, 1fr) 6px var(--telemetry-w, 35%);
+  grid-gap: 0;
   background: var(--border);
   min-height: 0;
 }
+/* When telemetry is hidden, the column collapses entirely (resizer
+   too) and main-area takes the full width. */
+.ide-layout.telemetry-hidden {
+  grid-template-columns: minmax(0, 1fr) 0 0;
+}
+.ide-layout.telemetry-hidden > .resizer.main-telemetry,
+.ide-layout.telemetry-hidden > .telemetry-pane { display: none; }
 
 .pane {
   background: var(--bg);
@@ -196,121 +269,135 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   min-width: 0;
   overflow: hidden;
 }
-.editor-pane { grid-column: 1; grid-row: 1; }
-.side-panes {
-  grid-column: 2;
-  grid-row: 1;
+
+.main-area {
+  grid-column: 1; grid-row: 1;
   display: grid;
-  grid-template-rows: 0.8fr 1.6fr 1fr;
-  grid-gap: 1px;
+  grid-template-rows: var(--editor-h, 60%) 6px minmax(0, 1fr);
+  grid-gap: 0;
   background: var(--border);
   min-height: 0;
+  min-width: 0;
 }
-.log-pane       { grid-row: 1; }
-.telemetry-pane { grid-row: 2; }
-.console-pane   { grid-row: 3; }
+.editor-pane { grid-row: 1; }
+.bottom-area {
+  grid-row: 3;
+  display: grid;
+  grid-template-columns: var(--log-w, 50%) 6px minmax(0, 1fr);
+  grid-gap: 0;
+  background: var(--border);
+  min-width: 0;
+}
+/* Bottom-area panes get their own mins so they stay usable when the
+   telemetry pane is dragged wide and the main column shrinks. */
+.log-pane     { grid-column: 1; min-width: 200px; }
+.console-pane { grid-column: 3; min-width: 360px; }
+/* Keep pane titles on one line — wrapping pushes button rows down
+   and starts cropping. */
+.pane-title { white-space: nowrap; }
 
-/* Telemetry pane internals */
-.chart-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
+.telemetry-pane {
+  grid-column: 3; grid-row: 1;
+  /* The header packs status + info + window selector + Pause + Clear,
+     and the cmd-strip below packs CMD label + name + args + send.
+     Below ~420 px the trailing buttons get clipped off the right
+     edge. Hard min keeps the chrome readable; if the user wants
+     more room for code they can hide the pane outright via the
+     toolbar toggle. */
+  min-width: 420px;
+}
+
+/* ---- Resizers (drag handles between panes) ---- */
+.resizer {
+  background: var(--border);
   position: relative;
-  background: var(--card);
+  z-index: 5;
+  transition: background-color 0.15s;
 }
-#ide-chart-canvas {
+.resizer:hover, .resizer.dragging { background: var(--accent, #58a6ff); }
+.resizer-v { cursor: col-resize; }
+.resizer-h { cursor: row-resize; }
+/* Position each resizer in its parent grid. */
+.ide-layout > .resizer.main-telemetry { grid-column: 2; grid-row: 1; }
+.main-area  > .resizer-h               { grid-row: 2; }
+.bottom-area > .resizer-v              { grid-column: 2; }
+/* Bigger grab hitbox than the visual sliver. */
+.resizer-v::after, .resizer-h::after {
+  content: '';
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
+  top: -3px; bottom: -3px; left: -3px; right: -3px;
 }
-.cmd-strip {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.6rem;
-  border-top: 1px solid var(--border);
-  background: var(--card);
-  font-size: 0.78rem;
+/* Block text selection while a drag is in progress (set on body via JS). */
+body.resizing, body.resizing * {
+  user-select: none !important;
+  cursor: inherit !important;
 }
-.cmd-strip .cmd-label {
-  color: var(--text2);
-  font-weight: 600;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.cmd-strip .cmd-num {
-  width: 4em;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 2px 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-.cmd-strip .cmd-text {
-  width: 8em;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 2px 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-.cmd-strip .cmd-text-wide { width: 12em; }
-.cmd-strip .cmd-select {
-  background: var(--bg);
-  color: var(--text2);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 1px 4px;
-  font-size: 0.72rem;
-}
-.cmd-strip .cmd-sep {
-  width: 1px;
-  align-self: stretch;
-  background: var(--border);
-  margin: 0 0.2rem;
-}
-.cmd-log {
-  flex: 1 1 14em;
-  min-width: 8em;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: var(--text2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+body.resizing-v { cursor: col-resize; }
+body.resizing-h { cursor: row-resize; }
 
+/* ---- Pane header ---- */
 .pane-header {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.35rem 0.75rem;
+  flex-wrap: wrap;             /* actions wrap below title when narrow */
+  gap: 0.4rem 0.6rem;
+  padding: 0.4rem 0.75rem;
   background: var(--card);
   border-bottom: 1px solid var(--border);
-  min-height: 32px;
+  min-height: 36px;
 }
 .pane-title {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--text2);
-  font-weight: 600;
+  font-weight: 700;
 }
 .pane-hint {
   color: var(--text2);
-  font-size: 0.75rem;
-  margin-left: auto;
+  font-size: 0.74rem;
 }
-.pane-header .btn-mini { margin-left: auto; }
-.pane-header .pane-hint + .btn-mini { margin-left: 0; }
+.pane-hint-info {
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.pane-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
 
-/* Monaco fills the editor pane. */
+/* Status dot — left of the pane-actions group */
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+  color: var(--text2);
+  font-weight: 500;
+}
+.status-dot::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text3);
+  box-shadow: 0 0 0 2px transparent;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.status-dot[data-state="ok"]::before {
+  background: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+.status-dot[data-state="err"]::before {
+  background: var(--red);
+  box-shadow: 0 0 0 3px var(--red-soft);
+}
+
+/* ---- Editor (Monaco) ---- */
 #ide-source.ide-monaco {
   flex: 1 1 auto;
   min-height: 0;
@@ -321,15 +408,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 }
 #ide-source.ide-monaco .monaco-editor { padding: 0; }
 
-/* Build log + runtime console share the same pre styling (mono, scrollable). */
+/* ---- Build log + runtime console ---- */
 #ide-log, #ide-console {
   flex: 1 1 auto;
   background: var(--bg);
   color: var(--text);
-  padding: 0.5rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.78rem;
-  line-height: 1.4;
+  font-size: 0.77rem;
+  line-height: 1.45;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
@@ -354,31 +441,425 @@ code {
   font-size: 0.85em;
 }
 
-/* Narrow viewport: stack side panes under editor. */
+/* ---- Telemetry pane internals ---- */
+/* Container for stacked plot widgets — each Chart instance appends a
+   .plot subtree here. Scrollable so adding many plots doesn't blow
+   the pane out of its column.
+   min-height keeps the chart from being squeezed to zero by the
+   cmd-strip + telemetry-console + headers below it (each have their
+   own fixed minimums); the user can still reclaim space by hiding
+   the telemetry pane outright via the topbar toggle. */
+.plots-container {
+  flex: 1 1 auto;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--bg-soft);
+}
+.plot {
+  flex: 1 1 200px;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+}
+.plot:last-child { border-bottom: none; }
+.plot.dragging {
+  opacity: 0.55;
+  /* Slight scale-down to acknowledge the drag is active even before
+     the drop target has been chosen. */
+  outline: 1px dashed var(--accent, #58a6ff);
+}
+/* Position indicator on the candidate drop sibling. The container
+   relies on these classes set/cleared from the dragover handler. */
+.plot.drop-above { box-shadow: inset 0 2px 0 var(--accent, #58a6ff); }
+.plot.drop-below { box-shadow: inset 0 -2px 0 var(--accent, #58a6ff); }
+
+/* Empty state when the user has deleted every plot. */
+.plots-empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  font-size: 0.78rem;
+  font-style: italic;
+  padding: 1rem;
+  text-align: center;
+}
+
+.plot-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+/* Drag handle — only this part of the plot is grabbable; clicking
+   buttons / typing in the title input still works as expected. */
+.plot-drag {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text3);
+  cursor: grab;
+  user-select: none;
+  padding: 0 0.1rem;
+}
+.plot-drag:hover { color: var(--text); }
+.plot-drag:active { cursor: grabbing; }
+body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
+.plot-title {
+  flex: 1 1 auto;
+  min-width: 4em;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text);
+  border-radius: 3px;
+}
+.plot-title:focus, .plot-title:hover {
+  border-color: var(--border);
+  background: var(--bg);
+  outline: none;
+}
+.plot-info {
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+}
+.chart-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  background: var(--bg-soft);
+  box-shadow: inset 0 1px 0 var(--border-soft);
+  /* uPlot needs a positively-sized container; the flex chain provides it. */
+  overflow: hidden;
+}
+
+.chart-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  font-size: 0.78rem;
+  font-style: italic;
+  pointer-events: none;
+}
+
+/* uPlot dark-theme overrides — its default CSS is light-themed. */
+.uplot {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--text);
+}
+.u-title { color: var(--text); }
+
+/* Legend in normal flow below the chart — uPlot accounts for it in the
+   overall height, so the canvas above shrinks to make room rather than
+   getting overlaid. Compact, single-row when possible.  */
+.u-legend {
+  background: var(--card-soft);
+  border-top: 1px solid var(--border-soft);
+  color: var(--text);
+  font-size: 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 3px 8px;
+  text-align: left;
+}
+.u-legend table { border-collapse: collapse; margin: 0 auto; }
+.u-legend th, .u-legend td { padding: 1px 6px; }
+.u-legend tr { display: inline-table; vertical-align: middle; }
+.u-legend .u-marker { width: 10px; height: 2px; }
+.u-legend .u-series th { color: var(--text2); font-weight: 500; text-align: left; }
+.u-legend .u-series.u-off > * { opacity: 0.4; }
+.u-legend .u-value {
+  font-variant-numeric: tabular-nums;
+  min-width: 6ch;
+  text-align: right;
+  color: var(--text);
+}
+.u-cursor-pt { background: var(--accent); border: none; }
+.u-axis { color: var(--text2); }
+.u-select { background: rgba(88, 166, 255, 0.12); }
+
+/* Command strip — two visually distinct groups + status log. */
+.cmd-strip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+  font-size: 0.78rem;
+}
+
+.cmd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--card-soft);
+}
+
+.cmd-strip .cmd-label {
+  color: var(--text2);
+  font-weight: 700;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-right: 0.15rem;
+}
+.cmd-strip .cmd-num {
+  width: 4em;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.cmd-strip .cmd-text {
+  width: 7em;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.cmd-strip .cmd-text-wide { width: 11em; }
+
+.cmd-strip .cmd-select {
+  background: var(--bg);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px 1px 5px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Segmented-button cluster: removes the gap between adjacent buttons,
+   merges borders, rounds outer corners only. */
+.btn-cluster {
+  display: inline-flex;
+}
+.btn-cluster .btn-mini {
+  border-radius: 0;
+  margin-left: -1px;
+  position: relative;
+}
+.btn-cluster .btn-mini:first-child {
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+  margin-left: 0;
+}
+.btn-cluster .btn-mini:last-child {
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
+}
+.btn-cluster .btn-mini:hover,
+.btn-cluster .btn-mini:focus-visible { z-index: 1; }
+
+/* The inline cmd-log strip was removed — command outcomes go
+   straight to the telemetry console at the bottom of the same pane. */
+
+/* ---- Telemetry console (inset at the bottom of the telemetry pane) ----
+   Inside .telemetry-pane, NOT a top-level pane — sits below the cmd
+   strip with a fixed minimum height and an internal scroll. The header
+   shares the .pane-header look so it reads as part of the same family
+   as Build log / Runtime console headers. */
+.telemetry-console {
+  /* Fixed height range (not %-based) so the plots-container above
+     gets a deterministic share of the pane. At max-height: 35% the
+     console grew with the pane and starved the chart on tall windows. */
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
+  max-height: 220px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  overflow: hidden;
+}
+.telemetry-console .pane-header {
+  /* Slightly more compact than the main pane headers so this inset
+     doesn't compete visually with the telemetry pane's own header. */
+  min-height: 30px;
+  padding: 0.25rem 0.6rem;
+}
+.netcon-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-soft);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.netcon-body:empty::before {
+  content: 'no events yet — command results and download summaries land here';
+  color: var(--text3);
+  font-style: italic;
+}
+.netcon-body::-webkit-scrollbar       { width: 6px; }
+.netcon-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.netcon-entry {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.35;
+  margin-bottom: 0.1rem;
+  color: var(--text2);
+}
+.netcon-entry.ok   { color: var(--green, #3fb950); }
+.netcon-entry.err  { color: var(--red,   #ff7b72); }
+.netcon-entry.info { color: var(--text); }
+.netcon-entry .netcon-ts {
+  opacity: 0.55;
+  margin-right: 0.4em;
+}
+
+/* Inline progress bar entry — single row that updates in place. */
+.netcon-progress-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 0.2rem;
+  overflow: hidden;
+}
+.netcon-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent, #58a6ff);
+  transition: width 0.12s linear;
+}
+.netcon-entry.netcon-progress.ok  .netcon-progress-fill { background: var(--green, #3fb950); }
+.netcon-entry.netcon-progress.err .netcon-progress-fill { background: var(--red,   #ff7b72); }
+
+/* ---- Inline SVG icons ---- */
+.icon, .btn-icon > svg, button > svg {
+  pointer-events: none;
+  display: inline-block;
+  vertical-align: -2px;
+  fill: currentColor;
+}
+/* Compact button variant for icon-only triggers (Pause, Clear, etc.). */
+.btn-mini.btn-icon, .btn-ghost.btn-icon {
+  padding: 0.25rem 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.btn-icon[aria-pressed="true"] {
+  background: var(--card-active, rgba(88, 166, 255, 0.18));
+  border-color: var(--accent, #58a6ff);
+  color: var(--accent, #58a6ff);
+}
+/* Panel-toggle button is a stateful toggle but its glyph already
+   communicates the state (left-arrow vs right-arrow). The accent
+   highlight on top would just be noise, so opt this one out. */
+#ide-toggle-telemetry[aria-pressed="true"] {
+  background: transparent;
+  border-color: var(--border);
+  color: inherit;
+}
+
+/* ---- Editable command presets (telemetry pane) ---- */
+.cmd-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  padding: 0.25rem 0;
+}
+.cmd-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+}
+.cmd-preset > .cmd-preset-send {
+  border: none;
+  background: transparent;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.74rem;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.cmd-preset > .cmd-preset-send:hover { color: var(--accent, #58a6ff); }
+.cmd-preset > .cmd-preset-edit,
+.cmd-preset > .cmd-preset-delete {
+  border: none;
+  background: transparent;
+  padding: 0.2rem 0.25rem;
+  cursor: pointer;
+  color: var(--text2);
+  display: inline-flex;
+  align-items: center;
+}
+.cmd-preset > .cmd-preset-edit:hover    { color: var(--accent, #58a6ff); }
+.cmd-preset > .cmd-preset-delete:hover  { color: var(--red, #ff7b72); }
+.cmd-preset.editing {
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  padding: 0.3rem;
+  border-color: var(--accent, #58a6ff);
+}
+.cmd-preset.editing input {
+  font-size: 0.74rem;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 3px;
+}
+.cmd-preset-add {
+  font-size: 0.74rem;
+}
+
+/* ---- Narrow viewport layouts ----
+   Resizers are hidden at narrow widths; the layout falls back to a
+   single column. Telemetry sits below the editor, build log + console
+   share a row. */
 @media (max-width: 960px) {
   .ide-layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(260px, 1fr) minmax(360px, 1fr);
+    grid-template-rows: minmax(260px, 1fr) minmax(280px, 1fr);
   }
-  .editor-pane { grid-column: 1; grid-row: 1; }
-  .side-panes {
-    grid-column: 1;
-    grid-row: 2;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-  }
-  .log-pane       { grid-row: 1; grid-column: 1; }
-  .telemetry-pane { grid-row: 1; grid-column: 2; }
-  .console-pane   { grid-row: 2; grid-column: 1 / span 2; }
+  .main-area     { grid-column: 1; grid-row: 1; }
+  .telemetry-pane { grid-column: 1; grid-row: 2; min-width: 0; }
+  .resizer       { display: none; }
 }
 @media (max-width: 620px) {
   .topbar { flex-wrap: wrap; height: auto; padding: 0.5rem; }
   .toolbar { flex-wrap: wrap; }
-  .side-panes {
-    grid-template-columns: 1fr;
-    grid-template-rows: 0.8fr 1.6fr 1fr;
+  .main-area {
+    grid-template-rows: minmax(220px, 1fr) 0 minmax(180px, auto);
   }
-  .log-pane       { grid-row: 1; grid-column: 1; }
-  .telemetry-pane { grid-row: 2; grid-column: 1; }
-  .console-pane   { grid-row: 3; grid-column: 1; }
+  .bottom-area {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+  .log-pane     { grid-column: 1; grid-row: 1; }
+  .console-pane { grid-column: 1; grid-row: 2; }
+  .resizer      { display: none; }
 }

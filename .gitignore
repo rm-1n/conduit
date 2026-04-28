@@ -88,8 +88,22 @@ web/assets/
 web/lib/emception/build/
 web/lib/emception/upstream/
 
+# Node deps for headless tests (web/tests/) — package{,-lock}.json are
+# tracked so the h5wasm version pin is reproducible.
+node_modules/
+
 # ---- Logs / scratch -------------------------------------------------------
 *.log
+
+# Ad-hoc troubleshooting screenshots / browser-automation traces dropped at
+# repo root or stashed by playwright-mcp. Real docs/diagrams live under
+# hardware/ or docs/ and aren't matched by these rules.
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+.playwright-mcp/
+*.h5
 
 # ---- Defensive: never commit Claude Code per-project state ---------------
 # Claude Code keeps its plans/memory/transcripts in ~/.claude/, not in the
