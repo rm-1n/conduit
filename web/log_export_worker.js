@@ -96,7 +96,16 @@ export async function writeHdf5(channels, opts = {}) {
     // (no LCPL flag exposed) — write at group level after creating each
     // group explicitly. See memory project_h5wasm_intermediate_groups.md
     // and web/tests/log_export_hdf5.mjs.
-    const DTYPE_H5 = ['<i1','<u1','<i2','<u2','<i4','<u4','<i8','<u8','<f4','<f8'];
+    // h5wasm dtype strings: NOT the numpy convention. The library
+    // matches `^([<>|]?)([bhiqefdsBHIQS])([0-9]*)$` and looks up size
+    // from the LETTER (b/B=1, h/H=2, i/I=4, q/Q=8, e=2, f=4, d=8).
+    // Trailing digits are ignored. Using `<u4` (numpy U32) throws
+    // "is not a recognized dtype"; using `<i2` for I16 silently
+    // packs the data as I32 (4 bytes/sample, dataset is 2x too big
+    // and reads as int32 in Python). Always use the single-letter
+    // size-implied form.
+    //                       I8   U8   I16  U16  I32  U32  I64  U64  F32  F64
+    const DTYPE_H5     = ['<b','<B','<h','<H','<i','<I','<q','<Q','<f','<d'];
     let tlmRoot = null;
     if (channels.length > 0) {
       f.create_group('telemetry');

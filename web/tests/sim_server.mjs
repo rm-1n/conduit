@@ -50,20 +50,53 @@ const EMIT_HZ    = Number(flag('--rate', 200));   // combined samples-per-second
 const VERSION    = flag('--version', 'sim-1.0.0');
 const PARTITION  = flag('--partition', 'A');
 
+// Mutable simulation state — modified by /api/cmd handlers below so the
+// IDE's command UI has something visibly observable to drive.
+const simState = {
+  amp: 1.0,   // amplitude scaling for the SIN/COS waveforms
+};
+
 // Three channels:
-//   SIN — F32, slow sine for visual sanity
-//   COS — F32, slow cosine for visual sanity
+//   SIN — F32, slow sine for visual sanity (scaled by simState.amp)
+//   COS — F32, slow cosine for visual sanity (scaled by simState.amp)
 //   SEQ — U32, monotonically increasing counter — tests/data_loss_check.mjs
 //         walks this post-recording to detect dropped samples.
 let seqCounter = 0;
 const CHANNELS = [
   { id: 0, name: 'SIN', dtype: 8 /* F32 */, n: 1,
-    sample(tSec) { return Math.sin(2 * Math.PI * 0.5 * tSec); } },
+    sample(tSec) { return simState.amp * Math.sin(2 * Math.PI * 0.5 * tSec); } },
   { id: 1, name: 'COS', dtype: 8 /* F32 */, n: 1,
-    sample(tSec) { return Math.cos(2 * Math.PI * 1.3 * tSec); } },
+    sample(tSec) { return simState.amp * Math.cos(2 * Math.PI * 1.3 * tSec); } },
   { id: 2, name: 'SEQ', dtype: 5 /* U32 */, n: 1,
     sample()     { return seqCounter++; } },
 ];
+
+// Command registry — analog of firmware's on_command()/poe_command_register().
+// Handlers receive the parsed query args object and return either
+//   { ok: true,  result: <anything> }  — surfaced in the netcon as the
+//                                        success payload; mirrors the
+//                                        IDE's `body.result || body` read
+//                                        path in commands.js
+//   { ok: false, error: '...' }        — sent with HTTP 400 so the IDE
+//                                        shows it as a command error
+const COMMANDS = {
+  // POST /api/cmd?name=set_amp&value=<float>
+  // Mirrors ide.js's documented set_amp example. Clamps to [0, 5] to
+  // match the typical user-code pattern; out-of-range returns an
+  // error the IDE renders in the telemetry console.
+  set_amp(args) {
+    const v = Number(args.value);
+    if (!Number.isFinite(v)) {
+      return { ok: false, error: 'value must be a finite number' };
+    }
+    if (v < 0 || v > 5) {
+      return { ok: false, error: 'value must be in [0.0, 5.0]' };
+    }
+    const prev = simState.amp;
+    simState.amp = v;
+    return { ok: true, result: { amp: v, prev } };
+  },
+};
 
 const SCHEMA = Object.fromEntries(CHANNELS.map((c) => [c.id, c.name]));
 
@@ -310,6 +343,30 @@ function handleSimDrop(_req, res) {
   sendJson(res, 200, { dropped: n });
 }
 
+// POST /api/cmd?name=<cmd>&<arg>=<val>... — invoke a registered command
+// handler. Args are query params (mirrors firmware behavior); body is
+// ignored. The IDE's commands.js sends only via query string.
+function handleCmd(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host || HOST}`);
+  const name = url.searchParams.get('name') || '';
+  const args = {};
+  for (const [k, v] of url.searchParams) {
+    if (k !== 'name') args[k] = v;
+  }
+  const handler = COMMANDS[name];
+  if (!handler) {
+    sendJson(res, 404, { ok: false, error: `unknown command "${name}"` });
+    return;
+  }
+  let result;
+  try { result = handler(args); }
+  catch (e) {
+    sendJson(res, 500, { ok: false, error: String(e && e.message || e) });
+    return;
+  }
+  sendJson(res, result.ok ? 200 : 400, result);
+}
+
 // ---- SERVER --------------------------------------------------------------
 
 const server = createServer((req, res) => {
@@ -322,6 +379,7 @@ const server = createServer((req, res) => {
   if (req.method === 'GET' && path === '/api/data_schema') return handleSchema(req, res);
   if (req.method === 'GET' && path === '/api/data')        return handleStreamData(req, res);
   if (req.method === 'POST' && path === '/sim/drop')       return handleSimDrop(req, res);
+  if (req.method === 'POST' && path === '/api/cmd')        return handleCmd(req, res);
 
   // Stub: every other endpoint returns a benign 200/204 so the IDE's
   // periodic probes (status polls, log polls) don't paint as errors.

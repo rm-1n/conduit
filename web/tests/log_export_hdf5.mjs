@@ -54,9 +54,23 @@ for (let i = 0; i < N2; i++) {
   imuWallMs[i] = T0_WALL_MS + (i * DT2) / 1000;
 }
 
+// U32 SEQ channel — the actual dtype that flushed out the dtype-string
+// bug ("<u4 is not a recognized dtype"). h5wasm's dtype regex doesn't
+// accept the numpy `u` letter; size must come from the C struct char.
+const N3 = 800;
+const seqValues = new Uint32Array(N3);
+const seqUptime = new Float64Array(N3);
+const seqWallMs = new Float64Array(N3);
+for (let i = 0; i < N3; i++) {
+  seqValues[i] = 1_000_000 + i;          // values > 2^16 to catch I16-as-I32 truncation
+  seqUptime[i] = i * 1000;
+  seqWallMs[i] = T0_WALL_MS + i;
+}
+
 const channels = [
   { name: 'SIN', dtype: 8, n: 1,   M: N1, values: sinValues, uptimeUs: sinUptime, wallMs: sinWallMs },
   { name: 'IMU', dtype: 2, n: NN2, M: N2, values: imuValues, uptimeUs: imuUptime, wallMs: imuWallMs },
+  { name: 'SEQ', dtype: 5, n: 1,   M: N3, values: seqValues, uptimeUs: seqUptime, wallMs: seqWallMs },
 ];
 
 // ---------------------------------------------------------------------------
@@ -108,6 +122,7 @@ function check(label, ok, detail) {
 check('group /telemetry exists',     !!f.get('telemetry'));
 check('group /telemetry/SIN exists', !!f.get('telemetry/SIN'));
 check('group /telemetry/IMU exists', !!f.get('telemetry/IMU'));
+check('group /telemetry/SEQ exists', !!f.get('telemetry/SEQ'));
 
 // Scalar SIN
 {
@@ -137,6 +152,29 @@ check('group /telemetry/IMU exists', !!f.get('telemetry/IMU'));
     if (ds.shape) check(`IMU.values shape == [${N2}, ${NN2}]`,
       ds.shape.length === 2 && Number(ds.shape[0]) === N2 && Number(ds.shape[1]) === NN2,
       `got [${ds.shape.join(', ')}]`);
+    // h5wasm reads I16 back into Int16Array iff the dtype was emitted
+    // correctly. If we'd emitted as I32 instead (the latent bug), this
+    // would round-trip fine numerically but the constructor name flips
+    // to Int32Array → caught here.
+    check('IMU.values constructor name == Int16Array',
+      arr.constructor && arr.constructor.name === 'Int16Array',
+      `got ${arr.constructor && arr.constructor.name}`);
+  }
+}
+
+// Scalar SEQ U32 — large values would truncate if dtype was wrongly
+// emitted as I16 / I8.
+{
+  const ds = f.get('telemetry/SEQ/values');
+  check('dataset /telemetry/SEQ/values exists', !!ds);
+  if (ds) {
+    const arr = ds.value;
+    check(`SEQ.values length == ${N3}`, arr.length === N3, `actual ${arr.length}`);
+    check('SEQ.values constructor name == Uint32Array',
+      arr.constructor && arr.constructor.name === 'Uint32Array',
+      `got ${arr.constructor && arr.constructor.name}`);
+    check('SEQ.values[0]',         Number(arr[0])         === seqValues[0]);
+    check(`SEQ.values[${N3 - 1}]`, Number(arr[N3 - 1])    === seqValues[N3 - 1]);
   }
 }
 

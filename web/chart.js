@@ -159,6 +159,26 @@
       // seeing the full session). null = no cutoff.
       this.clearedSinceMs = null;
 
+      // Pause state. When paused:
+      //   - pauseAtMs is the dataStore wallMs at which we froze the
+      //     view; _buildRenderData uses it as the slice's right edge so
+      //     post-pause samples don't extend the trace.
+      //   - frozenMin / frozenMax are the x-scale (in seconds) at pause
+      //     time; _applyXScale uses them instead of live lastT, and the
+      //     drag-zoom handler updates them so zoom while paused
+      //     navigates within the frozen data instead of snapping the
+      //     scale to live "now" (where there's no data yet).
+      this.pauseAtMs  = null;
+      this.frozenMin  = null;
+      this.frozenMax  = null;
+      // Explicit Y-axis range. When both are set, _applyScales pins the
+      // y scale to them (set by drag-zoom-Y or shift-wheel-Y). When
+      // null, _applyScales recomputes from the visible series' min/max
+      // each render — same as uPlot's auto, but we drive it explicitly
+      // so the auto-range button can reliably reset back to "fit data".
+      this.frozenYMin = null;
+      this.frozenYMax = null;
+
       // Render state.
       this.uplot = null;
       this.paused = false;
@@ -215,6 +235,9 @@
       this.knownChannels.clear();
       this.clearedSinceMs = null;
       this.userZoomed = false;
+      this.frozenMin  = null; this.frozenMax  = null;
+      this.frozenYMin = null; this.frozenYMax = null;
+      this.pauseAtMs  = null;
       if (this.uplot) { try { this.uplot.destroy(); } catch (_) {} this.uplot = null; }
       const placeholder = document.createElement('div');
       placeholder.className = 'chart-placeholder';
@@ -321,7 +344,23 @@
         this.pauseBtn.title = this.paused ? 'Resume' : 'Pause';
         this.pauseBtn.setAttribute('aria-label', this.paused ? 'Resume' : 'Pause');
         this.pauseBtn.classList.toggle('is-active', this.paused);
-        if (!this.paused) this._syncToUplot();
+        if (this.paused) {
+          // Freeze: capture both the data cutoff (so the slice stops
+          // accumulating new samples) and the current scale (so future
+          // zooms know where we were when frozen).
+          const ds = window.PicoPoE && window.PicoPoE.dataStore;
+          this.pauseAtMs = (ds && ds.sessionEndWallMs != null)
+                           ? ds.sessionEndWallMs : Date.now();
+          if (this.uplot) {
+            this.frozenMin = this.uplot.scales.x.min;
+            this.frozenMax = this.uplot.scales.x.max;
+          }
+        } else {
+          this.pauseAtMs = null;
+          this.frozenMin = null;
+          this.frozenMax = null;
+          this._syncToUplot();
+        }
       });
 
       this.clearBtn = document.createElement('button');
@@ -331,6 +370,14 @@
       this.clearBtn.setAttribute('aria-label', 'Clear this plot');
       if (icons) icons.set(this.clearBtn, 'delete', { size: 14 });
       this.clearBtn.addEventListener('click', () => this.clear());
+
+      this.autoRangeBtn = document.createElement('button');
+      this.autoRangeBtn.type = 'button';
+      this.autoRangeBtn.className = 'btn-ghost btn-mini btn-icon';
+      this.autoRangeBtn.title = 'Auto-range: reset x to 10 s, y to fit visible series';
+      this.autoRangeBtn.setAttribute('aria-label', 'Auto-range');
+      if (icons) icons.set(this.autoRangeBtn, 'crop_free', { size: 14 });
+      this.autoRangeBtn.addEventListener('click', () => this._autoRange());
 
       this.deleteBtn = document.createElement('button');
       this.deleteBtn.type = 'button';
@@ -345,6 +392,7 @@
       this.header.appendChild(this.windowSel);
       this.header.appendChild(this.pauseBtn);
       this.header.appendChild(this.clearBtn);
+      this.header.appendChild(this.autoRangeBtn);
       this.header.appendChild(this.deleteBtn);
 
       this.mount = document.createElement('div');
@@ -367,14 +415,101 @@
 
       // Double-click resets the visible window to the largest preset
       // (5 min) — the single discoverable affordance for "show me
-      // everything I've recorded" after a series of zoom-ins.
+      // everything I've recorded" after a series of zoom-ins. In paused
+      // mode this also clears the frozen-view bounds so the next render
+      // shows the full pre-pause range.
       this.mount.addEventListener('dblclick', () => {
         this.windowS = 300;
+        if (this.paused) {
+          // Anchor the unzoomed view at pauseAtMs so we stay frozen but
+          // see a wider range of the snapshot.
+          const right = (this.pauseAtMs != null ? this.pauseAtMs : Date.now()) / 1000;
+          this.frozenMax = right;
+          this.frozenMin = right - this.windowS;
+        }
         this._refreshWindowOptions();
-        this._syncToUplot();
-        this._applyXScale();
+        this._renderNow();
         emitLayoutChange();
       });
+
+      // Mouse-wheel zoom — works in both live and paused modes.
+      //   scroll up           → zoom in  (smaller window)
+      //   scroll down         → zoom out (larger window)
+      //   shift + scroll      → zoom Y instead of X
+      // Both axes keep the data point under the cursor stationary so
+      // the user can scroll through detail at a specific event without
+      // losing it. The auto-range button (top-right of the header)
+      // resets back to "10 s window, y fits visible series".
+      this.mount.addEventListener('wheel', (ev) => {
+        if (!this.uplot) return;
+        ev.preventDefault();
+        const factor = (ev.deltaY > 0) ? 1.25 : 0.8;
+        const rect = this.uplot.over.getBoundingClientRect();
+        if (ev.shiftKey) {
+          // ---- Y zoom (shift held) -----------------------------------
+          // Anchor at cursor's data y value so zooming into a specific
+          // peak/trough doesn't drift it off-screen. Always sets an
+          // explicit frozen Y range — auto-range button resets.
+          const py = ev.clientY - rect.top;
+          const cursorY = this.uplot.posToVal(py, 'y');
+          const yMin = this.uplot.scales.y.min;
+          const yMax = this.uplot.scales.y.max;
+          if (yMin == null || yMax == null) return;
+          let newYMin = cursorY - (cursorY - yMin) * factor;
+          let newYMax = cursorY + (yMax - cursorY) * factor;
+          if (newYMax - newYMin < 1e-9) {
+            const c = (newYMin + newYMax) / 2;
+            newYMin = c - 5e-10; newYMax = c + 5e-10;
+          }
+          this.frozenYMin = newYMin;
+          this.frozenYMax = newYMax;
+        } else {
+          // ---- X zoom -------------------------------------------------
+          if (this.paused && this.frozenMin != null && this.frozenMax != null) {
+            const px = ev.clientX - rect.left;
+            const cursorVal = this.uplot.posToVal(px, 'x');
+            const oldMin = this.frozenMin, oldMax = this.frozenMax;
+            let newMin = cursorVal - (cursorVal - oldMin) * factor;
+            let newMax = cursorVal + (oldMax - cursorVal) * factor;
+            if (newMax - newMin < 0.001) {
+              const c = (newMin + newMax) / 2;
+              newMin = c - 0.0005; newMax = c + 0.0005;
+            }
+            this.frozenMin = newMin;
+            this.frozenMax = newMax;
+            this.windowS  = newMax - newMin;
+          } else {
+            this.windowS = Math.max(0.1, this.windowS * factor);
+          }
+        }
+        this._refreshWindowOptions();
+        this._renderNow();
+        emitLayoutChange();
+      }, { passive: false });
+    }
+
+    // Auto-range — single user-facing reset:
+    //   - x window goes back to the default 10 s preset
+    //   - y range recomputed from the currently-visible series (legend
+    //     toggles are honored by _computeAutoYRange)
+    //   - if paused, the x range stays anchored at pauseAtMs so the
+    //     user keeps inspecting the same snapshot, just at the default
+    //     zoom; if live, the right edge re-tracks "now"
+    _autoRange() {
+      this.windowS = 10;
+      this.frozenYMin = null;
+      this.frozenYMax = null;
+      if (this.paused) {
+        const right = (this.pauseAtMs != null ? this.pauseAtMs : Date.now()) / 1000;
+        this.frozenMax = right;
+        this.frozenMin = right - this.windowS;
+      } else {
+        this.frozenMin = null;
+        this.frozenMax = null;
+      }
+      this._refreshWindowOptions();
+      this._renderNow();
+      emitLayoutChange();
     }
 
     _isSeriesVisible(label) {
@@ -481,29 +616,59 @@
         width: w, height: h,
         pxAlign: 1,
         cursor: {
-          // setScale:false — uPlot would otherwise zoom to exactly the
-          // dragged range, freezing the right edge wherever the user
-          // released. We only want the drag's WIDTH (as the new
-          // windowS) and keep auto-scrolling at "now". The setSelect
-          // hook below extracts the width and re-applies scale via
-          // _applyXScale, which always anchors max=lastT.
-          drag:  { x: true, y: false, setScale: false },
+          // 2D drag — width controls X zoom (with the live-anchoring
+          // semantics described in the setSelect handler), height
+          // controls Y. setScale:false keeps uPlot from auto-zooming;
+          // we apply scales explicitly via setSelect.
+          drag:  { x: true, y: true, setScale: false },
           focus: { prox: 16 },
         },
         hooks: {
           setSelect: [(u) => {
-            if (!u.select || u.select.width <= 0) return;
-            const a = u.posToVal(u.select.left, 'x');
-            const b = u.posToVal(u.select.left + u.select.width, 'x');
-            const newWindowS = Math.max(0.1, b - a);
-            // Clear the visible selection rectangle now that we've
-            // captured its width — leaving it set would paint a stale
-            // box on the next redraw.
+            const sel = u.select;
+            if (!sel) return;
+            const hadX = sel.width  > 0;
+            const hadY = sel.height > 0;
+            if (!hadX && !hadY) return;
+            // Capture the selection BEFORE clearing — otherwise
+            // setSelect({...},false) would zero out our reads.
+            let xa, xb, ya, yb;
+            if (hadX) {
+              xa = u.posToVal(sel.left, 'x');
+              xb = u.posToVal(sel.left + sel.width, 'x');
+            }
+            if (hadY) {
+              // Pixel y grows downward but the data y grows upward —
+              // top-of-rect = max value, bottom = min.
+              yb = u.posToVal(sel.top, 'y');
+              ya = u.posToVal(sel.top + sel.height, 'y');
+            }
+            // Clear the visible selection rectangle so it doesn't
+            // paint a stale box on the next redraw.
             u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false);
-            this.windowS = newWindowS;
+
+            if (hadX) {
+              this.windowS = Math.max(0.1, xb - xa);
+              if (this.paused) {
+                // Paused → respect the SELECTED RANGE (xa..xb), not
+                // just its width. The frozen view shifts to whatever
+                // sub-region the user dragged over, letting them
+                // inspect arbitrary parts of the snapshot.
+                this.frozenMin = xa;
+                this.frozenMax = xb;
+              }
+            }
+            if (hadY) {
+              // Y zoom always pins to the explicit range — there's
+              // no "live tracking" concern for Y.
+              this.frozenYMin = ya;
+              this.frozenYMax = yb;
+            }
             this._refreshWindowOptions();
-            this._syncToUplot();
-            this._applyXScale();
+            // Force a one-shot render even if paused — re-decimating
+            // for the new (smaller) range gives the user finer
+            // resolution as they zoom in. Bypass the throttle.
+            this._renderNow();
             emitLayoutChange();
           }],
           setSeries: [(u, idx, opts) => {
@@ -531,7 +696,28 @@
           },
           {
             stroke, grid: { stroke: grid, width: 1 }, ticks: { stroke: tick, width: 1 },
-            size: 56,
+            // Autosize to the widest tick label so big magnitudes
+            // (e.g. "1234567") don't overflow the y-axis gutter and
+            // get clipped by .chart-wrap's overflow:hidden. uPlot
+            // calls this with the about-to-render formatted values;
+            // measure them via the live canvas context so the result
+            // matches the actual rendered glyphs (font, kerning, etc).
+            // Floor of 50 keeps tiny ranges from collapsing the gutter.
+            size: (u, values) => {
+              if (!values || values.length === 0) return 50;
+              const ctx = u.ctx;
+              ctx.save();
+              ctx.font = '12px ' +
+                'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+              let max = 0;
+              for (const v of values) {
+                const w = ctx.measureText(String(v)).width;
+                if (w > max) max = w;
+              }
+              ctx.restore();
+              // +18 = ~6 px tick mark + ~12 px breathing room
+              return Math.max(50, Math.ceil(max) + 18);
+            },
           },
         ],
         series: seriesArr,
@@ -553,19 +739,71 @@
     }
 
     _applyXScale() {
-      if (!this.uplot || this.userZoomed) return;
-      const ds = window.PicoPoE && window.PicoPoE.dataStore;
-      const lastTms = ds && ds.sessionEndWallMs;
-      if (lastTms == null) return;
-      const max = lastTms / 1000;
-      const min = max - this.windowS;
-      this.uplot.setScale('x', { min, max });
+      if (!this.uplot) return;
+      // ---- X scale -----------------------------------------------------
+      // Paused with an explicit frozen view → use it. This is the case
+      // after the user drag-zoomed inside a paused snapshot; we want
+      // the scale to land on the actual data they selected, NOT live
+      // "now" (where there's no data because the slice cutoff is at
+      // pauseAtMs). Without this branch, zoom-while-paused snapped to
+      // an empty x-window and the chart looked blank.
+      if (this.paused && this.frozenMin != null && this.frozenMax != null) {
+        this.uplot.setScale('x', { min: this.frozenMin, max: this.frozenMax });
+      } else if (!this.userZoomed) {
+        const ds = window.PicoPoE && window.PicoPoE.dataStore;
+        const lastTms = ds && ds.sessionEndWallMs;
+        if (lastTms != null) {
+          const max = lastTms / 1000;
+          this.uplot.setScale('x', { min: max - this.windowS, max });
+        }
+      }
+      // ---- Y scale -----------------------------------------------------
+      // Explicit frozen Y from drag-zoom-Y or shift-wheel → use it.
+      // Otherwise compute from currently-visible series so legend
+      // toggles take effect immediately (uPlot's built-in auto picks
+      // up `series[i].show` but won't recompute on a stale dataset
+      // without a setData call; doing it ourselves here is reliable).
+      if (this.frozenYMin != null && this.frozenYMax != null) {
+        this.uplot.setScale('y', { min: this.frozenYMin, max: this.frozenYMax });
+      } else {
+        const r = this._computeAutoYRange();
+        if (r) this.uplot.setScale('y', r);
+      }
+    }
+
+    _computeAutoYRange() {
+      if (!this.uplot) return null;
+      let yMin = Infinity, yMax = -Infinity;
+      const data = this.uplot.data;
+      const series = this.uplot.series;
+      for (let s = 1; s < series.length; s++) {
+        if (series[s].show === false) continue;
+        const arr = data[s];
+        if (!arr) continue;
+        for (let i = 0; i < arr.length; i++) {
+          const v = arr[i];
+          if (v == null || !Number.isFinite(v)) continue;
+          if (v < yMin) yMin = v;
+          if (v > yMax) yMax = v;
+        }
+      }
+      if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) return null;
+      if (yMin === yMax) {
+        // Avoid a zero-height plot when all visible samples are equal.
+        const half = Math.max(Math.abs(yMin) * 0.05, 0.5);
+        return { min: yMin - half, max: yMax + half };
+      }
+      const pad = (yMax - yMin) * 0.05;
+      return { min: yMin - pad, max: yMax + pad };
     }
 
     _syncToUplot() {
       // Keep the central readout in sync with whatever just landed.
       scheduleCentralStats();
       if (!this.uplot) return;
+      // Paused → freeze new-data ingest. Zoom + pause/resume use
+      // _renderNow() to force a one-shot redraw without going through
+      // this throttled live-update path.
       if (this.paused) return;
       // Don't sync mid-rebuild — the new uPlot's series shape may not
       // match the current registry yet.
@@ -590,6 +828,19 @@
       this._applyXScale();
     }
 
+    // Force a one-shot redraw, ignoring the throttle and the paused
+    // bail-out. Used by drag-zoom (and could be used by any other
+    // explicit user action) so the chart reacts to UI input even when
+    // the live-data refresh is suspended.
+    _renderNow() {
+      if (!this.uplot) return;
+      const expectedSeriesCount = 1 + this._seriesLabels().length;
+      if (this.uplot.series.length !== expectedSeriesCount) return;
+      this.lastSetDataMs = performance.now();
+      this.uplot.setData(this._buildRenderData(), false);
+      this._applyXScale();
+    }
+
     // ------------------------------------------------------------------
     // Data slicing (the new core — replaces _pushSample / _trim / _dataArr)
     // ------------------------------------------------------------------
@@ -609,7 +860,12 @@
         return out;
       }
 
-      const lastTms = ds.sessionEndWallMs;
+      // Right edge of the slice. When paused, freeze at pauseAtMs so
+      // newer samples don't extend the trace. When live, use the
+      // dataStore's current high-water mark.
+      const lastTms = (this.paused && this.pauseAtMs != null)
+        ? this.pauseAtMs
+        : ds.sessionEndWallMs;
       if (lastTms == null) {
         const labels = this._seriesLabels();
         const out = [[]];
@@ -617,11 +873,21 @@
         return out;
       }
 
-      let winMinMs = lastTms - this.windowS * 1000;
+      // Slice window. When paused with a frozen view (post drag-zoom),
+      // honor the explicit min/max so we slice only the user-selected
+      // range — which lets the decimator allocate the bucket budget to
+      // the visible region instead of the full pre-zoom window.
+      let winMinMs, winMaxMs;
+      if (this.paused && this.frozenMin != null && this.frozenMax != null) {
+        winMinMs = this.frozenMin * 1000;
+        winMaxMs = this.frozenMax * 1000 + 1;
+      } else {
+        winMinMs = lastTms - this.windowS * 1000;
+        winMaxMs = lastTms + 1;
+      }
       if (this.clearedSinceMs != null && this.clearedSinceMs > winMinMs) {
         winMinMs = this.clearedSinceMs;
       }
-      const winMaxMs = lastTms + 1;   // inclusive of lastTms
 
       // Slice each registered channel. Vector channels expand to one
       // entry per component; for the common single-channel-per-plot case
