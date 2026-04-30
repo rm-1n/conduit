@@ -435,6 +435,17 @@
         cursor = null;
         if (activeAbort) activeAbort.abort();
       },
+      // Inject a browser-side note (connection events, refresh outcomes,
+      // etc.) into the runtime console pane. Tagged so the user can tell
+      // it apart from device-emitted log lines, and routed through the
+      // same renderAppend path so it respects pause + scroll-to-bottom.
+      note(text, level) {
+        if (!text) return;
+        const tag = level === 'err'  ? '[err]'
+                  : level === 'ok'   ? '[ok] '
+                  :                    '[…] ';
+        renderAppend(`${tag} ${text}\n`);
+      },
       stop() {
         stopped = true;
         persistFlush();

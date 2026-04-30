@@ -35,6 +35,13 @@
     return parts.join('&');
   }
 
+  // Expose pure helpers up-front so unit tests can grab them without
+  // also booting the DOM-bound init() path. The full surface (send +
+  // preset CRUD) is added in init() once the DOM is ready.
+  window.PicoPoE = window.PicoPoE || {};
+  window.PicoPoE.cmd = window.PicoPoE.cmd || {};
+  window.PicoPoE.cmd.buildQuery = buildQuery;
+
   async function send(name, args) {
     const ip = getIp();
     if (!ip) throw new Error('no device selected');
@@ -100,6 +107,7 @@
     }
     return out;
   }
+  window.PicoPoE.cmd.parseAdvArgs = parseAdvArgs;
 
   // -- Editable persistent command presets ---------------------------
   //
@@ -273,7 +281,10 @@
     renderPresets();
 
     window.PicoPoE = window.PicoPoE || {};
-    window.PicoPoE.cmd = {
+    // Extend (don't replace) — the early-exposed pure helpers
+    // (buildQuery, parseAdvArgs) must survive init() so unit/test
+    // harnesses can reach them.
+    Object.assign(window.PicoPoE.cmd = window.PicoPoE.cmd || {}, {
       send,
       // Programmatic surface for adding presets from elsewhere (test
       // harness, future "save current cmd" hotkey, etc.).
@@ -286,7 +297,7 @@
         renderPresets();
       },
       listPresets: loadPresets,
-    };
+    });
   }
 
   if (document.readyState === 'loading') {

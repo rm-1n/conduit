@@ -78,6 +78,48 @@
     }
   }
 
+  // Pure wire-format decoder. Given a byte buffer + offset, classify
+  // the next record as one of:
+  //   { kind: 'record',  recordBytes, msgId, dtype, n, uptimeUs, payload }
+  //   { kind: 'need',    needBytes }     // wait until buf has this many at offset
+  //   { kind: 'resync' }                 // skip 1 byte and try again
+  // Exposed via window.PicoPoE.telemetryWire so unit tests can drive it
+  // without booting the streaming loop.
+  const FRAME_MAGIC   = 0xFE;
+  const FRAME_VERSION = 0x01;
+  const FRAME_HEADER_BYTES = 16;
+  function parseRecord(buf, offset) {
+    offset = offset | 0;
+    const len = buf.byteLength;
+    if (offset >= len)              return { kind: 'need', needBytes: 1 };
+    if (buf[offset] !== FRAME_MAGIC) return { kind: 'resync' };
+    if (offset + FRAME_HEADER_BYTES > len) return { kind: 'need', needBytes: FRAME_HEADER_BYTES };
+    if (buf[offset + 1] !== FRAME_VERSION) return { kind: 'resync' };
+    const dv = new DataView(buf.buffer, buf.byteOffset + offset, FRAME_HEADER_BYTES);
+    const msgId = dv.getUint16(2, true);
+    const dtype = dv.getUint8(4);
+    const n     = dv.getUint16(5, true);
+    const uptimeLo = dv.getUint32(8,  true);
+    const uptimeHi = dv.getUint32(12, true);
+    const uptimeUs = uptimeHi * 0x100000000 + uptimeLo;
+    const esz = dtypeSize(dtype);
+    if (esz === 0) return { kind: 'resync' };           // garbage dtype → framing loss
+    const recordBytes = FRAME_HEADER_BYTES + n * esz;
+    if (offset + recordBytes > len) return { kind: 'need', needBytes: recordBytes };
+    return {
+      kind: 'record', recordBytes, msgId, dtype, n, uptimeUs,
+      payload: buf.subarray(offset + FRAME_HEADER_BYTES, offset + recordBytes),
+    };
+  }
+  // Expose on window.PicoPoE.telemetryWire BEFORE init() runs, so unit
+  // tests can `loadModule('telemetry.js')` and grab the parser without
+  // also kicking off the network/timer machinery.
+  window.PicoPoE = window.PicoPoE || {};
+  window.PicoPoE.telemetryWire = {
+    parseRecord, dtypeSize, readElem,
+    MAGIC: FRAME_MAGIC, VERSION: FRAME_VERSION, HEADER_BYTES: FRAME_HEADER_BYTES,
+  };
+
   let stateEl = null;
   let getIp = () => null;
 
@@ -206,35 +248,14 @@
     let recordsThisCall = 0;
     const startBufLen = parseBuf.byteLength;
     while (i < parseBuf.byteLength) {
-      // Resync if needed.
-      if (parseBuf[i] !== 0xFE) {
-        // Skip one byte and look for magic again.
-        i++;
-        drainResyncCount++;
-        continue;
-      }
-      if (i + 16 > parseBuf.byteLength) break;       // not enough for header
-      if (parseBuf[i + 1] !== 0x01) { i++; drainResyncCount++; continue; } // bad version, resync
-
-      const dv = new DataView(parseBuf.buffer, parseBuf.byteOffset + i, 16);
-      const msgId   = dv.getUint16(2, true);
-      const dtype   = dv.getUint8(4);
-      const n       = dv.getUint16(5, true);
-      // hdr[7] reserved
-      const uptimeLo = dv.getUint32(8, true);
-      const uptimeHi = dv.getUint32(12, true);
-      const uptimeUs = uptimeHi * 0x100000000 + uptimeLo;
-
+      const r = parseRecord(parseBuf, i);
+      if (r.kind === 'need') break;                      // wait for more bytes
+      if (r.kind === 'resync') { i++; drainResyncCount++; continue; }
+      // r.kind === 'record'
+      const { msgId, dtype, n, uptimeUs, recordBytes } = r;
       const esz = dtypeSize(dtype);
-      if (esz === 0) {
-        // Garbage dtype — likely framing loss mid-stream. Skip a byte and resync.
-        i++;
-        continue;
-      }
-      const payloadBytes = n * esz;
-      const recordBytes = 16 + payloadBytes;
-      if (i + recordBytes > parseBuf.byteLength) break;  // wait for more
-
+      // Copy out the payload before advancing — drain() may slice the
+      // parseBuf below, which would invalidate a subarray view.
       const payload = parseBuf.slice(i + 16, i + recordBytes);
       i += recordBytes;
 

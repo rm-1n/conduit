@@ -1,0 +1,199 @@
+/* ============================================================
+   CONDUIT — design system tokens, ported from the design package
+   (conduit/project/design/colors_and_type.css).
+   Industrial precision, editorial restraint. Kept in lockstep with
+   the design source — change there first, then mirror here.
+   Loaded BEFORE style.css so app-specific rules override what they
+   need to.
+   ============================================================ */
+
+/* -- Color tokens (light) --------------------------------- */
+:root,
+[data-theme="light"] {
+  /* Surfaces */
+  --bg:        #FFFFFF;
+  --bg-2:      #F2F2F7;
+  --bg-3:      #E5E5EA;
+
+  /* Ink */
+  --ink:       #1C1C1E;
+  --ink-dim:   #3C3C43;
+  --ink-faint: #8E8E93;
+
+  /* Hairline */
+  --line:      #D1D1D6;
+
+  /* Accents — light variants */
+  --blue:      #007AFF;
+  --green:     #34C759;
+  --orange:    #FF9500;
+  --red:       #FF3B30;
+  --indigo:    #5856D6;
+  --teal:      #30B0C7;
+
+  --accent:    var(--blue);
+
+  --status-live:    var(--green);
+  --status-warn:    var(--orange);
+  --status-fault:   var(--red);
+  --status-idle:    var(--ink-faint);
+  --secondary:      var(--indigo);
+  --data:           var(--teal);
+
+  --grid-tint: color-mix(in oklab, var(--accent) 4%, transparent);
+  color-scheme: light;
+}
+
+/* -- Color tokens (dark) ---------------------------------- */
+[data-theme="dark"] {
+  --bg:        #000000;
+  --bg-2:      #1C1C1E;
+  --bg-3:      #2C2C2E;
+
+  --ink:       #F2F2F7;
+  --ink-dim:   #98989F;
+  --ink-faint: #636366;
+
+  --line:      #38383A;
+
+  --blue:      #0A84FF;
+  --green:     #30D158;
+  --orange:    #FF9F0A;
+  --red:       #FF453A;
+  --indigo:    #5E5CE6;
+  --teal:      #64D2FF;
+
+  --accent:    var(--blue);
+
+  --status-live:  var(--green);
+  --status-warn:  var(--orange);
+  --status-fault: var(--red);
+  --status-idle:  var(--ink-faint);
+  --secondary:    var(--indigo);
+  --data:         var(--teal);
+
+  --grid-tint: color-mix(in oklab, var(--accent) 4%, transparent);
+  color-scheme: dark;
+}
+
+/* -- Aliases for legacy var names used in the existing IDE
+   stylesheet. Lets us drop these in without touching every selector;
+   gradually migrate consumers to the canonical Conduit names. ----- */
+:root {
+  --text:        var(--ink);
+  --text2:       var(--ink-dim);
+  --text3:       var(--ink-faint);
+  --bg-soft:     var(--bg-2);
+  --card:        var(--bg-2);
+  --card-soft:   var(--bg-3);
+  --border:      var(--line);
+  --border-soft: color-mix(in oklab, var(--line) 60%, transparent);
+  --accent-soft: color-mix(in oklab, var(--accent) 14%, transparent);
+  --accent-hover: color-mix(in oklab, var(--accent) 88%, white);
+}
+
+/* -- Typography ------------------------------------------- */
+:root {
+  --font-mono:    "Roboto Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-display: "Fraunces", "Times New Roman", Georgia, serif;
+
+  --t-label:     10px;
+  --t-label-lg:  11px;
+  --t-body-sm:   12px;
+  --t-body:      13px;
+  --t-body-lg:   14px;
+  --t-num:       16px;
+
+  --t-h2:        clamp(28px, 4vw, 44px);
+  --t-h1:        clamp(48px, 8vw, 96px);
+
+  --w-light:     300;
+  --w-regular:   400;
+  --w-medium:    500;
+  --w-semibold:  600;
+  --w-bold:      700;
+
+  /* Spatial — base 4px */
+  --s-1:   4px;
+  --s-2:   8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-6:  24px;
+  --s-8:  32px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  --hairline: 1px solid var(--line);
+  --radius-sm: 2px;
+  --radius:    4px;
+  --radius-lg: 6px;   /* Conduit cap; never round more */
+
+  --shadow-1: 0 1px 0 rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+
+  --ease:        cubic-bezier(0.2, 0.0, 0.2, 1);
+  --dur-hover:   200ms;
+  --dur-enter:   800ms;
+}
+
+/* -- Base reset (non-invasive — only what the design demands) -- */
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--t-body-lg);
+  font-weight: var(--w-regular);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* -- Status dots ------------------------------------------- */
+.dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--status-idle);
+  vertical-align: middle;
+}
+.dot--live  { background: var(--status-live);  box-shadow: 0 0 8px var(--status-live); animation: pulse-live 2.4s var(--ease) infinite; }
+.dot--warn  { background: var(--status-warn);  box-shadow: 0 0 8px var(--status-warn); }
+.dot--fault { background: var(--status-fault); box-shadow: 0 0 8px var(--status-fault); animation: pulse-fault 1s var(--ease) infinite; }
+.dot--data  { background: var(--data);         box-shadow: 0 0 8px var(--data); }
+
+@keyframes pulse-live  { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes pulse-fault { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* -- Surface grid (toggle via .surface-grid on a container) -- */
+.surface-grid {
+  background-image:
+    linear-gradient(to right, var(--grid-tint) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-tint) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Material Symbols defaults */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: 300;
+  font-style: normal;
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'liga';
+  vertical-align: middle;
+  color: inherit;
+  user-select: none;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

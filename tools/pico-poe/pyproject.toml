@@ -12,6 +12,13 @@ dependencies = [
     "httpx>=0.24",
 ]
 
+[project.optional-dependencies]
+# `pip install -e ".[test]"` for local runs and CI. Kept separate from
+# the runtime deps so end users don't pull in pytest.
+test = [
+    "pytest>=8",
+]
+
 [project.scripts]
 pico-poe = "pico_poe_cli.cli:main"
 

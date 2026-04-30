@@ -51,7 +51,14 @@
     return monacoReady;
   }
 
+  // Monaco theme — prefers the explicit Conduit `data-theme` attribute
+  // (set by the topbar toggle), falls back to the OS preference. Without
+  // the attribute check, the user can flip the topbar to "light" and
+  // the chrome turns light but the editor stays dark.
   function pickTheme() {
+    const attr = document.documentElement.getAttribute('data-theme');
+    if (attr === 'light') return 'vs';
+    if (attr === 'dark')  return 'vs-dark';
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs';
   }
 
@@ -72,9 +79,14 @@
       insertSpaces: true,
       scrollBeyondLastLine: false,
     });
-    // Live-follow the OS color scheme.
-    window.matchMedia('(prefers-color-scheme: dark)')
-      .addEventListener('change', () => monaco.editor.setTheme(pickTheme()));
+    // Live-follow the OS color scheme AND the Conduit data-theme
+    // toggle. The MutationObserver fires whenever the topbar's
+    // light/dark buttons flip data-theme on <html>.
+    const reapply = () => monaco.editor.setTheme(pickTheme());
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', reapply);
+    new MutationObserver(reapply).observe(document.documentElement, {
+      attributes: true, attributeFilter: ['data-theme'],
+    });
     return editorInstance;
   }
 

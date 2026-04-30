@@ -74,7 +74,7 @@ body {
 }
 
 /* ---- Top bar ---- */
-.topbar {
+.ide-topbar {
   height: var(--topbar-h);
   flex: 0 0 auto;
   display: flex;
@@ -164,9 +164,13 @@ input:focus, select:focus {
 }
 input::placeholder { color: var(--text3); }
 
-#ide-quick-ip { width: 14ch; }
+/* Wide enough for "192.168.178.200" and "127.0.0.1:8766" without
+   placeholder truncation. */
+#ide-quick-ip { width: 20ch; }
 #ide-auth-token { width: 11ch; }
-#ide-device-select { min-width: 18ch; max-width: 28ch; }
+/* Long enough to show "127.0.0.1:8766 — vsim-1.0.0 — A" and the
+   typical "192.168.178.200 — v1.2.0-b — A" without truncation. */
+#ide-device-select { min-width: 18ch; max-width: 40ch; }
 
 /* ---- Buttons ---- */
 button {
@@ -293,15 +297,25 @@ button[aria-pressed="true"], button.is-active {
 .bottom-area {
   grid-row: 3;
   display: grid;
-  grid-template-columns: var(--log-w, 50%) 6px minmax(0, 1fr);
+  /* Track 3 is `minmax(420px, 1fr)` not `minmax(0, 1fr)` so the
+     console column can't shrink below its content min and the pane
+     overflow under the telemetry sidebar. The telemetry resizer's
+     data-other-min-px clamps the parent to leave enough room. */
+  grid-template-columns: var(--log-w, 50%) 6px minmax(420px, 1fr);
   grid-gap: 0;
   background: var(--border);
   min-width: 0;
 }
 /* Bottom-area panes get their own mins so they stay usable when the
-   telemetry pane is dragged wide and the main column shrinks. */
-.log-pane     { grid-column: 1; min-width: 200px; }
-.console-pane { grid-column: 3; min-width: 360px; }
+   telemetry pane is dragged wide and the main column shrinks.
+   Build log: room for Build + Build & Upload + clear icon now that
+              those buttons live in its header.
+   Console:   title + "disconnected" status pill + 3 icon controls.
+              380 was the empirical-minimum that fits at idealised
+              metrics, but font rendering varies — 420 leaves headroom
+              so the clear button never tucks under the sidebar edge. */
+.log-pane     { grid-column: 1; min-width: 360px; }
+.console-pane { grid-column: 3; min-width: 420px; }
 /* Keep pane titles on one line — wrapping pushes button rows down
    and starts cropping. */
 .pane-title { white-space: nowrap; }
@@ -351,8 +365,12 @@ body.resizing-h { cursor: row-resize; }
   display: flex;
   align-items: center;
   flex-wrap: wrap;             /* actions wrap below title when narrow */
-  gap: 0.4rem 0.6rem;
-  padding: 0.4rem 0.75rem;
+  gap: 6px 10px;
+  /* Whole-pixel padding so the gap between the right edge of the
+     pane-actions group and the pane edge doesn't sub-pixel-jitter as
+     the pane resizes. 0.75rem ≈ 12 px but rounds inconsistently when
+     the pane lands on fractional widths during a drag. */
+  padding: 6px 12px;
   background: var(--card);
   border-bottom: 1px solid var(--border);
   min-height: 36px;
@@ -377,7 +395,7 @@ body.resizing-h { cursor: row-resize; }
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 6px;
 }
 
 /* Status dot — left of the pane-actions group */
@@ -435,12 +453,11 @@ body.resizing-h { cursor: row-resize; }
 }
 #ide-log { color: var(--text2); }
 
+/* Runtime console terminal — uses Conduit surface tokens so it
+   inverts cleanly with the theme toggle. */
 .terminal {
-  background: #0a0d12;
-  color: #c4d1de;
-}
-@media (prefers-color-scheme: light) {
-  .terminal { background: #1b1f24; color: #d0d7de; }
+  background: var(--bg);
+  color: var(--ink-dim);
 }
 
 code {
@@ -768,9 +785,11 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   vertical-align: -2px;
   fill: currentColor;
 }
-/* Compact button variant for icon-only triggers (Pause, Clear, etc.). */
+/* Compact button variant for icon-only triggers (Pause, Clear, etc.).
+   Whole-pixel padding so the rightmost icon's distance to the pane
+   edge is identical at every viewport — see comment on .pane-header. */
 .btn-mini.btn-icon, .btn-ghost.btn-icon {
-  padding: 0.25rem 0.4rem;
+  padding: 4px 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

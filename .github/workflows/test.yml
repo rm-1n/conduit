@@ -1,0 +1,74 @@
+# Continuous integration — runs the unit-test suites for both the web
+# IDE and the Python CLI on every push and pull request. The two jobs
+# run in parallel and have no shared state. They DO NOT exercise the
+# firmware build (covered by the separate build-web-sdk / build-llvm-box
+# workflows) or any device-dependent integration tests (those live in
+# web/tests/*.mjs and need either sim_server or live hardware).
+#
+# To add a test:
+#   - Web JS: drop a *.test.mjs file into web/tests/unit/. The glob in
+#     web/tests/package.json picks it up; `npm test` runs it.
+#   - Python CLI: drop a test_*.py file into tools/pico-poe/tests/.
+#     pytest auto-discovers it.
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel a running test run for a branch when a newer commit arrives.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: web · node:test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/tests/package-lock.json
+      - name: Install web test deps
+        working-directory: web/tests
+        run: npm ci
+      - name: Run web unit tests
+        working-directory: web/tests
+        run: npm test
+
+  cli:
+    name: python cli · pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      # Pin to a few representative interpreters. 3.9 is the minimum
+      # declared in pyproject.toml; 3.12 is what most users will have;
+      # 3.14 is the dev/Homebrew default on the maintainer's machine.
+      fail-fast: false
+      matrix:
+        python: ['3.9', '3.12', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: 'pip'
+          cache-dependency-path: tools/pico-poe/pyproject.toml
+      - name: Install pico-poe with test extras
+        working-directory: tools/pico-poe
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+      - name: Run CLI tests
+        working-directory: tools/pico-poe
+        run: python -m pytest tests/ -v

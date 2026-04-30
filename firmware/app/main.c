@@ -145,6 +145,18 @@ int main() {
     // never arrives, the watchdog keeps patting on this loop until power
     // is cycled, at which point the ROM rolls back to the previous
     // partition.
+    // Network-health watchdog. If the PHY link reports DOWN continuously
+    // for HEALTH_LINK_DOWN_LIMIT_MS while the device is running normally
+    // (not mid-OTA, not already rebooting), we kick a reboot via the
+    // standard g_reboot_pending path. The PHY poller in the RMII driver
+    // flips netif up/down within 500 ms of cable changes, so a brief
+    // unplug/replug never trips this; only a sustained outage does.
+    // Restart is the only reliable recovery for cases like a wedged PHY
+    // or a half-dead lwIP state where the link is "up" at the driver
+    // but the stack can't accept new connections.
+    #define HEALTH_LINK_DOWN_LIMIT_MS  60000
+    absolute_time_t link_down_since = nil_time;
+    bool last_link_up = network_is_link_up();
     unsigned int iter = 0;
     while (1) {
         // Atomic load so the flag written from core 1 (lwIP TCP callback)
@@ -163,8 +175,26 @@ int main() {
         }
         watchdog_update();
         pico_poe_loop();
+
+        // Health check — once per diag print interval (≈ 1 s) is plenty
+        // of resolution for a 60-second grace window.
         if (++iter >= DIAG_PRINT_EVERY) {
             iter = 0;
+            bool link_up = network_is_link_up();
+            if (link_up != last_link_up) {
+                printf("[health] link transition: %s\n", link_up ? "DOWN→UP" : "UP→DOWN");
+                last_link_up = link_up;
+                if (!link_up) link_down_since = get_absolute_time();
+                else          link_down_since = nil_time;
+            }
+            if (!link_up && !is_nil_time(link_down_since)) {
+                int64_t down_ms = absolute_time_diff_us(link_down_since, get_absolute_time()) / 1000;
+                if (down_ms >= HEALTH_LINK_DOWN_LIMIT_MS && !ota_commit_pending()) {
+                    printf("[health] link down for %lld ms — scheduling reboot\n", (long long)down_ms);
+                    __atomic_store_n(&g_reboot_pending, true, __ATOMIC_RELEASE);
+                    watchdog_reboot(0, 0, 200);
+                }
+            }
             printf("[main] link=%d ip=%s commit_pending=%d\n",
                    network_is_link_up(), network_get_ip_str(),
                    (int)ota_commit_pending());

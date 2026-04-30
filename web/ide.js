@@ -213,15 +213,134 @@ void pico_poe_loop(void) {
     catch (_) {}
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // Pure layout solver. DOM-free, side-effect-free — fed an outer
+  // viewport width plus the saved telemetry/log percentages and a
+  // mins record, returns the clamped percentages that satisfy every
+  // pane's minimum. The order of clamps is fixed (outer-first:
+  // telemetry then log) so cascading constraints settle in a single
+  // pass. See web/tests/unit/layout_solver.test.mjs for the contract.
+  // The DOM-driven clamp paths below call this; tests drive it
+  // directly via window.PicoPoE.layout.solve.
+  function solveLayout({ ideLayoutPx, telemetryPct, logPct, mins }) {
+    const m = mins || { log: 360, console: 420, telemetry: 420, resizer: 6 };
+    // Clamp telemetry first (outer): main column needs at least
+    // log_min + 6 + console_min, plus the 6-px telemetry resizer track
+    // that's deducted from main.
+    const telOtherMin = m.log + m.resizer + m.console + m.resizer;
+    let telPct = Number.isFinite(telemetryPct) ? telemetryPct : 35;
+    if (ideLayoutPx > 0) {
+      const telMinPct = (m.telemetry / ideLayoutPx) * 100;
+      const telMaxPct = 100 - (telOtherMin / ideLayoutPx) * 100;
+      // Apply max first, then min. If the viewport is too small for
+      // both mins to fit (max < min), this lands telPct at the min,
+      // preferring to honour the telemetry pane's own width over a
+      // perfect bottom-area split — the resulting overflow is the
+      // honest "viewport is too small" UX, not a silent collapse.
+      if (telPct > telMaxPct) telPct = telMaxPct;
+      if (telPct < telMinPct) telPct = telMinPct;
+    }
+    // Now compute bottom-area width and clamp log against it.
+    const bottomAreaPx = Math.max(0, ideLayoutPx - m.resizer - (telPct / 100) * ideLayoutPx);
+    const logOtherMin  = m.console + m.resizer;
+    let cLogPct = Number.isFinite(logPct) ? logPct : 50;
+    if (bottomAreaPx > 0) {
+      const logMinPct = (m.log / bottomAreaPx) * 100;
+      const logMaxPct = 100 - (logOtherMin / bottomAreaPx) * 100;
+      if (cLogPct > logMaxPct) cLogPct = logMaxPct;
+      if (cLogPct < logMinPct) cLogPct = logMinPct;
+    }
+    return { telemetryPct: telPct, logPct: cLogPct };
+  }
+  window.PicoPoE = window.PicoPoE || {};
+  window.PicoPoE.layout = { solve: solveLayout };
+
+  // Compute a resizer's allowed [min%, max%] band against its current
+  // container width. Used both during drag (live clamp) and on init /
+  // window resize (re-clamp persisted values that may have been saved
+  // at a larger viewport or before a new other-side min was introduced).
+  function resizerBand(r) {
+    const axis = r.dataset.axis;
+    const minPx = Number(r.dataset.minPx) || DEFAULT_MIN_PANE_PX;
+    const otherMinPx = Number(r.dataset.otherMinPx) || DEFAULT_MIN_PANE_PX;
+    const containerSel = r.dataset.container
+      || (axis === 'x' ? '.ide-layout' : '.main-area');
+    const container = document.querySelector(containerSel);
+    if (!container) return { minPct: 5, maxPct: 95 };
+    const rect = container.getBoundingClientRect();
+    const span = axis === 'x' ? rect.width : rect.height;
+    if (span <= 0) return { minPct: 5, maxPct: 95 };
+    let minPct = (minPx / span) * 100;
+    let maxPct = 100 - (otherMinPx / span) * 100;
+    // Tiny viewport — both mins can't be honoured. Fall back to a
+    // proportional split (50/50) rather than negative numbers.
+    if (maxPct <= minPct) { minPct = 5; maxPct = 95; }
+    return { minPct, maxPct };
+  }
+
+  // Walk every resizer and clamp its target CSS-var into the current
+  // valid band. Resizers cascade — the log↔console resizer's container
+  // is .bottom-area, whose width depends on the telemetry resizer's
+  // current value. So we run the clamp pass repeatedly until nothing
+  // changes (max 4 iterations as a safety belt). This handles the
+  // case where a saved telemetry-w is over-wide → bottom-area is
+  // stale → log-w clamps against a wrong width on the first pass.
+  function clampAllResizers() {
+    const root = document.documentElement;
+    let totalChanged = false;
+    for (let pass = 0; pass < 4; pass++) {
+      let changed = false;
+      for (const r of document.querySelectorAll('.resizer')) {
+        const target = r.dataset.target;
+        if (!target) continue;
+        const cur = parseFloat(getComputedStyle(root).getPropertyValue(target));
+        if (!Number.isFinite(cur)) continue;
+        const { minPct, maxPct } = resizerBand(r);
+        let next = cur;
+        if (next < minPct) next = minPct;
+        if (next > maxPct) next = maxPct;
+        if (Math.abs(next - cur) > 0.05) {
+          root.style.setProperty(target, next.toFixed(2) + '%');
+          changed = true;
+          totalChanged = true;
+        }
+      }
+      if (!changed) break;
+    }
+    if (totalChanged) {
+      // Persist the settled values.
+      const layout = loadLayout();
+      for (const r of document.querySelectorAll('.resizer')) {
+        const target = r.dataset.target;
+        if (!target) continue;
+        const cur = getComputedStyle(root).getPropertyValue(target).trim();
+        if (cur) layout[target] = cur;
+      }
+      saveLayout(layout);
+      window.dispatchEvent(new Event('resize'));
+    }
+  }
+
   function setupResizers() {
     const root = document.documentElement;
     const layout = loadLayout();
     // Restore any previously-saved CSS-var sizes before binding drag.
+    // Clamp to a sane band [10%, 90%] — the resizer's offset math can
+    // produce nonsense values (negative %, >100%) when the viewport
+    // shrinks between sessions (e.g. after we added the Conduit topbar
+    // above the IDE shell), and an out-of-range track size collapses
+    // the bottom panes to ~0 with the editor eating the layout.
     for (const [k, v] of Object.entries(layout)) {
-      if (typeof k === 'string' && k.startsWith('--') &&
-          typeof v === 'string' && v.endsWith('%')) {
-        root.style.setProperty(k, v);
+      if (typeof k !== 'string' || !k.startsWith('--')) continue;
+      if (typeof v !== 'string' || !v.endsWith('%')) continue;
+      const n = parseFloat(v);
+      if (!Number.isFinite(n) || n < 10 || n > 90) {
+        // Drop the bad entry so the CSS fallback (e.g. 60% / 35%) wins.
+        delete layout[k];
+        saveLayout(layout);
+        continue;
       }
+      root.style.setProperty(k, v);
     }
 
     for (const r of document.querySelectorAll('.resizer')) {
@@ -229,6 +348,20 @@ void pico_poe_loop(void) {
       // Keyboard accessibility: arrow keys nudge by 2% per press.
       r.addEventListener('keydown', (ev) => onResizerKey(r, ev));
     }
+
+    // Re-clamp now (catches values saved before we added the new
+    // bottom-area constraint) and on every viewport change. requestAnimation
+    // gives the layout one tick to settle so getBoundingClientRect reads
+    // the post-init dimensions instead of zero.
+    requestAnimationFrame(clampAllResizers);
+    let resizeTimer = 0;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      // Debounced — clamping during a continuous viewport drag would
+      // shrink the saved % to whatever the smallest transient size was,
+      // and the user wouldn't get the room back when the window grows.
+      resizeTimer = setTimeout(clampAllResizers, 150);
+    });
 
     // Hide / show the telemetry pane via the topbar toggle. The
     // hidden state collapses the whole right column (resizer + pane)
@@ -245,8 +378,11 @@ void pico_poe_loop(void) {
         main.classList.toggle('telemetry-hidden', !!hidden);
         toggleBtn.setAttribute('aria-pressed', hidden ? 'true' : 'false');
         toggleBtn.title = hidden ? 'Show telemetry pane' : 'Hide telemetry pane';
+        // 20-px glyph reads cleanly inside the 28-px topbar iconbtn —
+        // 18 was inherited from when the button lived in the IDE's
+        // internal toolbar and looks lost in the larger global topbar.
         if (icons) icons.set(toggleBtn, hidden ? 'panel_close' : 'panel_open',
-                             { size: 18 });
+                             { size: 20 });
         // Tell uPlot + anyone else with a ResizeObserver that the
         // viewport effectively changed.
         window.dispatchEvent(new Event('resize'));
@@ -350,6 +486,13 @@ void pico_poe_loop(void) {
     const target = r.dataset.target;                   // CSS custom property name
     const anchor = r.dataset.anchor || 'left';         // 'left'/'top' or 'right'/'bottom'
     const minPx = Number(r.dataset.minPx) || DEFAULT_MIN_PANE_PX;
+    // data-other-min-px lets a resizer enforce a minimum on the OPPOSITE
+    // side too. The main↔telemetry resizer uses it so dragging telemetry
+    // wider stops as soon as the main column can no longer fit Build Log
+    // + Runtime Console (the bottom-area panes nested inside main).
+    // Without this the telemetry grow-drag could shrink main below the
+    // bottom-area's required width, clipping the build/console panes.
+    const otherMinPx = Number(r.dataset.otherMinPx) || DEFAULT_MIN_PANE_PX;
     const containerSel = r.dataset.container
       || (axis === 'x' ? '.ide-layout' : '.main-area');
     const container = document.querySelector(containerSel);
@@ -359,7 +502,7 @@ void pico_poe_loop(void) {
     const startPos = axis === 'x' ? rect.left : rect.top;
 
     const minPct = (minPx / span) * 100;
-    const maxPct = 100 - minPct;
+    const maxPct = 100 - (otherMinPx / span) * 100;
 
     r.classList.add('dragging');
     document.body.classList.add('resizing', axis === 'x' ? 'resizing-v' : 'resizing-h');
@@ -376,6 +519,11 @@ void pico_poe_loop(void) {
       if (pct < minPct) pct = minPct;
       if (pct > maxPct) pct = maxPct;
       document.documentElement.style.setProperty(target, pct.toFixed(2) + '%');
+      // Cascade: dragging telemetry shrinks bottom-area → log-w may now
+      // be too wide and crush the runtime console. Run the full layout
+      // solver synchronously so the inner resizer adjusts in real time
+      // (the debounced resize handler alone fires only after release).
+      clampAllResizers();
       window.dispatchEvent(new Event('resize'));
     };
 
@@ -407,13 +555,29 @@ void pico_poe_loop(void) {
       : (axis === 'x' ? ev.key === 'ArrowLeft' : ev.key === 'ArrowUp');
     if (!grow && !shrink) return;
     ev.preventDefault();
+    // Mirror the drag-handler clamps so keyboard nudges respect the
+    // same per-pane mins (and the bottom-area composite min via
+    // data-other-min-px).
+    const minPx = Number(r.dataset.minPx) || DEFAULT_MIN_PANE_PX;
+    const otherMinPx = Number(r.dataset.otherMinPx) || DEFAULT_MIN_PANE_PX;
+    const containerSel = r.dataset.container
+      || (axis === 'x' ? '.ide-layout' : '.main-area');
+    const container = document.querySelector(containerSel);
+    const span = container
+      ? (axis === 'x' ? container.getBoundingClientRect().width
+                       : container.getBoundingClientRect().height)
+      : 0;
+    const minPct = span > 0 ? (minPx / span) * 100 : 5;
+    const maxPct = span > 0 ? 100 - (otherMinPx / span) * 100 : 95;
     const cur = parseFloat(getComputedStyle(document.documentElement)
       .getPropertyValue(target)) || 50;
-    const next = grow ? Math.min(95, cur + 2) : Math.max(5, cur - 2);
-    document.documentElement.style.setProperty(target, next + '%');
+    let next = grow ? cur + 2 : cur - 2;
+    if (next < minPct) next = minPct;
+    if (next > maxPct) next = maxPct;
+    document.documentElement.style.setProperty(target, next.toFixed(2) + '%');
     window.dispatchEvent(new Event('resize'));
     const layout = loadLayout();
-    layout[target] = next + '%';
+    layout[target] = next.toFixed(2) + '%';
     saveLayout(layout);
   }
 
@@ -425,20 +589,33 @@ void pico_poe_loop(void) {
     const rescanBtn = document.getElementById('ide-rescan-btn');
     const token = document.getElementById('ide-auth-token');
 
-    // Restore persisted token + device selection.
+    // Restore persisted token + last-typed IP so reload reconnects to
+    // the same device automatically. Without restoring quick_ip,
+    // returning to the page leaves the IP field blank → telemetry's
+    // getIp() returns null → no auto-reconnect, even though the
+    // device is reachable.
     try {
       const s = JSON.parse(localStorage.getItem('picopoe') || '{}');
       if (s.token) token.value = s.token;
+      const ipInput = document.getElementById('ide-quick-ip');
+      if (ipInput && !ipInput.value && s.quick_ip) ipInput.value = s.quick_ip;
     } catch (_) {}
 
     const persist = () => {
       try {
         const s = JSON.parse(localStorage.getItem('picopoe') || '{}');
         s.ide_ip = deviceSelect.value;
-        s.token = token.value;
+        s.token  = token.value;
+        const ipInput = document.getElementById('ide-quick-ip');
+        if (ipInput) s.quick_ip = ipInput.value.trim();
         localStorage.setItem('picopoe', JSON.stringify(s));
       } catch (_) {}
     };
+    // Persist the quick-IP field on every edit so the next reload
+    // picks up wherever the user left off — even if they never
+    // clicked Add.
+    const ipInputForPersist = document.getElementById('ide-quick-ip');
+    if (ipInputForPersist) ipInputForPersist.addEventListener('input', persist);
     deviceSelect.addEventListener('change', () => {
       persist();
       // Let the console tear down its cursor so the next poll gets the
@@ -499,12 +676,12 @@ void pico_poe_loop(void) {
         document.getElementById('subnet').value = subnet;
       }
       rescanBtn.disabled = true;
-      setStatus(`Scanning ${subnet}.0/24…`);
+      connStatus(`Scanning ${subnet}.0/24…`);
       try {
         const found = await window.PicoPoE.startScan({ subnet });
-        setStatus(`${found.length} device(s)`);
+        connStatus(`${found.length} device(s)`, 'ok');
       } catch (e) {
-        setStatus(`scan error: ${e.message || e}`, 'err');
+        connStatus(`scan error: ${e.message || e}`, 'err');
       } finally {
         rescanBtn.disabled = false;
         refreshDeviceList();
@@ -516,20 +693,20 @@ void pico_poe_loop(void) {
     const quickInput = document.getElementById('ide-quick-ip');
     quickBtn.addEventListener('click', async () => {
       const ip = quickInput.value.trim();
-      if (!ip) { setStatus('enter an IP first', 'err'); return; }
+      if (!ip) { connStatus('enter an IP first', 'err'); return; }
       quickBtn.disabled = true;
-      setStatus(`Probing ${ip}…`);
+      connStatus(`Probing ${ip}…`);
       try {
         const result = await window.PicoPoE.probeAndRemember(ip);
         if (result) {
-          setStatus(`Added ${ip} (v${result.version}, ${result.partition})`);
+          connStatus(`Added ${ip} (v${result.version}, ${result.partition})`, 'ok');
           deviceSelect.value = ip;
           persist();
         } else {
-          setStatus(`no response from ${ip}`, 'err');
+          connStatus(`no response from ${ip}`, 'err');
         }
       } catch (e) {
-        setStatus(`error: ${e.message || e}`, 'err');
+        connStatus(`probe error: ${e.message || e}`, 'err');
       } finally {
         quickBtn.disabled = false;
         refreshDeviceList();
@@ -538,6 +715,48 @@ void pico_poe_loop(void) {
 
     document.getElementById('ide-btn-build').addEventListener('click', onBuild);
     document.getElementById('ide-btn-build-upload').addEventListener('click', onBuildUpload);
+
+    // Reconnect — re-probes the bound IP and force-restarts the
+    // telemetry / runtime-console streams. We do this:
+    //   • once on UI start, to recover from a stale dropdown selection
+    //     pointing at a device that's been power-cycled / reflashed
+    //     since last visit, which otherwise leaves the panes silent
+    //     even though the device is on the LAN.
+    //   • whenever the user clicks the topbar refresh icon, as a
+    //     manual "kick everything" that doesn't require a full reload.
+    async function reconnect() {
+      const refreshBtn = document.getElementById('ide-refresh');
+      const ip = (deviceSelect.value || '').trim()
+              || (document.getElementById('ide-quick-ip').value || '').trim();
+      if (!ip) { connStatus('no device — Add or Scan first', 'err'); return; }
+      try {
+        if (refreshBtn) refreshBtn.disabled = true;
+        connStatus(`Reconnecting ${ip}…`);
+        const result = await window.PicoPoE.probeAndRemember(ip);
+        if (!result) { connStatus(`no response from ${ip}`, 'err'); return; }
+        // Cycle telemetry: pause aborts the in-flight fetch + clears
+        // chart, resume starts a fresh stream against the now-verified
+        // device. Console has the same effect via resetCursor + clear.
+        const tel = window.PicoPoE && window.PicoPoE.telemetry;
+        if (tel && tel.pause)  tel.pause();
+        if (tel && tel.resume) tel.resume();
+        const con = window.PicoPoE && window.PicoPoE.console;
+        if (con && con.resetCursor) con.resetCursor();
+        if (con && con.clear)       con.clear();
+        connStatus(`Reconnected (v${result.version}, ${result.partition})`, 'ok');
+      } catch (e) {
+        connStatus(`reconnect error: ${e.message || e}`, 'err');
+      } finally {
+        if (refreshBtn) refreshBtn.disabled = false;
+        refreshDeviceList();
+      }
+    }
+    const refreshBtn = document.getElementById('ide-refresh');
+    if (refreshBtn) refreshBtn.addEventListener('click', reconnect);
+    // Auto-kick reconnect once on boot. Deferred slightly so the rest
+    // of init (telemetry's streamLoop, console's poll loop) has wired
+    // up — pause/resume needs the loops to exist to do their thing.
+    setTimeout(() => { reconnect().catch(() => {}); }, 800);
 
     setupResizers();
 
@@ -802,6 +1021,18 @@ void pico_poe_loop(void) {
     el.style.color = kind === 'err' ? 'var(--red)'
                    : kind === 'ok'  ? 'var(--green)'
                    : '';
+  }
+
+  // Connection-flavoured status (probe / reconnect / scan results).
+  // Routed into the runtime console pane instead of the topbar chip
+  // so old messages scroll away naturally — "no response from X"
+  // doesn't linger after the next attempt succeeds. The topbar chip
+  // is kept clear of connection content; build/upload progress still
+  // uses setStatus.
+  function connStatus(text, kind) {
+    const con = window.PicoPoE && window.PicoPoE.console;
+    if (con && con.note) con.note(text, kind);
+    else console.log('[conn]', text);
   }
 
   function logLine(s) {

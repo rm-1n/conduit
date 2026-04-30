@@ -40,6 +40,25 @@
 #define MEMP_NUM_PBUF                   24
 #define PBUF_POOL_SIZE                  24
 
+// Bumped from lwIP default 5. The two streaming endpoints
+// (/api/data?stream=1 and /api/log?stream=1) each pin a PCB for the
+// life of the browser session, plus short-lived /api/status, /api/cmd,
+// /api/upload, /api/commit, /api/reboot. With only 5, half-dead PCBs
+// from a vanished client (no FIN/RST — browser tab put to sleep, OS
+// VPN drop, etc.) accumulate and lock the device out: the LED keeps
+// blinking but no new connections succeed. Keepalive (below) is the
+// cleanup mechanism; the bump is a safety margin while keepalive
+// probes do their work.
+#define MEMP_NUM_TCP_PCB                8
+
+// TCP keepalive — opt-in per PCB via SOF_KEEPALIVE. http_server.c
+// turns it on for /api/data?stream=1 and /api/log?stream=1 because
+// those are the connections that can sit idle from the device's POV
+// (server pushes, client just consumes). Defaults below: probe after
+// 30 s idle, then every 5 s, drop the PCB after 4 missed acks. So a
+// vanished client costs us ~50 s, then the PCB is reclaimed.
+#define LWIP_TCP_KEEPALIVE              1
+
 // Tighter TCP timer cadence so /api/log and /api/data streaming flushes
 // happen every ~100 ms instead of every ~500 ms (tcp_poll runs off the
 // slow timer = 2 × TCP_TMR_INTERVAL). At 250 Hz emit rates this turns the

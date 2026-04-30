@@ -143,6 +143,7 @@ static size_t copy_header_value(const char *val, char *out, size_t max) {
 // Forward decls.
 static err_t http_poll(void *arg, struct tcp_pcb *pcb);
 static void conn_close(struct tcp_pcb *pcb, http_conn_t *conn);
+static void enable_keepalive(struct tcp_pcb *pcb);
 
 // --------------------------------------------------------------------------
 // Response builders
@@ -445,6 +446,7 @@ static void handle_log(struct tcp_pcb *pcb, http_conn_t *conn) {
         conn->log_since = since;
         conn->state = CONN_STATE_STREAMING;
         tcp_nagle_disable(pcb);
+        enable_keepalive(pcb);
         tcp_poll(pcb, http_poll, 1);
         return;
     }
@@ -528,6 +530,7 @@ static void handle_data(struct tcp_pcb *pcb, http_conn_t *conn) {
         conn->data_stream = true;
         conn->state = CONN_STATE_STREAMING;
         tcp_nagle_disable(pcb);
+        enable_keepalive(pcb);
         tcp_poll(pcb, http_poll, 1);
         return;
     }
@@ -770,6 +773,24 @@ static void parse_request_line(http_conn_t *conn) {
 // --------------------------------------------------------------------------
 // TCP callbacks
 // --------------------------------------------------------------------------
+
+// Turn on TCP keepalive for streaming connections. Without this, a
+// vanished client (browser tab put to sleep, OS VPN drop, NAT box
+// reboot — anything that drops packets without sending FIN/RST) holds
+// a PCB indefinitely; after MEMP_NUM_TCP_PCB such events the device
+// stops accepting new connections even though the firmware is healthy.
+// Probes start after KEEP_IDLE_MS of silence, retry every KEEP_INTVL_MS
+// up to KEEP_CNT failures → vanished client costs ≈ 50 s before the
+// PCB is reaped.
+#define HTTP_KEEP_IDLE_MS   30000
+#define HTTP_KEEP_INTVL_MS   5000
+#define HTTP_KEEP_CNT           4
+static void enable_keepalive(struct tcp_pcb *pcb) {
+    pcb->so_options |= SOF_KEEPALIVE;
+    pcb->keep_idle  = HTTP_KEEP_IDLE_MS;
+    pcb->keep_intvl = HTTP_KEEP_INTVL_MS;
+    pcb->keep_cnt   = HTTP_KEEP_CNT;
+}
 
 static void conn_close(struct tcp_pcb *pcb, http_conn_t *conn) {
     if (conn) {
