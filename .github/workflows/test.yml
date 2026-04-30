@@ -1,15 +1,20 @@
-# Continuous integration — runs the unit-test suites for both the web
-# IDE and the Python CLI on every push and pull request. The two jobs
-# run in parallel and have no shared state. They DO NOT exercise the
-# firmware build (covered by the separate build-web-sdk / build-llvm-box
-# workflows) or any device-dependent integration tests (those live in
-# web/tests/*.mjs and need either sim_server or live hardware).
+# Continuous integration — runs the unit-test suites for the Python
+# CLI and the web IDE inside the same Docker images you can pull
+# locally with `scripts/ci.sh`.
 #
-# To add a test:
-#   - Web JS: drop a *.test.mjs file into web/tests/unit/. The glob in
-#     web/tests/package.json picks it up; `npm test` runs it.
-#   - Python CLI: drop a test_*.py file into tools/pico-poe/tests/.
-#     pytest auto-discovers it.
+# How CI and local stay in sync:
+#   - The job's `container:` directive picks the same `python:X-slim`
+#     and `node:20-bullseye-slim` images Docker pulls in scripts/ci.sh.
+#   - The actual install + test commands live in scripts/ci-python.sh
+#     and scripts/ci-node.sh; both this workflow and the local script
+#     exec them. So a green `scripts/ci.sh` locally near-guarantees a
+#     green workflow run.
+#
+# Why `container:` instead of `docker run` inside a step:
+#   - The runner-managed container approach is the idiomatic Actions
+#     pattern, gets us network/cache integration for free, and avoids
+#     Docker-in-Docker's quirks. The price is one extra image pull at
+#     job start (~3-8 s for these slim images, geo-CDN'd).
 
 name: tests
 
@@ -20,55 +25,40 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Cancel a running test run for a branch when a newer commit arrives.
+# A new commit on a branch cancels its older in-flight run.
 concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  web:
-    name: web · node:test
+  python:
+    name: python ${{ matrix.python }} · pytest
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web/tests/package-lock.json
-      - name: Install web test deps
-        working-directory: web/tests
-        run: npm ci
-      - name: Run web unit tests
-        working-directory: web/tests
-        run: npm test
-
-  cli:
-    name: python cli · pytest
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    container:
+      image: python:${{ matrix.python }}-slim
     strategy:
-      # Pin to a few representative interpreters. 3.9 is the minimum
-      # declared in pyproject.toml; 3.12 is what most users will have;
-      # 3.14 is the dev/Homebrew default on the maintainer's machine.
       fail-fast: false
       matrix:
+        # Floor (3.9) is what pyproject.toml advertises; 3.12 is the
+        # most-deployed LTS-ish; 3.14 is the maintainer's machine.
         python: ['3.9', '3.12', '3.14']
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-          cache: 'pip'
-          cache-dependency-path: tools/pico-poe/pyproject.toml
-      - name: Install pico-poe with test extras
-        working-directory: tools/pico-poe
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[test]"
-      - name: Run CLI tests
-        working-directory: tools/pico-poe
-        run: python -m pytest tests/ -v
+      # The slim base images don't ship `bash` reliably across all
+      # tags, but they all have it under /usr/bin/bash from the
+      # debian-slim base. We invoke the script explicitly via bash
+      # to avoid hashbang surprises.
+      - name: Run CI fixture (Python)
+        run: bash scripts/ci-python.sh
+
+  node:
+    name: node 20 · node:test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    container:
+      image: node:20-bullseye-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run CI fixture (Node)
+        run: bash scripts/ci-node.sh

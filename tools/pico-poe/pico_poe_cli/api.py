@@ -1,5 +1,10 @@
 """HTTP client for PICO-POE device REST API."""
 
+# PEP 563 — defers annotation evaluation so PEP 604 syntax (`dict | None`,
+# `list[dict]`) parses cleanly on Python 3.9. Without this the function
+# defs in scan_subnet raise TypeError at import time on 3.9.
+from __future__ import annotations
+
 import httpx
 
 DEFAULT_TIMEOUT = 5.0
