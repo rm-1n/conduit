@@ -106,6 +106,114 @@ def flash_firmware(picotool, uf2_path):
 
 # ── Serial capture ───────────────────────────────────────────────────────────
 
+def diag_capture(serial_port, output_path=None, duration=None):
+    """Long-running stream of the firmware's [diag] heartbeat.
+
+    Reads USB CDC line-by-line, prints to stdout, optionally appends to
+    a file. Runs until --duration elapses or Ctrl-C. Watches each
+    [diag] line for two failure fingerprints and yells loudly when
+    they trip:
+       • Core-1 stalled — the c1 delta in the heartbeat hits 0+ for
+         multiple consecutive samples.
+       • TCP PCB exhaustion — tcp_pcb saturated (used == max).
+
+    The point of this tool is to leave it running overnight or during
+    a soak. When the device wedges, scrolling back through the file
+    pinpoints which subsystem stopped first.
+    """
+    import re
+    import signal
+
+    info(f"Streaming {serial_port}"
+         f"{' → ' + output_path if output_path else ''}"
+         f"{f' for {duration}s' if duration else ' (Ctrl-C to stop)'}")
+
+    try:
+        fd = os.open(serial_port, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError as e:
+        warn(f"Cannot open {serial_port}: {e}")
+        return None
+
+    fout = None
+    if output_path:
+        # Line-buffered so the log stays current even if we're killed
+        # mid-stream — losing the last few seconds is the worst case.
+        fout = open(output_path, "a", buffering=1)
+        fout.write(f"# diag stream started {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+    # Heartbeat line format produced by firmware/app/diag.c:
+    #   [diag] link=1 ip=... c1=N(+Δ) heap=u/m pbuf=u/m tcp_pcb=u/m
+    #          tcp=Aa/Tt/Ll rx=N(+Δ) tx=N(+Δ) commit_pending=0
+    diag_re = re.compile(
+        r"\[diag\] .*?c1=(\d+)\(\+(\d+)\).*?tcp_pcb=(\d+)/(\d+)"
+    )
+    consecutive_stalls = 0
+    saturated_streak = 0
+    sample_count = 0
+
+    # Graceful Ctrl-C: print summary on the way out instead of a stack trace.
+    stop = {"flag": False}
+    def _on_sig(_n, _f):
+        stop["flag"] = True
+    signal.signal(signal.SIGINT, _on_sig)
+    signal.signal(signal.SIGTERM, _on_sig)
+
+    end = (time.time() + duration) if duration else None
+    line_buf = b""
+
+    try:
+        while not stop["flag"] and (end is None or time.time() < end):
+            r, _, _ = select.select([fd], [], [], 1.0)
+            if not r:
+                continue
+            try:
+                chunk = os.read(fd, 4096)
+            except BlockingIOError:
+                continue
+            if not chunk:
+                continue
+            line_buf += chunk
+            while b"\n" in line_buf:
+                raw, line_buf = line_buf.split(b"\n", 1)
+                line = raw.decode("utf-8", errors="replace").rstrip("\r")
+                if not line:
+                    continue
+                ts = time.strftime("%H:%M:%S")
+                stamped = f"{ts}  {line}"
+                print(stamped)
+                if fout:
+                    fout.write(stamped + "\n")
+
+                m = diag_re.search(line)
+                if m:
+                    sample_count += 1
+                    _, dc1, used, mx = m.groups()
+                    dc1, used, mx = int(dc1), int(used), int(mx)
+                    if dc1 == 0:
+                        consecutive_stalls += 1
+                        if consecutive_stalls == 1:
+                            warn("Core-1 delta dropped to 0 — possible stall starting")
+                        elif consecutive_stalls in (3, 5, 10, 30, 60):
+                            warn(f"Core-1 stalled for {consecutive_stalls} samples")
+                    else:
+                        if consecutive_stalls > 0:
+                            info(f"Core-1 recovered after {consecutive_stalls} samples")
+                        consecutive_stalls = 0
+                    if used >= mx:
+                        saturated_streak += 1
+                        if saturated_streak in (5, 30, 120):
+                            warn(f"TCP PCB pool saturated for {saturated_streak} samples ({used}/{mx})")
+                    else:
+                        saturated_streak = 0
+    finally:
+        os.close(fd)
+        if fout:
+            fout.write(f"# diag stream ended {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            fout.close()
+        info(f"Captured {sample_count} heartbeats")
+    return sample_count
+
+
 def capture_serial(serial_port, duration=12, boot_wait=8):
     """Capture serial output from the Pico after a reboot."""
     info(f"Waiting {boot_wait}s for boot, then capturing serial for {duration}s...")

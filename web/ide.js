@@ -829,6 +829,12 @@ void pico_poe_loop(void) {
 
     api.compiler.setProgress(({ stage, pct, detail }) => {
       logLine(`[${stage}] ${Math.round(pct)}% ${detail || ''}`);
+      // Bar pct comes from elapsed time, not from {stage,pct} —
+      // ensures monotonic, smooth fill regardless of how many sub-
+      // phases the compiler emits per stage. The label still carries
+      // the live stage/detail so the user knows which step is running.
+      const tag = detail ? `${stage} · ${detail}` : stage;
+      setProgressBar({ pct: buildPct(), label: `Building · ${tag}` });
     });
     const elfBytes = await api.compiler.compile(source);
     logLine(`compile+link produced ${elfBytes.byteLength}-byte ELF`);
@@ -850,7 +856,8 @@ void pico_poe_loop(void) {
 
   async function onBuild() {
     clearLog();
-    setStatus('Building…');
+    resetBuildBar();
+    setProgressBar({ pct: 0, label: 'Building…' });
     try {
       const uf2 = await buildUf2({ version: nextStampedVersion() });
       const blob = new Blob([uf2], { type: 'application/octet-stream' });
@@ -861,11 +868,12 @@ void pico_poe_loop(void) {
       a.click();
       URL.revokeObjectURL(url);
       logLine(`built ${uf2.byteLength} bytes, ${uf2.byteLength / 512} UF2 blocks`);
-      setStatus(`Built ${uf2.byteLength} B.`);
+      recordBuildDuration();
+      setProgressBar({ pct: 100, label: `Built ${uf2.byteLength} B`, kind: 'ok' });
     } catch (e) {
       if (e.stderr) logLine(e.stderr.trim());
       logLine(`error: ${e.message}`);
-      setStatus(`Build failed`, 'err');
+      setProgressBar({ label: 'Build failed', kind: 'err' });
     }
   }
 
@@ -873,16 +881,17 @@ void pico_poe_loop(void) {
     const ip = document.getElementById('ide-device-select').value.trim();
     const token = document.getElementById('ide-auth-token').value;
     if (!ip) {
-      setStatus('Pick a device (Add or Scan).', 'err');
+      setProgressBar({ pct: 0, label: 'Pick a device (Add or Scan)', kind: 'err' });
       return;
     }
     if (!token) {
-      setStatus('Auth token is empty.', 'err');
+      setProgressBar({ pct: 0, label: 'Auth token is empty', kind: 'err' });
       return;
     }
 
     clearLog();
-    setStatus('Building…');
+    resetBuildBar();
+    setProgressBar({ pct: 0, label: 'Building…' });
 
     const stampVer = nextStampedVersion();
     try {
@@ -898,20 +907,16 @@ void pico_poe_loop(void) {
     } catch (e) {
       if (e.stderr) logLine(e.stderr.trim());
       logLine(`error: ${e.message}`);
-      setStatus('Build failed', 'err');
+      setProgressBar({ label: 'Build failed', kind: 'err' });
       return;
     }
+    recordBuildDuration();
     logLine(`built ${uf2.byteLength} bytes`);
 
-    const statusDiv = document.getElementById('ide-upload-status');
-    const bar = document.getElementById('ide-upload-bar');
-    const msg = document.getElementById('ide-upload-msg');
-    statusDiv.classList.remove('hidden');
-    bar.style.width = '0%';
-    bar.style.background = '';
-    msg.style.color = '';
-    msg.textContent = 'Uploading…';
-    setStatus('Uploading…');
+    // Build done — bar at 50%; upload phase covers 50..95%, then commit
+    // tops it up to 100%. We keep the colour/kind clean here so the
+    // bar stays neutral until we have a concrete final outcome.
+    setProgressBar({ pct: 50, label: 'Uploading…' });
 
     // Pause the telemetry stream for the OTA window. Reasons:
     //  1. The /api/upload POST and our /api/data?stream=1 GET compete for
@@ -936,15 +941,21 @@ void pico_poe_loop(void) {
       result = await window.PicoPoE.updateFirmware({
         ip, token, data: uf2,
         onProgress: ({ pct, loaded, total }) => {
-          bar.style.width = `${pct}%`;
-          msg.textContent = `Uploading… ${Math.round(pct)}% (${loaded}/${total} B)`;
+          // Upload covers 50..95% of the overall bar; the last 5% is
+          // reserved for verify/commit so the user never sees 100%
+          // until the device actually reports the new image running.
+          const overall = 50 + (pct / 100) * 45;
+          setProgressBar({
+            pct: overall,
+            label: `Uploading · ${Math.round(pct)}% (${loaded}/${total} B)`,
+          });
         },
         onStage: (stage, detail) => {
           logLine(detail && typeof detail === 'string' ? `[${stage}] ${detail}` : `[${stage}]`);
-          if (stage === 'precheck') msg.textContent = 'Checking device…';
-          else if (stage === 'waiting') msg.textContent = `Waiting for reboot… ${typeof detail === 'string' ? detail : ''}`;
-          else if (stage === 'verifying') msg.textContent = 'Verifying…';
-          else if (stage === 'commit') msg.textContent = 'Committing (TBYB)…';
+          if      (stage === 'precheck')  setProgressBar({ pct: 50, label: 'Checking device…' });
+          else if (stage === 'waiting')   setProgressBar({ pct: 95, label: `Waiting for reboot… ${typeof detail === 'string' ? detail : ''}` });
+          else if (stage === 'verifying') setProgressBar({ pct: 97, label: 'Verifying…' });
+          else if (stage === 'commit')    setProgressBar({ pct: 99, label: 'Committing (TBYB)…' });
         },
       });
     } finally {
@@ -982,45 +993,98 @@ void pico_poe_loop(void) {
 
     switch (result.outcome) {
       case 'committed':
-        bar.style.width = '100%'; bar.style.background = 'var(--green)'; msg.style.color = 'var(--green)';
-        msg.textContent = `Committed ✓ v${result.post.version} on partition ${result.post.partition}`;
+        setProgressBar({ pct: 100, kind: 'ok',
+          label: `Committed ✓ v${result.post.version} on partition ${result.post.partition}` });
         logLine(`commit OK; running v${result.post.version} on ${result.post.partition}`);
-        setStatus('Committed.');
         break;
       case 'rebooted':
-        bar.style.width = '100%'; bar.style.background = 'var(--green)'; msg.style.color = 'var(--green)';
-        msg.textContent = `Running v${result.post.version} on ${result.post.partition}`;
+        setProgressBar({ pct: 100, kind: 'ok',
+          label: `Running v${result.post.version} on ${result.post.partition}` });
         logLine(`image now running at v${result.post.version}, ${result.post.partition}`);
-        setStatus('Done.');
         break;
       case 'rollback':
-        bar.style.background = 'var(--orange)'; msg.style.color = 'var(--orange)';
-        msg.textContent = `Rolled back — still on ${result.pre.partition}. The new image booted but didn't commit (probably crashed in setup/loop).`;
+        setProgressBar({ kind: 'warn',
+          label: `Rolled back — still on ${result.pre.partition}. New image booted but didn't commit.` });
         logLine('Image was written and briefly booted but reset before commit.');
         logLine('Most likely your code crashed early. Try the "Reset template" button or simplify your code.');
-        setStatus('Rolled back', 'err');
         break;
       case 'unreachable':
-        bar.style.background = 'var(--orange)'; msg.style.color = 'var(--orange)';
-        msg.textContent = 'Device did not respond; power-cycle to roll back.';
+        setProgressBar({ kind: 'warn',
+          label: 'Device did not respond; power-cycle to roll back.' });
         logLine('device did not come back — wedged or slow reboot');
-        setStatus('Unreachable', 'err');
         break;
       case 'error':
-        bar.style.background = 'var(--red)'; msg.style.color = 'var(--red)';
-        msg.textContent = `Error: ${result.error.message || result.error}`;
+        setProgressBar({ kind: 'err',
+          label: `Error: ${result.error.message || result.error}` });
         logLine(`error: ${result.error.message || result.error}`);
-        setStatus('Upload failed', 'err');
         break;
     }
   }
 
-  function setStatus(text, kind) {
-    const el = document.getElementById('ide-status');
-    el.textContent = text;
-    el.style.color = kind === 'err' ? 'var(--red)'
-                   : kind === 'ok'  ? 'var(--green)'
-                   : '';
+  // Build / upload progress bar — drives the #ide-upload-status footer
+  // in the build-log pane. Used for the entire Build → Upload → Commit
+  // flow so the user sees one continuous progress indicator instead of
+  // a tiny status word in the topbar. Three knobs:
+  //   pct    — 0..100, the bar fill width (omit to keep current width)
+  //   label  — short text under the bar (omit to keep)
+  //   kind   — 'ok' | 'warn' | 'err' | undefined, sets the bar/text colour
+  function setProgressBar({ pct, label, kind } = {}) {
+    const status = document.getElementById('ide-upload-status');
+    const bar = document.getElementById('ide-upload-bar');
+    const msg = document.getElementById('ide-upload-msg');
+    if (!status || !bar || !msg) return;
+    status.classList.remove('hidden');
+    if (pct != null)   bar.style.width = `${pct}%`;
+    if (label != null) msg.textContent = label;
+    const color = kind === 'err'  ? 'var(--red)'
+                : kind === 'warn' ? 'var(--orange)'
+                : kind === 'ok'   ? 'var(--green)'
+                : '';
+    bar.style.background = color;
+    msg.style.color      = color;
+  }
+
+  // Map "where are we in the build phase" to bar pct via TIME, not via
+  // per-stage budgets. The user's mental model is "0% at the first
+  // event, 100% at the last" — a uniform progression. Per-stage
+  // budgets fight this because the compiler fires multiple 0..100%
+  // cycles under the same stage name (e.g. SDK fetch then SDK
+  // unpack), which makes a high-water-based bar look stuck after the
+  // first sub-phase pins it to that stage's end.
+  //
+  // Instead: anchor on elapsed time since the build started, paced
+  // against the duration of the previous build (persisted to
+  // localStorage). On the very first run we use a sensible cold-cache
+  // estimate. The bar fills at a constant rate and the per-stage
+  // label tells the user which phase is currently running.
+  const BUILD_DURATION_KEY = 'picopoe.lastBuildMs';
+  const BUILD_DURATION_DEFAULT_MS = 30_000;   // typical cold-cache run
+  let buildStartMs = 0;
+  let estimatedBuildMs = BUILD_DURATION_DEFAULT_MS;
+  try {
+    const saved = Number(localStorage.getItem(BUILD_DURATION_KEY));
+    if (Number.isFinite(saved) && saved > 1000) estimatedBuildMs = saved;
+  } catch (_) {}
+
+  function resetBuildBar() {
+    buildStartMs = Date.now();
+  }
+  // Compute the bar pct for an in-flight build event. Returns a value
+  // in [0, 49] so we leave a tiny gap for the "Built …" success state
+  // to push to 50 (the boundary between build and upload halves).
+  function buildPct() {
+    if (!buildStartMs) return 0;
+    const elapsed = Date.now() - buildStartMs;
+    const frac = elapsed / estimatedBuildMs;
+    return Math.min(49, frac * 50);
+  }
+  // Record the actual duration so the next build's pacing improves.
+  function recordBuildDuration() {
+    if (!buildStartMs) return;
+    const dur = Date.now() - buildStartMs;
+    if (dur < 1000) return;
+    estimatedBuildMs = dur;
+    try { localStorage.setItem(BUILD_DURATION_KEY, String(dur)); } catch (_) {}
   }
 
   // Connection-flavoured status (probe / reconnect / scan results).

@@ -179,6 +179,29 @@ def serial(serial_port, duration, boot_wait):
 
 
 @main.command()
+@click.option("--serial-port", envvar="SERIAL_PORT", default=dev.DEFAULT_SERIAL_PORT, help="USB serial device")
+@click.option("-o", "--output", default=None, type=click.Path(),
+              help="Append the diag stream to this file (line-buffered)")
+@click.option("--duration", default=None, type=int,
+              help="Stop after N seconds (default: run until Ctrl-C)")
+def diag(serial_port, output, duration):
+    """Stream the firmware [diag] heartbeat over USB.
+
+    Long-running diagnostic for catching device stalls. Watches each
+    heartbeat for two failure fingerprints and warns loudly when they
+    trip — Core-1 stall (c1 delta = 0) and TCP PCB exhaustion. Leave
+    it running overnight or during a soak; when the device wedges, the
+    output file pins which subsystem stopped first.
+
+    Examples:
+        pico-poe diag                                     # stream to stdout, Ctrl-C to stop
+        pico-poe diag -o diag.log                         # also write to a file
+        pico-poe diag -o diag.log --duration 28800        # 8h soak then exit
+    """
+    dev.diag_capture(serial_port, output_path=output, duration=duration)
+
+
+@main.command()
 @click.option("-d", "--device", default=dev.DEFAULT_DEVICE_IP, help="Device IP address")
 @click.option("--wait/--no-wait", default=True, help="Wait for device to boot first")
 def test(device, wait):

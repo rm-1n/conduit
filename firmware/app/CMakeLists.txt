@@ -108,6 +108,7 @@ function(pico_poe_define_app TARGET)
         log_buffer.c
         data_buffer.c
         commands.c
+        diag.c
     )
 
     target_include_directories(${TARGET} PRIVATE

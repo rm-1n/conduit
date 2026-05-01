@@ -74,6 +74,16 @@
 // Memory pool — need enough for OTA upload buffering
 #define MEM_SIZE                        8192
 
+// Stats — explicit so the firmware-side diag.c heartbeat can read
+// real numbers for heap, MEMP pools, and link layer. Defaults are
+// supposed to be on, but a chained #include or compiler define can
+// silently zero them; pinning here keeps the diag stream meaningful.
+#define LWIP_STATS                      1
+#define MEM_STATS                       1
+#define MEMP_STATS                      1
+#define LINK_STATS                      1
+#define TCP_STATS                       1
+
 // We use raw TCP API, no httpd
 #define LWIP_HTTPD_CGI                  0
 #define LWIP_HTTPD_SSI                  0

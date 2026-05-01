@@ -141,8 +141,12 @@ body {
 .topbar__themetoggle { display: inline-flex; gap: 0; }
 .topbar__themetoggle .iconbtn { border-radius: 0; color: var(--ink-faint); position: relative; }
 .topbar__themetoggle .iconbtn + .iconbtn { margin-left: -1px; }
-.topbar__themetoggle .iconbtn:hover,
+/* Hover must win over pressed so the unpressed-but-hovered button's
+   full border is visible. Otherwise hovering the sun in dark-mode
+   leaves its right edge tucked behind the moon's left border, and
+   the hover frame looks open on that side. */
 .topbar__themetoggle .iconbtn[aria-pressed="true"] { z-index: 1; }
+.topbar__themetoggle .iconbtn:hover                { z-index: 2; }
 .topbar__themetoggle .iconbtn[aria-pressed="true"] {
   color: var(--ink);
   background: var(--bg-2);

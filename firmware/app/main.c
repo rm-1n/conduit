@@ -21,13 +21,26 @@
 #include "pico_poe_config.h"
 #include "rmii_ethernet/netif.h"
 #include "lan8720a.h"
+#include "diag.h"
 
-// Hardware watchdog timeout. Longer than any single legitimate stall in the
-// main loop (typical sleep_ms(1000) + diagnostic print). If we're stuck
-// somewhere blocking for >4s, the chip resets. Combined with PICO_CRT0_IMAGE_TYPE_TBYB,
-// a reset before ota_commit() makes the ROM roll back to the previous
-// partition on the next boot.
-#define WATCHDOG_TIMEOUT_MS 4000
+// Symbol from the rmii_ethernet driver — the inner step of its loop.
+// We call this from our own wrapper instead of the driver's loop so we
+// can bump g_core1_iter every iteration and Core 0 can detect a Core-1
+// stall on the next heartbeat. This is the SAME work the driver's
+// netif_rmii_ethernet_loop() does (poll → sys_check_timeouts inside);
+// we're just adding the counter.
+extern void netif_rmii_ethernet_poll(void);
+
+// Hardware watchdog timeout. Longer than any single legitimate stall in
+// the main loop (typical sleep_ms(1000) + diagnostic print). If we're
+// stuck somewhere blocking for >2 s, the chip resets. Combined with
+// PICO_CRT0_IMAGE_TYPE_TBYB, a reset before ota_commit() makes the ROM
+// roll back to the previous partition on the next boot.
+//
+// 2 s (down from 4) — the longest legitimate stall in the loop is the
+// sleep_ms(1000) heartbeat plus the printf, comfortably under 1.5 s on
+// the worst observed run. Tighter recovery from soft Core-0 hangs.
+#define WATCHDOG_TIMEOUT_MS 2000
 
 // Arduino-style user hooks. The browser IDE (web/) compiles user C source
 // into an object file that provides strong definitions for these two
@@ -61,7 +74,14 @@ volatile bool g_reboot_pending = false;
 // is symmetric if anything on core 0 ever needs to write flash too.
 static void core1_entry(void) {
     flash_safe_execute_core_init();
-    netif_rmii_ethernet_loop();
+    // Run the same loop the driver would, but tick g_core1_iter on every
+    // pass so Core 0's heartbeat can prove Core 1 is still alive.
+    // netif_rmii_ethernet_poll() already calls sys_check_timeouts() at
+    // the end (see firmware/lib/pico-rmii-ethernet_nce/src/rmii_ethernet.c).
+    while (1) {
+        netif_rmii_ethernet_poll();
+        __atomic_add_fetch(&g_core1_iter, 1, __ATOMIC_RELAXED);
+    }
 }
 
 int main() {
@@ -195,9 +215,7 @@ int main() {
                     watchdog_reboot(0, 0, 200);
                 }
             }
-            printf("[main] link=%d ip=%s commit_pending=%d\n",
-                   network_is_link_up(), network_get_ip_str(),
-                   (int)ota_commit_pending());
+            diag_print_line();
         }
         sleep_us(USER_LOOP_PERIOD_US);
     }
