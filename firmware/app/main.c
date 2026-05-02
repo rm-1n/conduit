@@ -165,17 +165,18 @@ int main() {
     // never arrives, the watchdog keeps patting on this loop until power
     // is cycled, at which point the ROM rolls back to the previous
     // partition.
-    // Network-health watchdog. If the PHY link reports DOWN continuously
-    // for HEALTH_LINK_DOWN_LIMIT_MS while the device is running normally
-    // (not mid-OTA, not already rebooting), we kick a reboot via the
-    // standard g_reboot_pending path. The PHY poller in the RMII driver
-    // flips netif up/down within 500 ms of cable changes, so a brief
-    // unplug/replug never trips this; only a sustained outage does.
-    // Restart is the only reliable recovery for cases like a wedged PHY
-    // or a half-dead lwIP state where the link is "up" at the driver
-    // but the stack can't accept new connections.
-    #define HEALTH_LINK_DOWN_LIMIT_MS  60000
+    // Link-down warning threshold. When the PHY reports DOWN for longer
+    // than this we just emit a one-shot warning to USB serial so the
+    // condition is visible — we deliberately do NOT auto-reboot. The
+    // user's policy is "never reboot without explicit request" (the
+    // device may be running real-time control like an inverted pendulum;
+    // an unannounced reboot can hurt more than the outage). Recovery for
+    // stack wedges is handled non-disruptively by the wedge_check_cb in
+    // network.c (TX SM reset + gARP burst). A truly unrecoverable PHY
+    // hang would still need the user to power-cycle or USB-flash.
+    #define HEALTH_LINK_DOWN_WARN_MS  60000
     absolute_time_t link_down_since = nil_time;
+    bool            link_down_warned = false;
     bool last_link_up = network_is_link_up();
     unsigned int iter = 0;
     while (1) {
@@ -204,15 +205,20 @@ int main() {
             if (link_up != last_link_up) {
                 printf("[health] link transition: %s\n", link_up ? "DOWN→UP" : "UP→DOWN");
                 last_link_up = link_up;
-                if (!link_up) link_down_since = get_absolute_time();
-                else          link_down_since = nil_time;
+                if (!link_up) {
+                    link_down_since = get_absolute_time();
+                    link_down_warned = false;
+                } else {
+                    link_down_since = nil_time;
+                    link_down_warned = false;
+                }
             }
-            if (!link_up && !is_nil_time(link_down_since)) {
+            if (!link_up && !is_nil_time(link_down_since) && !link_down_warned) {
                 int64_t down_ms = absolute_time_diff_us(link_down_since, get_absolute_time()) / 1000;
-                if (down_ms >= HEALTH_LINK_DOWN_LIMIT_MS && !ota_commit_pending()) {
-                    printf("[health] link down for %lld ms — scheduling reboot\n", (long long)down_ms);
-                    __atomic_store_n(&g_reboot_pending, true, __ATOMIC_RELEASE);
-                    watchdog_reboot(0, 0, 200);
+                if (down_ms >= HEALTH_LINK_DOWN_WARN_MS) {
+                    printf("[health] link down for %lld ms — sustained outage, "
+                           "no auto-reboot (per user policy)\n", (long long)down_ms);
+                    link_down_warned = true;
                 }
             }
             diag_print_line();

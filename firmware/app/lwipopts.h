@@ -51,6 +51,15 @@
 // probes do their work.
 #define MEMP_NUM_TCP_PCB                8
 
+// lwIP's default LWIP_NUM_SYS_TIMEOUT_INTERNAL on this build is 2
+// (LWIP_TCP + LWIP_ARP). That's only enough for the cyclic system
+// timers and leaves no room for app-scheduled sys_timeout calls
+// (our wedge_check_cb tick + 4 burst gARPs after a cable replug).
+// When the pool exhausts, sys_timeout silently drops the request,
+// which we caught when the wedge auto-recovery stopped re-arming
+// after its first fire. 16 is comfortable headroom.
+#define MEMP_NUM_SYS_TIMEOUT            16
+
 // TCP keepalive — opt-in per PCB via SOF_KEEPALIVE. http_server.c
 // turns it on for /api/data?stream=1 and /api/log?stream=1 because
 // those are the connections that can sit idle from the device's POV

@@ -10,14 +10,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&family=Fraunces:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.min.css">
-<link rel="stylesheet" href="style.css?v=112">
+<link rel="stylesheet" href="style.css?v=113">
 <!-- Conduit design system — loaded AFTER style.css so Conduit's
      :root token overrides win without touching the legacy IDE rules.
      conduit-tokens.css aliases the existing var names (--text→--ink etc)
      so everything keeps working. conduit-chrome.css adds the new
      site-level topbar + Control view layout. -->
-<link rel="stylesheet" href="conduit-tokens.css?v=112">
-<link rel="stylesheet" href="conduit-chrome.css?v=112">
+<link rel="stylesheet" href="conduit-tokens.css?v=113">
+<link rel="stylesheet" href="conduit-chrome.css?v=113">
 </head>
 <body>
 <!-- ============================================================
@@ -371,32 +371,32 @@
 <!-- Bump ?v=N whenever IDE flow semantics or the SDK object bundle change,
      otherwise returning browsers silently run stale JS / link stale .o files.
      The runtime console prints PICOPOE_ASSET_VERSION on boot. -->
-<script>window.PICOPOE_ASSET_VERSION = '2026-05-01-time-paced-build-bar';</script>
+<script>window.PICOPOE_ASSET_VERSION = '2026-05-01-faster-disconnect-detect';</script>
 <!-- uPlot — high-performance time-series plotting via CDN. Pinned for
      reproducibility; bump VERSION carefully (uPlot's API has been stable
      since 1.6 but theme/options sometimes drift). -->
 <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.iife.min.js"></script>
 <!-- Inline SVG icon helper. Loaded early so other scripts can call
      PicoPoE.icons.set(buttonEl, 'pause') without races. -->
-<script src="icons.js?v=112"></script>
-<script src="upload.js?v=112"></script>
-<script src="elf.js?v=112"></script>
-<script src="uf2.js?v=112"></script>
-<script src="finalize.js?v=112"></script>
-<script src="editor.js?v=112"></script>
-<script src="compiler.js?v=112"></script>
-<script src="app.js?v=112"></script>
-<script src="ide.js?v=112"></script>
-<script src="log_store.js?v=112"></script>
-<script src="log_export.js?v=112"></script>
-<script src="console.js?v=112"></script>
-<script src="chart.js?v=112"></script>
+<script src="icons.js?v=113"></script>
+<script src="upload.js?v=113"></script>
+<script src="elf.js?v=113"></script>
+<script src="uf2.js?v=113"></script>
+<script src="finalize.js?v=113"></script>
+<script src="editor.js?v=113"></script>
+<script src="compiler.js?v=113"></script>
+<script src="app.js?v=113"></script>
+<script src="ide.js?v=113"></script>
+<script src="log_store.js?v=113"></script>
+<script src="log_export.js?v=113"></script>
+<script src="console.js?v=113"></script>
+<script src="chart.js?v=113"></script>
 <!-- data_store.js: in-memory time-series store. Loaded before
      telemetry.js so the append target exists by the time the first
      record arrives. -->
-<script src="data_store.js?v=112"></script>
-<script src="telemetry.js?v=112"></script>
-<script src="netcon.js?v=112"></script>
-<script src="commands.js?v=112"></script>
+<script src="data_store.js?v=113"></script>
+<script src="telemetry.js?v=113"></script>
+<script src="netcon.js?v=113"></script>
+<script src="commands.js?v=113"></script>
 </body>
 </html>

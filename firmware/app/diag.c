@@ -33,6 +33,7 @@
 
 #include "network.h"
 #include "ota.h"
+#include "http_server.h"
 
 volatile uint32_t g_core1_iter = 0;
 
@@ -72,23 +73,77 @@ void diag_print_line(void) {
     // since last print. recv = inbound passed up the stack; xmit = sent
     // out on the wire. Either staying flat for sustained periods while
     // link reports up is the smoking gun for a wedged MAC.
-    static u32_t last_rx = 0, last_tx = 0;
-    u32_t rx = lwip_stats.link.recv;
-    u32_t tx = lwip_stats.link.xmit;
-    u32_t drx = rx - last_rx;
-    u32_t dtx = tx - last_tx;
-    last_rx = rx; last_tx = tx;
+    // lwIP's LINK_STATS counters are never bumped on this driver's code
+    // path (the rmii driver doesn't go through ethernet_input). Use the
+    // driver's own counters instead — bumped after every input handoff
+    // (rxf) and at every entry to linkoutput (txa). If rxf climbs while
+    // txa stays flat post-cable-cycle, lwIP isn't trying to reply (e.g.
+    // SYNs aren't reaching higher layers); if both climb but the network
+    // stays dead, the device's responses aren't leaving the wire.
+    extern volatile uint32_t g_rmii_rx_frames;
+    extern volatile uint32_t g_rmii_tx_attempts;
+    // Finer-grained: rxu = unicast frames matching our MAC (switch is
+    // forwarding to us); rxs = TCP SYNs to us specifically. The pair
+    // disambiguates "switch lost us" from "lwIP swallowed the SYN".
+    extern volatile uint32_t g_rmii_rx_to_us;
+    extern volatile uint32_t g_rmii_rx_tcp_syn;
+    static u32_t last_rx = 0, last_tx = 0, last_acpt = 0, last_strm = 0;
+    static u32_t last_rxu = 0, last_rxs = 0;
+    u32_t rx   = g_rmii_rx_frames;
+    u32_t tx   = g_rmii_tx_attempts;
+    u32_t rxu  = g_rmii_rx_to_us;
+    u32_t rxs  = g_rmii_rx_tcp_syn;
+    u32_t acpt = http_server_accepts();
+    u32_t strm = http_server_streams_started();
+    u32_t drx   = rx   - last_rx;
+    u32_t dtx   = tx   - last_tx;
+    u32_t drxu  = rxu  - last_rxu;
+    u32_t drxs  = rxs  - last_rxs;
+    u32_t dacpt = acpt - last_acpt;
+    u32_t dstrm = strm - last_strm;
+    last_rx = rx; last_tx = tx; last_acpt = acpt; last_strm = strm;
+    last_rxu = rxu; last_rxs = rxs;
+
+    // lwIP internal drop counters — pinpoint where post-cable-cycle
+    // SYNs disappear. ipdrop counts IP packets dropped (wrong dest IP,
+    // netif down, etc.); tcpdrop counts TCP packets dropped (no
+    // matching PCB, etc.); tcperr counts TCP errors (checksum, malformed).
+    // If acpt doesn't climb but ipdrop/tcpdrop/tcperr do, we know where
+    // lwIP is silently rejecting the SYNs.
+    u32_t ipdrop  = lwip_stats.ip.drop;
+    u32_t tcpdrop = lwip_stats.tcp.drop;
+    u32_t tcperr  = lwip_stats.tcp.err;
+    u32_t tcpchk  = lwip_stats.tcp.chkerr;
+    static u32_t last_ipdrop = 0, last_tcpdrop = 0, last_tcperr = 0, last_tcpchk = 0;
+    u32_t dipdrop  = ipdrop  - last_ipdrop;
+    u32_t dtcpdrop = tcpdrop - last_tcpdrop;
+    u32_t dtcperr  = tcperr  - last_tcperr;
+    u32_t dtcpchk  = tcpchk  - last_tcpchk;
+    last_ipdrop = ipdrop; last_tcpdrop = tcpdrop; last_tcperr = tcperr; last_tcpchk = tcpchk;
 
     printf("[diag] link=%d ip=%s c1=%lu(+%lu) "
            "heap=%lu/%lu pbuf=%u/%u tcp_pcb=%u/%u "
-           "tcp=%ua/%ut/%ul rx=%lu(+%lu) tx=%lu(+%lu) commit_pending=%d\n",
+           "tcp=%ua/%ut/%ul rx=%lu(+%lu) tx=%lu(+%lu) "
+           "rxu=%lu(+%lu) rxs=%lu(+%lu) "
+           "acpt=%lu(+%lu) strm=%lu(+%lu) "
+           "ipdrop=%lu(+%lu) tcpdrop=%lu(+%lu) tcperr=%lu(+%lu) tcpchk=%lu(+%lu) "
+           "wedge_rec=%lu commit_pending=%d\n",
            network_is_link_up(), network_get_ip_str(),
            (unsigned long)c1, (unsigned long)dc1,
            (unsigned long)m->used,  (unsigned long)m->avail,
            (unsigned)pb->used, (unsigned)pb->avail,
            (unsigned)tc->used, (unsigned)tc->avail,
            tcp_a, tcp_tw, tcp_l,
-           (unsigned long)rx, (unsigned long)drx,
-           (unsigned long)tx, (unsigned long)dtx,
+           (unsigned long)rx,      (unsigned long)drx,
+           (unsigned long)tx,      (unsigned long)dtx,
+           (unsigned long)rxu,     (unsigned long)drxu,
+           (unsigned long)rxs,     (unsigned long)drxs,
+           (unsigned long)acpt,    (unsigned long)dacpt,
+           (unsigned long)strm,    (unsigned long)dstrm,
+           (unsigned long)ipdrop,  (unsigned long)dipdrop,
+           (unsigned long)tcpdrop, (unsigned long)dtcpdrop,
+           (unsigned long)tcperr,  (unsigned long)dtcperr,
+           (unsigned long)tcpchk,  (unsigned long)dtcpchk,
+           (unsigned long)network_get_wedge_recoveries(),
            (int)ota_commit_pending());
 }

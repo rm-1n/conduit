@@ -20,7 +20,12 @@
   'use strict';
 
   const RECONNECT_OK_MS    = 100;
-  const RECONNECT_ERR_MS   = 2000;
+  // Sleep between failed reconnect attempts. Tight (was 2 s, now 750 ms)
+  // so a cable replug recovers in ≤1 s instead of feeling laggy. The
+  // device's HTTP server accepts new TCP within ~50 ms of link-up, so
+  // the only cost of polling more often is a few extra failed fetches
+  // while the cable is genuinely out — not a bottleneck.
+  const RECONNECT_ERR_MS   = 750;
   const IP_CHECK_MS        = 1000;
   const SCHEMA_REFRESH_MIN_MS = 1000;
   const PERSIST_BATCH_MAX  = 64;
@@ -28,18 +33,24 @@
   // Stall watchdog: if the open stream goes silent for this long we
   // assume the underlying TCP is half-dead (Wi-Fi flap, ethernet
   // unplug, NAT timeout, browser idle suspend) and abort so the loop
-  // reconnects cleanly. Tuned wider than any legitimate quiet period —
-  // even an idle device on a paused script still emits keep-alives.
-  const STALL_MS           = 6000;
-  const STALL_CHECK_MS     = 1000;
+  // reconnects cleanly. Tuned tight — at ~250 Hz emit rate, every
+  // 100 ms tick should land a packet. 1.5 s is well clear of any
+  // legitimate gap on a healthy stream and close enough that a cable
+  // pull turns the link indicator red within ~2 s instead of staring
+  // at a green dot for ages. Was 3 s; the firmware now aborts open
+  // TCP PCBs on link-down (within ~500 ms via the rmii poll) so most
+  // cable pulls deliver an RST that lands well before this fires.
+  const STALL_MS           = 1500;
+  const STALL_CHECK_MS     = 250;
   // Connect-phase timeout — between issuing fetch() and the first byte
   // landing. Without this, a device that's just rebooted (TCP accepts
   // but firmware isn't ready to serve) leaves runStream blocked
   // indefinitely on `await fetch(...)` or `await reader.read()`. The
   // stall watchdog can't help here because it skips when lastByteMs is
-  // still 0. 5 s is well above the round-trip on LAN even for a slow
-  // device + handshake.
-  const CONNECT_TIMEOUT_MS = 5000;
+  // still 0. 2.5 s is well above the round-trip on LAN even for a slow
+  // device + handshake; was 5 s, dropped because the slowest legitimate
+  // path (TCP connect during PHY auto-neg restart) settles in ~1.5 s.
+  const CONNECT_TIMEOUT_MS = 2500;
   // Schema fetch timeout. Same reason — a hung /api/data_schema would
   // wedge runStream's awaited refreshSchema and prevent the data fetch
   // from ever issuing.
@@ -527,6 +538,15 @@
         diag('stall.abort', { quietMs: Math.round(performance.now() - lastByteMs) });
         setState('reconnecting…', 'err');
         try { activeAbort.abort(); } catch (_) {}
+        // Telemetry and the runtime console share the same TCP fate:
+        // if the device's link went down, both streams are dead. The
+        // console can't detect this on its own (it has no stall
+        // watchdog because logs may legitimately be silent for
+        // minutes), so wake it explicitly. Without this the link
+        // indicator flips to "Disconnected" the moment telemetry
+        // notices but the console stays green for minutes.
+        const con = window.PicoPoE && window.PicoPoE.console;
+        if (con && con.kick) { try { con.kick(); } catch (_) {} }
       }
     }, STALL_CHECK_MS);
   }

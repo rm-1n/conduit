@@ -27,7 +27,10 @@
   'use strict';
 
   const RECONNECT_OK_MS    = 100;
-  const RECONNECT_ERR_MS   = 2000;
+  // Sleep between failed reconnect attempts. Matched to telemetry.js —
+  // both streams share the same device, so retry cadence should agree.
+  // Was 2 s; 750 ms makes cable replug recover in ≤1 s.
+  const RECONNECT_ERR_MS   = 750;
   const IP_CHECK_MS        = 1000;
   const MAX_BUFFER_CHARS   = 200_000;
   const PENDING_MAX_CHARS  = 100_000;
@@ -38,7 +41,9 @@
   // otherwise leave runStream stuck on `await fetch(...)` indefinitely
   // (the log stream may legitimately be silent for minutes once
   // connected, so we DON'T add a stall watchdog post-headers).
-  const CONNECT_TIMEOUT_MS = 5000;
+  // Was 5 s; 2.5 s is plenty for LAN handshake + first byte and keeps
+  // the stale-state window short after a cable cut.
+  const CONNECT_TIMEOUT_MS = 2500;
   // Prefix regex: "[<digits>]\t<msg>". The greedy `(.*)$` captures the entire
   // rest of the line, including any literal "[...]\t" the user may have
   // written inside their format string.
@@ -434,6 +439,19 @@
       resetCursor() {
         cursor = null;
         if (activeAbort) activeAbort.abort();
+      },
+      // Wake the stream loop when an external observer (telemetry's
+      // stall watchdog, the user's Refresh button) decides this stream
+      // is stale. Without this, a half-dead TCP that's silent post-
+      // headers would sit in `await reader.read()` forever — there's
+      // no stall watchdog here because logs may legitimately be silent
+      // for minutes. Aborting forces streamLoop to retry, which either
+      // succeeds (firmware reachable) or trips its own connect timeout.
+      kick() {
+        if (activeAbort) {
+          try { activeAbort.abort(); } catch (_) {}
+          setState('reconnecting…', 'err');
+        }
       },
       // Inject a browser-side note (connection events, refresh outcomes,
       // etc.) into the runtime console pane. Tagged so the user can tell

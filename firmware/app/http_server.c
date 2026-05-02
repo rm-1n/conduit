@@ -146,6 +146,55 @@ static void conn_close(struct tcp_pcb *pcb, http_conn_t *conn);
 static void enable_keepalive(struct tcp_pcb *pcb);
 
 // --------------------------------------------------------------------------
+// Streaming-connection registry
+// --------------------------------------------------------------------------
+// Tracks currently-open /api/log?stream=1 and /api/data?stream=1 PCBs
+// so http_server_on_link_down() can abort them all on cable unplug.
+// Without this, vanished-client streamers sit in the small
+// MEMP_NUM_TCP_PCB pool for ~50 s (keepalive probe duration) and the
+// browser's reconnect SYNs get refused because the pool is full.
+typedef struct {
+    struct tcp_pcb *pcb;
+    http_conn_t    *conn;
+} stream_reg_entry_t;
+
+#define STREAM_REG_SIZE  MEMP_NUM_TCP_PCB
+static stream_reg_entry_t stream_registry[STREAM_REG_SIZE];
+
+// HTTP-server-specific diagnostic counters surfaced via diag.c. See the
+// header for what each tracks and how to interpret deltas across a
+// cable cycle.
+static volatile uint32_t g_accepts_total         = 0;
+static volatile uint32_t g_streams_started_total = 0;
+
+uint32_t http_server_accepts(void)         { return g_accepts_total; }
+uint32_t http_server_streams_started(void) { return g_streams_started_total; }
+
+static void register_streaming(struct tcp_pcb *pcb, http_conn_t *conn) {
+    for (int i = 0; i < STREAM_REG_SIZE; i++) {
+        if (stream_registry[i].pcb == NULL) {
+            stream_registry[i].pcb  = pcb;
+            stream_registry[i].conn = conn;
+            return;
+        }
+    }
+}
+
+// Idempotent. Matches by pcb when available, otherwise by conn (http_err
+// only has the conn pointer because lwIP has already freed the pcb by
+// the time the err callback fires).
+static void unregister_streaming(struct tcp_pcb *pcb, http_conn_t *conn) {
+    for (int i = 0; i < STREAM_REG_SIZE; i++) {
+        if ((pcb && stream_registry[i].pcb == pcb) ||
+            (conn && stream_registry[i].conn == conn)) {
+            stream_registry[i].pcb  = NULL;
+            stream_registry[i].conn = NULL;
+            return;
+        }
+    }
+}
+
+// --------------------------------------------------------------------------
 // Response builders
 // --------------------------------------------------------------------------
 
@@ -447,6 +496,8 @@ static void handle_log(struct tcp_pcb *pcb, http_conn_t *conn) {
         conn->state = CONN_STATE_STREAMING;
         tcp_nagle_disable(pcb);
         enable_keepalive(pcb);
+        register_streaming(pcb, conn);
+        g_streams_started_total++;
         tcp_poll(pcb, http_poll, 1);
         return;
     }
@@ -531,6 +582,8 @@ static void handle_data(struct tcp_pcb *pcb, http_conn_t *conn) {
         conn->state = CONN_STATE_STREAMING;
         tcp_nagle_disable(pcb);
         enable_keepalive(pcb);
+        register_streaming(pcb, conn);
+        g_streams_started_total++;
         tcp_poll(pcb, http_poll, 1);
         return;
     }
@@ -792,7 +845,37 @@ static void enable_keepalive(struct tcp_pcb *pcb) {
     pcb->keep_cnt   = HTTP_KEEP_CNT;
 }
 
+void http_server_on_link_down(void) {
+    int aborted = 0;
+    for (int i = 0; i < STREAM_REG_SIZE; i++) {
+        struct tcp_pcb *pcb = stream_registry[i].pcb;
+        http_conn_t   *conn = stream_registry[i].conn;
+        if (!pcb) continue;
+        // Belt-and-braces: only abort entries that are still in the
+        // streaming state. Anything mid-OTA (CONN_STATE_BODY) or
+        // mid-header (CONN_STATE_HEADER) is intentionally left alone.
+        if (conn && conn->state != CONN_STATE_STREAMING) continue;
+        // Detach all callbacks BEFORE tcp_abort. lwIP fires the err
+        // callback synchronously from inside tcp_abort, and we want
+        // it to no-op since we're freeing the conn ourselves below.
+        tcp_arg (pcb, NULL);
+        tcp_recv(pcb, NULL);
+        tcp_err (pcb, NULL);
+        tcp_poll(pcb, NULL, 0);
+        tcp_abort(pcb);
+        if (conn) free(conn);
+        stream_registry[i].pcb  = NULL;
+        stream_registry[i].conn = NULL;
+        aborted++;
+    }
+    if (aborted > 0) {
+        printf("[http] link-down: aborted %d stream PCB%s\n",
+               aborted, aborted == 1 ? "" : "s");
+    }
+}
+
 static void conn_close(struct tcp_pcb *pcb, http_conn_t *conn) {
+    unregister_streaming(pcb, conn);
     if (conn) {
         // If OTA was started but connection dropped, abort it
         if (conn->state == CONN_STATE_BODY && ota_in_progress()) {
@@ -965,6 +1048,9 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 
 static void http_err(void *arg, err_t err) {
     http_conn_t *conn = (http_conn_t *)arg;
+    // lwIP has already freed the pcb by the time err fires, so we can
+    // only match the registry entry by conn pointer.
+    unregister_streaming(NULL, conn);
     if (conn) {
         if (ota_in_progress()) {
             ota_abort();
@@ -974,6 +1060,7 @@ static void http_err(void *arg, err_t err) {
 }
 
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err) {
+    g_accepts_total++;
     if (err != ERR_OK || pcb == NULL) {
         return ERR_VAL;
     }

@@ -150,7 +150,7 @@ function(pico_poe_define_app TARGET)
     # Binary version for A/B partition selection — bump MINOR per OTA test
     # cycle. The RP2350 bootrom compares versions across partitions and
     # boots the newer.
-    pico_set_binary_version(${TARGET} MAJOR 1 MINOR 25)
+    pico_set_binary_version(${TARGET} MAJOR 1 MINOR 66)
 
     # Embed the A/B partition table so the bootrom can discover the layout
     # and pick between A and B based on binary version.
