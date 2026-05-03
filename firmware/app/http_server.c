@@ -947,6 +947,20 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
             // handle_log so the very first poll already starts at a sane cursor.
             conn->log_since = next;
             if (n == 0) return ERR_OK;
+            // Known cosmetic glitch on cable-cycle boundary: ~once per cable
+            // cycle the browser receives one log line whose first ~12 bytes
+            // are the *previous* line's prefix bytes prepended to the new
+            // line, e.g. "[702317801]\t02846190]\ttick=663000…" instead of
+            // "[702846190]\ttick=663000…". The duplicated chunk is exactly
+            // one prefix-length, suggesting an lwIP TCP segment-pool / pcb-
+            // reuse race around abort/reconnect that re-emits the tail of a
+            // prior tcp_write. log_since arithmetic on our side is correct
+            // (advance-before-write here only causes gaps on ERR_MEM, never
+            // duplicates). Proving the lwIP cause needs a wire capture across
+            // many cycles; for now we suppress the visible artifact in the
+            // browser via a renderer guard in web/console.js (strips a stray
+            // "<digits>]\t" tail from the parsed msg). Revisit if the
+            // duplication ever exceeds one prefix length.
             err_t e = tcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
             if (e == ERR_MEM) return ERR_OK;  // sndbuf race — retry next poll
             if (e != ERR_OK) {

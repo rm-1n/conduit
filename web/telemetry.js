@@ -22,9 +22,9 @@
   const RECONNECT_OK_MS    = 100;
   // Sleep between failed reconnect attempts. Browser cost of polling
   // more often is a few extra failed fetches while the cable is
-  // genuinely out — not a bottleneck. 400 ms means a clean replug
-  // recovers in well under 1 s.
-  const RECONNECT_ERR_MS   = 400;
+  // genuinely out — not a bottleneck. 150 ms means we land within
+  // ~150 ms of the upstream port re-opening.
+  const RECONNECT_ERR_MS   = 150;
   const IP_CHECK_MS        = 1000;
   const SCHEMA_REFRESH_MIN_MS = 1000;
   const PERSIST_BATCH_MAX  = 64;
@@ -43,14 +43,14 @@
   // but firmware isn't ready to serve) leaves runStream blocked
   // indefinitely on `await fetch(...)` or `await reader.read()`. The
   // stall watchdog can't help here because it skips when lastByteMs is
-  // still 0. 1.5 s comfortably covers a LAN handshake + headers; the
-  // device's first poll iteration delivers the first byte (real data
-  // or keepalive) within ~500 ms of accept.
-  const CONNECT_TIMEOUT_MS = 1500;
-  // Schema fetch timeout. Same reason — a hung /api/data_schema would
-  // wedge runStream's awaited refreshSchema and prevent the data fetch
-  // from ever issuing.
-  const SCHEMA_TIMEOUT_MS  = 4000;
+  // still 0. Firmware emits a 16-byte keepalive every ~500 ms, so
+  // 750 ms covers one keepalive + jitter.
+  const CONNECT_TIMEOUT_MS = 750;
+  // Schema fetch timeout. Sized to match CONNECT_TIMEOUT_MS so an
+  // unreachable device doesn't hold runStream's awaited refreshSchema
+  // for several seconds while the data path retries every 750 ms.
+  // /api/data_schema is ~200 bytes; a healthy LAN delivers it in <10 ms.
+  const SCHEMA_TIMEOUT_MS  = 750;
 
   const DTYPE_I8 = 0, DTYPE_U8 = 1, DTYPE_I16 = 2, DTYPE_U16 = 3,
         DTYPE_I32 = 4, DTYPE_U32 = 5, DTYPE_I64 = 6, DTYPE_U64 = 7,
@@ -190,15 +190,11 @@
 
   // Discriminated state machine for the indicator label.
   //   'connected'    (green) — bytes flowing within STALL_MS
-  //   'no data'      (amber) — TCP open + headers received but stale;
-  //                            elapsed seconds appended live
-  //   'reconnecting' (red)   — between runStream invocations; elapsed
-  //                            seconds appended live
+  //   'no data'      (amber) — TCP open + headers received but stale
+  //   'reconnecting' (red)   — between runStream invocations
   //   'paused'       (off)   — external pause (OTA)
   //   'no device'    (off)   — getIp returned null
   //   'disconnected' (off)   — initial / stop()
-  // The single-word label was indistinguishable when stuck — the user
-  // couldn't tell whether the browser was actively retrying or wedged.
   let currentStage = 'disconnected';
   let stageEnteredAt = 0;
   function setStage(stage) {
@@ -210,22 +206,9 @@
     if (!stateEl) return;
     let text, cls;
     switch (currentStage) {
-      case 'connected':
-        text = 'connected';
-        cls  = 'ok';
-        break;
-      case 'no data': {
-        const s = Math.max(0, Math.round((performance.now() - stageEnteredAt) / 1000));
-        text = s > 0 ? `no data (${s}s)` : 'no data';
-        cls  = 'err';
-        break;
-      }
-      case 'reconnecting': {
-        const s = Math.max(0, Math.round((performance.now() - stageEnteredAt) / 1000));
-        text = s > 0 ? `reconnecting (${s}s)…` : 'reconnecting…';
-        cls  = 'err';
-        break;
-      }
+      case 'connected':    text = 'connected';    cls = 'ok';  break;
+      case 'no data':      text = 'no data';      cls = 'err'; break;
+      case 'reconnecting': text = 'reconnecting…'; cls = 'err'; break;
       case 'paused':       text = 'paused';       cls = '';    break;
       case 'no device':    text = 'no device';    cls = '';    break;
       case 'disconnected': text = 'disconnected'; cls = '';    break;
@@ -257,16 +240,27 @@
 
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-  async function refreshSchema(ip, force) {
+  async function refreshSchema(ip, force, parentSignal) {
     const now = Date.now();
     if (!force && now - lastSchemaFetchMs < SCHEMA_REFRESH_MIN_MS) return;
     lastSchemaFetchMs = now;
     // Bound the schema fetch — without a timeout, a freshly-rebooted
     // device that accepts the TCP but doesn't reply leaves runStream's
     // `await refreshSchema(...)` blocked forever, so the data stream
-    // never gets a chance to (re)open.
+    // never gets a chance to (re)open. Also chain to the runStream's
+    // signal: a connect-timeout abort there must propagate here so we
+    // don't burn the rest of SCHEMA_TIMEOUT_MS waiting on a fetch the
+    // outer loop has already decided to retry.
     const schemaAbort = new AbortController();
     const schemaTimer = setTimeout(() => schemaAbort.abort(), SCHEMA_TIMEOUT_MS);
+    let onParentAbort = null;
+    if (parentSignal) {
+      if (parentSignal.aborted) schemaAbort.abort();
+      else {
+        onParentAbort = () => schemaAbort.abort();
+        parentSignal.addEventListener('abort', onParentAbort, { once: true });
+      }
+    }
     try {
       const res = await fetch(`http://${ip}/api/data_schema`,
                               { mode: 'cors', cache: 'no-store', signal: schemaAbort.signal });
@@ -288,7 +282,12 @@
     } catch (e) {
       diag('schema.error', { message: String(e && e.message || e) });
     }
-    finally { clearTimeout(schemaTimer); }
+    finally {
+      clearTimeout(schemaTimer);
+      if (parentSignal && onParentAbort) {
+        parentSignal.removeEventListener('abort', onParentAbort);
+      }
+    }
   }
 
   function appendBuf(extra) {
@@ -429,15 +428,12 @@
   }
 
   async function runStream(ip, signal) {
-    // Cursor-resume across (re)connects so brief network blips don't
-    // lose telemetry — the device replays from `since` if the ring still
-    // holds the bytes. Requires firmware ≥ v1.1.3 which clamps a stale
-    // `since > total` (post-reboot) at the entry point and writes back
-    // `conn->log_since` on zero-byte reads; without those fixes, a stale
-    // cursor would wedge the stream for ~10 minutes until total caught
-    // up. On a fresh page, cursor is null → omit `since` (live-tail).
-    const sinceParam = (cursor != null) ? `&since=${cursor}` : '';
-    const url = `http://${ip}/api/data?stream=1${sinceParam}`;
+    // Always live-tail (no `since=`). After a long outage, replaying the
+    // backlog would have the device dump tens of KB before getting to
+    // current data, adding seconds to perceived recovery time. The user
+    // accepts losing samples that occurred while the cable was out —
+    // the chart just shows a gap (chart.gap() below) and resumes live.
+    const url = `http://${ip}/api/data?stream=1`;
     wallMsAnchor = Date.now();
     parseBuf = new Uint8Array(0);
     diag('runStream.open', { url, cursor });
@@ -471,11 +467,15 @@
     }
     firstStream = false;
 
-    diag('runStream.refreshSchema');
-    await refreshSchema(ip, true);
-    diag('runStream.schemaDone', { schemaSize: schema.size,
-                                    schema: [...schema.entries()] });
-
+    // Schema is refreshed lazily — fired async when an unknown msg_id
+    // arrives in drain() (line ~380), or when uptime regresses (reboot
+    // path). Doing it synchronously here doubled every recovery's
+    // network round-trip count vs the runtime console, which under
+    // device PCB pressure (TIME_WAIT pool exhaustion after rapid
+    // cable cycles) added ~10 s to telemetry's recover-after-replug
+    // time. The cached schema from the prior session stays valid as
+    // long as the firmware hasn't changed. Empty-schema first connect
+    // resolves itself within one record via the unknown-id path.
     diag('runStream.fetch');
     const res = await fetch(url, { mode: 'cors', cache: 'no-store', signal });
     diag('runStream.headers', { ok: res.ok, status: res.status,
@@ -603,13 +603,6 @@
   function watchStall() {
     if (stallHandle) return;
     stallHandle = setInterval(() => {
-      // Re-render the live elapsed counter for stages that show one,
-      // independent of the stall/abort logic below. Keeps the indicator
-      // ticking ("reconnecting (3s)…") so the user can tell it's
-      // actually progressing rather than wedged.
-      if (currentStage === 'no data' || currentStage === 'reconnecting') {
-        renderStage();
-      }
       if (stopped || paused || !activeAbort) return;
       if (lastByteMs === 0) return;
       if (performance.now() - lastByteMs > STALL_MS) {

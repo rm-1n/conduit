@@ -45,3 +45,7 @@ size_t log_buffer_read(uint32_t since, uint8_t *out, size_t max,
 // Total bytes ever written. Clients bootstrap their cursor from this so they
 // only see new output going forward.
 uint32_t log_buffer_total_written(void);
+
+// How many times poe_log() has been entered. Pair with the byte total
+// to distinguish "callers stopped calling" from "calls were dropped".
+uint32_t log_buffer_call_count(void);

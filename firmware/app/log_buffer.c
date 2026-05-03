@@ -13,6 +13,10 @@ static uint8_t  g_ring[LOG_BUFFER_SIZE];
 static volatile uint32_t g_total = 0;
 static bool     g_inited = false;
 static spin_lock_t *g_lock;
+// Diagnostic — bumped at the very top of poe_log() before any
+// conditional. Pair with g_total to distinguish "poe_log was never
+// called" from "poe_log was called but push_bytes silently dropped".
+volatile uint32_t g_poe_log_calls = 0;
 
 #define LOG_LINE_MAX 256
 
@@ -33,6 +37,7 @@ void log_buffer_init(void) {
 }
 
 void poe_log(const char *fmt, ...) {
+    g_poe_log_calls++;
     // Each record is framed as "[<uptime_us>]\t<formatted>\n…". The prefix
     // is part of the same bytes pushed under the spinlock so a reader can
     // never see a torn record (timestamp without payload or vice versa).
@@ -93,4 +98,8 @@ size_t log_buffer_read(uint32_t since, uint8_t *out, size_t max,
 
 uint32_t log_buffer_total_written(void) {
     return g_total;
+}
+
+uint32_t log_buffer_call_count(void) {
+    return g_poe_log_calls;
 }
