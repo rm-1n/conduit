@@ -6,7 +6,7 @@ set(PICO_BOARD pico2)
 # Import the Pico SDK
 include(pico_sdk_import.cmake)
 
-project(pico_poe C CXX ASM)
+project(conduit C CXX ASM)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)

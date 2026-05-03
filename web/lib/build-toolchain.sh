@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the WASM Clang+LLD bundle for the pico-poe IDE, natively on macOS.
+# Build the WASM Clang+LLD bundle for the conduit IDE, natively on macOS.
 #
 # - Resets the Emception submodule to its pinned state
 # - Applies patches/emception-arm-target.patch (adds ARM backend to LLVM)

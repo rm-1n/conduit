@@ -7,7 +7,7 @@
 //   0       1     magic    = 0xFE
 //   1       1     version  = 0x01
 //   2       2     msg_id   LE u16
-//   4       1     dtype    u8 (poe_dtype_t)
+//   4       1     dtype    u8 (conduit_dtype_t)
 //   5       2     n        LE u16  element count, NOT bytes
 //   7       1     reserved 0
 //   8       8     uptime_us LE u64
@@ -34,7 +34,7 @@
   // unplug, NAT timeout, browser idle suspend) and abort so the loop
   // reconnects cleanly. The firmware emits a 16-byte keepalive record
   // every ~500 ms when the data ring is otherwise idle (see
-  // POE_DATA_KEEPALIVE_MSG_ID), so 1 s is one missed keepalive plus
+  // CONDUIT_DATA_KEEPALIVE_MSG_ID), so 1 s is one missed keepalive plus
   // jitter — anything longer is genuinely broken.
   const STALL_MS           = 1000;
   const STALL_CHECK_MS     = 150;
@@ -90,13 +90,13 @@
   //   { kind: 'record',  recordBytes, msgId, dtype, n, uptimeUs, payload }
   //   { kind: 'need',    needBytes }     // wait until buf has this many at offset
   //   { kind: 'resync' }                 // skip 1 byte and try again
-  // Exposed via window.PicoPoE.telemetryWire so unit tests can drive it
+  // Exposed via window.Conduit.telemetryWire so unit tests can drive it
   // without booting the streaming loop.
   const FRAME_MAGIC   = 0xFE;
   const FRAME_VERSION = 0x01;
   const FRAME_HEADER_BYTES = 16;
   // Reserved msg_id used by firmware http_poll's idle keepalive
-  // (see firmware/app/data_buffer.h POE_DATA_KEEPALIVE_MSG_ID). Records
+  // (see firmware/app/data_buffer.h CONDUIT_DATA_KEEPALIVE_MSG_ID). Records
   // with this id arrive at most every ~500 ms when the device's data
   // ring is empty; we count them as "stream is alive" but skip the
   // chart/store push in drain().
@@ -124,11 +124,11 @@
       payload: buf.subarray(offset + FRAME_HEADER_BYTES, offset + recordBytes),
     };
   }
-  // Expose on window.PicoPoE.telemetryWire BEFORE init() runs, so unit
+  // Expose on window.Conduit.telemetryWire BEFORE init() runs, so unit
   // tests can `loadModule('telemetry.js')` and grab the parser without
   // also kicking off the network/timer machinery.
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.telemetryWire = {
+  window.Conduit = window.Conduit || {};
+  window.Conduit.telemetryWire = {
     parseRecord, dtypeSize, readElem,
     MAGIC: FRAME_MAGIC, VERSION: FRAME_VERSION, HEADER_BYTES: FRAME_HEADER_BYTES,
     KEEPALIVE_MSG_ID,
@@ -170,7 +170,7 @@
 
   // Diagnostic ring buffer + structured logger. Each call goes to
   // console.log AND to a 100-entry buffer accessible via
-  // window.PICOPOE_DIAG(). The buffer is what the user pastes back
+  // window.CONDUIT_DIAG(). The buffer is what the user pastes back
   // when telemetry is misbehaving — it captures the sequence of state
   // transitions in order, with ms-since-page-load timestamps.
   const DIAG_MAX = 100;
@@ -274,7 +274,7 @@
       // datasets by msg_id → name. We attach to the CURRENT run only —
       // older runs keep whatever schema was captured at their time.
       if (currentRun && currentRun.streamEpoch != null) {
-        const store = window.PicoPoE && window.PicoPoE.logStore;
+        const store = window.Conduit && window.Conduit.logStore;
         if (store && store.setRunSchema) {
           store.setRunSchema(currentRun.streamEpoch, obj).catch(() => {});
         }
@@ -338,7 +338,7 @@
         // Tell the chart to break the trace — the next sample will land
         // at a wallMs that may differ noticeably from the buffer's last
         // pre-reboot value, and we don't want a diagonal across the seam.
-        const chart = window.PicoPoE && window.PicoPoE.chart;
+        const chart = window.Conduit && window.Conduit.chart;
         if (chart && chart.gap) chart.gap();
         // Schema may also have changed across reboot.
         refreshSchema(ip, true).catch(() => {});
@@ -359,7 +359,7 @@
         const offset = anchor - (uptimeUs / 1000);
         const streamEpoch = Date.now();
         currentRun = { streamEpoch, wallMsOffset: offset };
-        const store = window.PicoPoE && window.PicoPoE.logStore;
+        const store = window.Conduit && window.Conduit.logStore;
         if (store && store.startRun) {
           // Fire-and-forget — do NOT await. Failure is non-fatal.
           store.startRun({
@@ -390,13 +390,13 @@
       }
 
       // In-memory time-series store (HDF5 export reads from here).
-      const ds = window.PicoPoE && window.PicoPoE.dataStore;
+      const ds = window.Conduit && window.Conduit.dataStore;
       if (ds && ds.append) {
         ds.append({ name, dtype, n, uptimeUs, wallMs, values });
       }
 
       // Forward to the chart.
-      const chart = window.PicoPoE && window.PicoPoE.chart;
+      const chart = window.Conduit && window.Conduit.chart;
       if (chart && chart.push) {
         chart.push({ name, msgId, dtype, n, uptimeUs, wallMs, values });
       }
@@ -462,7 +462,7 @@
     // OTA reboots (where uptime regresses) AND brief network blips (where
     // it doesn't). Cheap and idempotent — gapIdx in the chart dedupes.
     if (!firstStream) {
-      const chart = window.PicoPoE && window.PicoPoE.chart;
+      const chart = window.Conduit && window.Conduit.chart;
       if (chart && chart.gap) chart.gap();
     }
     firstStream = false;
@@ -544,11 +544,11 @@
         currentRun = null;
         lastUptimeUs = null;
         schema = new Map();
-        const chart = window.PicoPoE && window.PicoPoE.chart;
+        const chart = window.Conduit && window.Conduit.chart;
         if (chart && chart.reset) chart.reset();
         // New device session — wipe the in-memory time-series store
         // so the next export only contains data from this device.
-        const ds = window.PicoPoE && window.PicoPoE.dataStore;
+        const ds = window.Conduit && window.Conduit.dataStore;
         if (ds && ds.resetSession) ds.resetSession();
       }
       if (!ip) {
@@ -619,7 +619,7 @@
         // minutes), so wake it explicitly. Without this the link
         // indicator flips to "Disconnected" the moment telemetry
         // notices but the console stays green for minutes.
-        const con = window.PicoPoE && window.PicoPoE.console;
+        const con = window.Conduit && window.Conduit.console;
         if (con && con.kick) { try { con.kick(); } catch (_) {} }
       }
     }, STALL_CHECK_MS);
@@ -652,8 +652,8 @@
     installConnectivityHooks();
     streamLoop();
 
-    window.PicoPoE = window.PicoPoE || {};
-    window.PicoPoE.telemetry = {
+    window.Conduit = window.Conduit || {};
+    window.Conduit.telemetry = {
       stop() {
         stopped = true;
         persistFlush();
@@ -673,7 +673,7 @@
         // OTA reads as a clean break instead of a diagonal across the
         // upload duration.
         if (activeAbort) activeAbort.abort();
-        const chart = window.PicoPoE && window.PicoPoE.chart;
+        const chart = window.Conduit && window.Conduit.chart;
         if (chart && chart.gap) chart.gap();
         persistFlush();
       },
@@ -688,7 +688,7 @@
         currentRun = null;
         lastUptimeUs = null;
         parseBuf = new Uint8Array(0);
-        const ds = window.PicoPoE && window.PicoPoE.dataStore;
+        const ds = window.Conduit && window.Conduit.dataStore;
         if (ds && ds.resetSession) ds.resetSession();
         // Drop the chart entirely — series Map AND uPlot instance — and
         // let the next push() re-register and reconstruct uPlot fresh.
@@ -702,7 +702,7 @@
         // uPlot is built with no carryover. The full record stream is
         // still preserved in IndexedDB for the HDF5 export — this only
         // drops the live chart's display history.
-        const chart = window.PicoPoE && window.PicoPoE.chart;
+        const chart = window.Conduit && window.Conduit.chart;
         if (chart && chart.reset) chart.reset();
         // firstStream stays false so a future network blip (not OTA)
         // still inserts a chart.gap() — only the OTA path nukes the ring.
@@ -727,11 +727,11 @@
     };
 
     // Single-call diagnostic dump — internal state + recent event log.
-    // The user runs `window.PICOPOE_DIAG()` in the browser console and
+    // The user runs `window.CONDUIT_DIAG()` in the browser console and
     // pastes the result back. Captures every transition for the last
     // ~100 events with ms-since-page-load timestamps.
-    window.PICOPOE_DIAG = () => ({
-      assetVersion: window.PICOPOE_ASSET_VERSION,
+    window.CONDUIT_DIAG = () => ({
+      assetVersion: window.CONDUIT_ASSET_VERSION,
       ip:           getIp(),
       knownIp,
       paused,
@@ -750,8 +750,8 @@
         tlm: { text: stateEl ? stateEl.textContent : null,
                dot:  stateEl ? stateEl.getAttribute('data-state') : null },
       },
-      dataStore: window.PicoPoE && window.PicoPoE.dataStore
-                 ? window.PicoPoE.dataStore.stats() : null,
+      dataStore: window.Conduit && window.Conduit.dataStore
+                 ? window.Conduit.dataStore.stats() : null,
       events: diagBuf.slice(),   // chronological
     });
   }

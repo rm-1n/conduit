@@ -1,6 +1,6 @@
-// Byte-diff test: feed the CMake-built pico_poe_app.elf through the JS UF2
+// Byte-diff test: feed the CMake-built conduit_app.elf through the JS UF2
 // pipeline (elf.js + uf2.js) and compare against the CMake-built
-// pico_poe_app.uf2 produced by picotool. Must match exactly — Phase A
+// conduit_app.uf2 produced by picotool. Must match exactly — Phase A
 // acceptance criterion.
 //
 // Run from repo root:  node web/tests/roundtrip.mjs
@@ -14,19 +14,19 @@ const webRoot = join(__dirname, '..');
 const repoRoot = join(__dirname, '..', '..');
 
 // Load the browser modules into global scope. Each file is an IIFE that
-// attaches to globalThis.PicoPoE in non-window environments.
+// attaches to globalThis.Conduit in non-window environments.
 for (const f of ['elf.js', 'uf2.js']) {
   const src = await readFile(join(webRoot, f), 'utf8');
   (0, eval)(src);
 }
 
-const elfPath = join(repoRoot, 'firmware/build/app/pico_poe_app.elf');
-const uf2Path = join(repoRoot, 'firmware/build/app/pico_poe_app.uf2');
+const elfPath = join(repoRoot, 'firmware/build/app/conduit_app.elf');
+const uf2Path = join(repoRoot, 'firmware/build/app/conduit_app.uf2');
 
 const elfBytes = new Uint8Array(await readFile(elfPath));
 const expectedUf2 = new Uint8Array(await readFile(uf2Path));
 
-const actualUf2 = globalThis.PicoPoE.elfToUf2(elfBytes);
+const actualUf2 = globalThis.Conduit.elfToUf2(elfBytes);
 
 console.log(`ELF:       ${elfBytes.byteLength} bytes  (${elfPath.replace(repoRoot, '.')})`);
 console.log(`expected:  ${expectedUf2.byteLength} bytes  (${expectedUf2.byteLength / 512} blocks)`);

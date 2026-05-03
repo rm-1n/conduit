@@ -87,7 +87,7 @@ export async function writeHdf5(channels, opts = {}) {
   let firstWallMs = Infinity, lastWallMs = -Infinity;
   let totalTlmRecords = 0;
 
-  const fname = `pico-poe-${Date.now()}.h5`;
+  const fname = `conduit-${Date.now()}.h5`;
   const FS = h5.FS;
   try { FS.unlink(fname); } catch (_) {}
   const f = new h5.File(fname, 'w');

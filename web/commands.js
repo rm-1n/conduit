@@ -2,7 +2,7 @@
 // command strip wiring. Reuses the topbar token and device IP.
 //
 // Public:
-//   await window.PicoPoE.cmd.send(name, args)
+//   await window.Conduit.cmd.send(name, args)
 //     Returns the parsed JSON response object on success, throws on
 //     network/HTTP error.
 
@@ -38,9 +38,9 @@
   // Expose pure helpers up-front so unit tests can grab them without
   // also booting the DOM-bound init() path. The full surface (send +
   // preset CRUD) is added in init() once the DOM is ready.
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.cmd = window.PicoPoE.cmd || {};
-  window.PicoPoE.cmd.buildQuery = buildQuery;
+  window.Conduit = window.Conduit || {};
+  window.Conduit.cmd = window.Conduit.cmd || {};
+  window.Conduit.cmd.buildQuery = buildQuery;
 
   async function send(name, args) {
     const ip = getIp();
@@ -71,11 +71,11 @@
   // single-line cmd-log strip was redundant once the telemetry console
   // landed at the bottom of the same pane.
   function reportOK(msg) {
-    const nc = window.PicoPoE && window.PicoPoE.netcon;
+    const nc = window.Conduit && window.Conduit.netcon;
     if (nc) nc.ok(msg);
   }
   function reportErr(msg) {
-    const nc = window.PicoPoE && window.PicoPoE.netcon;
+    const nc = window.Conduit && window.Conduit.netcon;
     if (nc) nc.err(msg);
   }
 
@@ -95,7 +95,7 @@
     // Bare-value shortcut for typed cmds — `0.1` becomes `value=0.1`.
     // The on_command() dispatcher always reads from the `value` query
     // key, so this is the natural one-arg case. Without this fold, the
-    // firmware's poe_cmd_arg_* falls back to 0/0.0 and the cmd silently
+    // firmware's conduit_cmd_arg_* falls back to 0/0.0 and the cmd silently
     // does the opposite of what the user typed.
     if (trimmed && !/[=,&]/.test(trimmed)) {
       return { value: trimmed };
@@ -107,11 +107,11 @@
     }
     return out;
   }
-  window.PicoPoE.cmd.parseAdvArgs = parseAdvArgs;
+  window.Conduit.cmd.parseAdvArgs = parseAdvArgs;
 
   // -- Editable persistent command presets ---------------------------
   //
-  // Stored in localStorage as picopoe.cmdPresets — an array of
+  // Stored in localStorage as conduit.cmdPresets — an array of
   // { label, name, args } objects. `args` is the raw query-string
   // fragment a user would type into the cmd-strip's args field
   // (e.g. "0.1" or "value=0.5,k=v"); we run it through parseAdvArgs
@@ -122,7 +122,7 @@
   // means re-creating the same buttons after every reflash. If we
   // need per-device later, key on (board_id, label) instead.
 
-  const PRESETS_KEY = 'picopoe.cmdPresets';
+  const PRESETS_KEY = 'conduit.cmdPresets';
   let presetsEl = null;
 
   function loadPresets() {
@@ -136,7 +136,7 @@
 
   function renderPresets() {
     if (!presetsEl) return;
-    const icons = window.PicoPoE && window.PicoPoE.icons;
+    const icons = window.Conduit && window.Conduit.icons;
     const presets = loadPresets();
     presetsEl.innerHTML = '';
     presets.forEach((p, idx) => {
@@ -207,7 +207,7 @@
   // small form. Save updates the array; cancel re-renders untouched.
   function openForm(idx, preset) {
     if (!presetsEl) return;
-    const icons = window.PicoPoE && window.PicoPoE.icons;
+    const icons = window.Conduit && window.Conduit.icons;
     const wrap = document.createElement('div');
     wrap.className = 'cmd-preset editing';
     wrap.innerHTML = `
@@ -280,11 +280,11 @@
 
     renderPresets();
 
-    window.PicoPoE = window.PicoPoE || {};
+    window.Conduit = window.Conduit || {};
     // Extend (don't replace) — the early-exposed pure helpers
     // (buildQuery, parseAdvArgs) must survive init() so unit/test
     // harnesses can reach them.
-    Object.assign(window.PicoPoE.cmd = window.PicoPoE.cmd || {}, {
+    Object.assign(window.Conduit.cmd = window.Conduit.cmd || {}, {
       send,
       // Programmatic surface for adding presets from elsewhere (test
       // harness, future "save current cmd" hotkey, etc.).

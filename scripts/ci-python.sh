@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-cd tools/pico-poe
+cd tools/conduit
 python -m pip install --quiet --upgrade pip
 pip install --quiet -e ".[test]"
 python -m pytest tests/ -v

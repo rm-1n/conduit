@@ -15,7 +15,7 @@
   // error, check that this marker logs — if not, you're running a stale
   // cached compiler.js.
   console.log('[compiler.js] fresh-module + flash-LMA filter; v=' +
-              (window.PICOPOE_ASSET_VERSION || 'unknown'));
+              (window.CONDUIT_ASSET_VERSION || 'unknown'));
 
   const COMPILER_ROOT = new URL('./assets/emception/', document.baseURI);
   const SDK_ROOT = new URL('./assets/sdk/', document.baseURI);
@@ -38,7 +38,7 @@
     '-isystem', '/clang-headers',
     '-isystem', '/pico-sdk/include/libc-stubs',
     '-I', '/pico-sdk/include',
-    // Our pico_poe_user.h exports `log` as a printf-style helper. Clang
+    // Our conduit_user.h exports `log` as a printf-style helper. Clang
     // treats `log` as a math builtin and warns on the signature mismatch.
     // The warning is informational but noisy in the Build log panel.
     '-fno-builtin-log',
@@ -81,12 +81,12 @@ SECTIONS {
   }
 
   async function fetchBytes(url, stage) {
-    // Append PICOPOE_ASSET_VERSION as a query param so each deploy gets a
+    // Append CONDUIT_ASSET_VERSION as a query param so each deploy gets a
     // distinct URL — Python's dev server doesn't emit Last-Modified or ETag
     // headers, so `cache: 'no-cache'` alone can't force revalidation of the
     // SDK bundle / newlib archives / clang headers. The version query makes
     // every new deploy bypass the browser cache unconditionally.
-    const v = (typeof window !== 'undefined' && window.PICOPOE_ASSET_VERSION) || 'dev';
+    const v = (typeof window !== 'undefined' && window.CONDUIT_ASSET_VERSION) || 'dev';
     const busted = url + (url.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(v);
     const res = await fetch(busted, { cache: 'no-cache' });
     if (!res.ok) throw new Error(`fetch ${url} → HTTP ${res.status}`);
@@ -144,7 +144,7 @@ SECTIONS {
   // alongside each tree. The returned Map is bulk-written to the VFS of every
   // freshly-instantiated Module during compile().
   async function fetchManifest(baseUrl, stage) {
-    const v = (typeof window !== 'undefined' && window.PICOPOE_ASSET_VERSION) || 'dev';
+    const v = (typeof window !== 'undefined' && window.CONDUIT_ASSET_VERSION) || 'dev';
     const manifestUrl = new URL('files.txt', baseUrl).href + '?v=' + encodeURIComponent(v);
     const res = await fetch(manifestUrl, { cache: 'no-cache' });
     if (!res.ok) throw new Error(`manifest fetch failed: ${res.status}`);
@@ -211,7 +211,7 @@ SECTIONS {
       if (!sdkObjects.has('main.c.o')) {
         throw new Error(
           `SDK object bundle is missing main.c.o (the firmware's main() ` +
-          `with pico_poe_setup/loop hooks). Got ${sdkObjects.size} objects. ` +
+          `with conduit_setup/loop hooks). Got ${sdkObjects.size} objects. ` +
           `Hard-reload the page (Cmd+Shift+R) to bust the browser cache.`);
       }
 
@@ -318,7 +318,7 @@ SECTIONS {
       //   libc + libnosys + libm + libgcc  (newlib + compiler-rt)
       //   crtend.o + crtn.o                (close init/fini frame)
       //
-      // user's strong pico_poe_setup / pico_poe_loop symbols override the
+      // user's strong conduit_setup / conduit_loop symbols override the
       // weak defaults in firmware/app/main.c (linked from main.c.o in
       // objPaths). The firmware's main() drives network/HTTP/OTA; user
       // code just supplements it via the two hooks.
@@ -373,8 +373,8 @@ SECTIONS {
 
   function isAvailable() { return assetsReady !== null; }
 
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.compiler = {
+  window.Conduit = window.Conduit || {};
+  window.Conduit.compiler = {
     compile,
     loadAssets,
     isAvailable,

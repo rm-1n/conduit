@@ -17,7 +17,7 @@ const __dirname_local = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(__dirname_local, '..');
 const elfPath = '/tmp/sdk-blink-app.elf'; // produced earlier by sdk_build.mjs
 
-// Load elf.js + uf2.js + finalize.js into globalThis.PicoPoE
+// Load elf.js + uf2.js + finalize.js into globalThis.Conduit
 for (const f of ['elf.js', 'uf2.js', 'finalize.js']) {
   const src = await readFile(join(webRoot, f), 'utf8');
   (0, eval)(src);
@@ -33,7 +33,7 @@ const before = spawnSync(process.env.HOME + '/.pico-sdk/picotool/2.2.0-a4/picoto
 console.log(before.stdout.split('\n').slice(0, 20).join('\n'));
 
 console.log('\n=== running finalize (TBYB on, version bumped to 99.99) ===');
-const meta = await globalThis.PicoPoE.finalize.finalizeElf(elf, {
+const meta = await globalThis.Conduit.finalize.finalizeElf(elf, {
   setTbyb: true,
   version: { major: 99, minor: 99 },
 });
@@ -43,7 +43,7 @@ console.log(`  hash = ${Array.from(meta.hash).map(b=>b.toString(16).padStart(2,'
 console.log(`  extraChunks: ${meta.extraChunks.length}, patches: ${meta.patches.length}`);
 
 console.log('\n=== producing UF2 with finalize metadata ===');
-const uf2 = globalThis.PicoPoE.elfToUf2(elf, {
+const uf2 = globalThis.Conduit.elfToUf2(elf, {
   extraChunks: meta.extraChunks,
   patches: meta.patches,
 });

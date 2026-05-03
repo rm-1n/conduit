@@ -1,6 +1,6 @@
 // netcon.js — Telemetry console (lives inside the telemetry pane).
 //
-// File name kept as `netcon.js` and public API kept as PicoPoE.netcon
+// File name kept as `netcon.js` and public API kept as Conduit.netcon
 // for stability — the visible label changed from "Network console" to
 // "Telemetry console" once the pane moved into the telemetry column.
 //
@@ -15,10 +15,10 @@
 //
 // Public surface:
 //
-//   PicoPoE.netcon.info(msg)   — neutral entry (e.g. "Saved file …")
-//   PicoPoE.netcon.ok(msg)     — green success
-//   PicoPoE.netcon.err(msg)    — red error
-//   PicoPoE.netcon.clear()     — wipe history
+//   Conduit.netcon.info(msg)   — neutral entry (e.g. "Saved file …")
+//   Conduit.netcon.ok(msg)     — green success
+//   Conduit.netcon.err(msg)    — red error
+//   Conduit.netcon.clear()     — wipe history
 //
 // Same scrollback semantics as the cmd-log strip: capped at MAX_ENTRIES,
 // auto-scrolls to bottom unless the user has manually scrolled up.
@@ -40,7 +40,7 @@
     if (!body) return null;
     const clearBtn = document.getElementById('ide-netcon-clear');
     if (clearBtn) clearBtn.addEventListener('click', clear);
-    const icons = window.PicoPoE && window.PicoPoE.icons;
+    const icons = window.Conduit && window.Conduit.icons;
     if (icons && clearBtn) icons.set(clearBtn, 'delete', { size: 14 });
     return body;
   }
@@ -85,7 +85,7 @@
   // controller they can update/done/fail on. Use for long-running
   // operations (HDF5 export, future plant-runner test runs, etc).
   //
-  //   const p = PicoPoE.netcon.progress('Exporting');
+  //   const p = Conduit.netcon.progress('Exporting');
   //   p.update(25, 'reading telemetry…');
   //   p.update(75, 'building HDF5…');
   //   p.done('Saved foo.h5');         // turns green
@@ -146,8 +146,8 @@
   // Hydrate on load so the icons are correct from the start.
   function init() { ensureDom(); }
 
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.netcon = { info, ok, err, clear, progress };
+  window.Conduit = window.Conduit || {};
+  window.Conduit.netcon = { info, ok, err, clear, progress };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

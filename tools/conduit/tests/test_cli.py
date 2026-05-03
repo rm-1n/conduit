@@ -1,4 +1,4 @@
-"""Unit tests for pico_poe_cli.cli — the click command surface.
+"""Unit tests for conduit_cli.cli — the click command surface.
 
 We use click.testing.CliRunner to invoke commands as a user would,
 and patch out the api module so no real HTTP is attempted.
@@ -9,14 +9,14 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-from pico_poe_cli import cli, api
+from conduit_cli import cli, api
 
 
 # ── Test doubles ─────────────────────────────────────────────────────
 
 
 class FakeDevice:
-    """Stand-in for PicoPoEDevice. Records every call + lets each
+    """Stand-in for ConduitDevice. Records every call + lets each
     method be overridden per-test via the `responses` dict."""
 
     instances: list["FakeDevice"] = []
@@ -52,9 +52,9 @@ class FakeDevice:
 
 @pytest.fixture(autouse=True)
 def stub_device(monkeypatch):
-    """Every test runs with PicoPoEDevice swapped for FakeDevice."""
+    """Every test runs with ConduitDevice swapped for FakeDevice."""
     FakeDevice.reset()
-    monkeypatch.setattr(cli, "PicoPoEDevice", FakeDevice)
+    monkeypatch.setattr(cli, "ConduitDevice", FakeDevice)
     yield
     FakeDevice.reset()
 

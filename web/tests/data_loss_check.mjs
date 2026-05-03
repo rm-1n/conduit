@@ -8,15 +8,15 @@
 //   3. In the browser console, dump the SEQ channel:
 //        copy(JSON.stringify({
 //          start: window.__lossTestStartMs,
-//          end:   window.PicoPoE.dataStore.sessionEndWallMs,
+//          end:   window.Conduit.dataStore.sessionEndWallMs,
 //          seq:   (() => {
-//            const s = window.PicoPoE.dataStore.slice('SEQ', { copy: true });
+//            const s = window.Conduit.dataStore.slice('SEQ', { copy: true });
 //            return { count: s.count, values: Array.from(s.values),
 //                     uptimeUs: Array.from(s.uptimeUs),
 //                     wallMs:   Array.from(s.wallMs) };
 //          })(),
-//          stats: window.PicoPoE.dataStore.stats(),
-//          diag:  window.PICOPOE_DIAG && window.PICOPOE_DIAG().events,
+//          stats: window.Conduit.dataStore.stats(),
+//          diag:  window.CONDUIT_DIAG && window.CONDUIT_DIAG().events,
 //        }, null, 2))
 //   4. Paste the clipboard into a file (e.g. /tmp/seq-dump.json).
 //   5. Run: node web/tests/data_loss_check.mjs /tmp/seq-dump.json

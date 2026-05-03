@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generate signing keys for PICO-POE secure boot.
+# Generate signing keys for CONDUIT secure boot.
 # Run once, keep private.pem SECRET.
 set -euo pipefail
 

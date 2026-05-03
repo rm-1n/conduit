@@ -3,7 +3,7 @@
 // 256-byte payloads, family-id-present flag, one block per touched page,
 // blocks in ascending flash-address order.
 //
-// Depends on: elf.js (window.PicoPoE.elf)
+// Depends on: elf.js (window.Conduit.elf)
 
 (function (root) {
   'use strict';
@@ -25,7 +25,7 @@
 
   const PAGE_SIZE = 256;
 
-  // family id defaults to rp2350-arm-s per firmware/include/pico_poe_config.h:68
+  // family id defaults to rp2350-arm-s per firmware/include/conduit_config.h:68
   const FAMILY_ID_RP2350        = 0xe48bff57;
   const FAMILY_ID_RP2350_ARM_S  = 0xe48bff59;
   const DEFAULT_FAMILY_ID = FAMILY_ID_RP2350_ARM_S;
@@ -69,8 +69,8 @@
     const familyId = options.familyId != null ? options.familyId : DEFAULT_FAMILY_ID;
     const includeAbs = options.includeAbsBlock !== false;
 
-    const elf = root.PicoPoE.elf.parseElf(elfBytes);
-    const chunks = root.PicoPoE.elf.loadableChunks(elf);
+    const elf = root.Conduit.elf.parseElf(elfBytes);
+    const chunks = root.Conduit.elf.loadableChunks(elf);
     if (chunks.length === 0) throw new Error('No loadable PT_LOAD segments in ELF');
 
     const extraChunks = Array.isArray(options.extraChunks) ? options.extraChunks : [];
@@ -131,8 +131,8 @@
     return out;
   }
 
-  root.PicoPoE = root.PicoPoE || {};
-  root.PicoPoE.uf2 = {
+  root.Conduit = root.Conduit || {};
+  root.Conduit.uf2 = {
     elfToUf2,
     constants: {
       PAGE_SIZE,
@@ -144,5 +144,5 @@
     },
   };
   // convenience on the top-level namespace
-  root.PicoPoE.elfToUf2 = elfToUf2;
+  root.Conduit.elfToUf2 = elfToUf2;
 })(typeof window !== 'undefined' ? window : globalThis);

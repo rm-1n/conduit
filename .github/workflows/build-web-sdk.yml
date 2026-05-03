@@ -4,7 +4,7 @@
 # Release so web/compiler.js can fetch it on first Build click.
 #
 # Runs on-demand only (workflow_dispatch). The resulting artifact is stable
-# across most pico-poe code changes — only needs regeneration when the SDK
+# across most conduit code changes — only needs regeneration when the SDK
 # version or the list of linked libraries changes.
 
 name: build-web-sdk
@@ -67,8 +67,8 @@ jobs:
             -Dpicotool_DIR="$PICOTOOL_PATH"/picotool
 
       - name: Build firmware
-        # This builds the full pico-poe app, which forces the Pico SDK to
-        # build all of its static libraries. We don't ship the pico-poe app
+        # This builds the full conduit app, which forces the Pico SDK to
+        # build all of its static libraries. We don't ship the conduit app
         # binary — we extract the SDK .a + .o files below.
         run: cmake --build firmware/build -j"$(nproc)"
 
@@ -89,7 +89,7 @@ jobs:
           find firmware/build -name 'crt0*.o' -exec cp {} "$OUT"/startup/ \;
           find firmware/build -name 'boot_stage2*.o' -exec cp {} "$OUT"/startup/ \;
           find firmware/build -name 'bs2_default_padded_checksummed*.o' -exec cp {} "$OUT"/startup/ \;
-          find firmware/build -name 'pico_poe_slower_boot2*.o' -exec cp {} "$OUT"/startup/ \;
+          find firmware/build -name 'conduit_slower_boot2*.o' -exec cp {} "$OUT"/startup/ \;
 
           # Linker script. The SDK preprocesses memmap_*.ld via a custom
           # target; we copy the generated .ld alongside its originals.

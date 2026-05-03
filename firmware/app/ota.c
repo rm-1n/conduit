@@ -1,5 +1,5 @@
 #include "ota.h"
-#include "pico_poe_config.h"
+#include "conduit_config.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -59,7 +59,7 @@ typedef struct {
 
 static void flash_safe_erase(void *param) {
     uint32_t addr = (uint32_t)(uintptr_t)param;
-    flash_range_erase(addr, PICO_POE_FLASH_SECTOR_SIZE);
+    flash_range_erase(addr, CONDUIT_FLASH_SECTOR_SIZE);
 }
 
 static void flash_safe_program(void *param) {
@@ -121,8 +121,8 @@ ota_err_t ota_begin(void) {
                                   >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB;
         uint16_t t_last_sector  = (target.permissions_and_location & PICOBIN_PARTITION_LOCATION_LAST_SECTOR_BITS)
                                   >> PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB;
-        uint32_t t_start = t_first_sector * PICO_POE_FLASH_SECTOR_SIZE;
-        uint32_t t_end   = (t_last_sector + 1) * PICO_POE_FLASH_SECTOR_SIZE;
+        uint32_t t_start = t_first_sector * CONDUIT_FLASH_SECTOR_SIZE;
+        uint32_t t_end   = (t_last_sector + 1) * CONDUIT_FLASH_SECTOR_SIZE;
 
         if (current_off >= t_start && current_off < t_end) {
             bool alt_found = false;
@@ -138,8 +138,8 @@ ota_err_t ota_begin(void) {
                                    >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB;
                 uint16_t a_last  = (alt_loc & PICOBIN_PARTITION_LOCATION_LAST_SECTOR_BITS)
                                    >> PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB;
-                uint32_t a_start = a_first * PICO_POE_FLASH_SECTOR_SIZE;
-                uint32_t a_end   = (a_last + 1) * PICO_POE_FLASH_SECTOR_SIZE;
+                uint32_t a_start = a_first * CONDUIT_FLASH_SECTOR_SIZE;
+                uint32_t a_end   = (a_last + 1) * CONDUIT_FLASH_SECTOR_SIZE;
 
                 if (current_off >= a_start && current_off < a_end) continue;
                 target.permissions_and_location = alt_loc;
@@ -159,8 +159,8 @@ ota_err_t ota_begin(void) {
     uint16_t last_sector  = (target.permissions_and_location & PICOBIN_PARTITION_LOCATION_LAST_SECTOR_BITS)
                             >> PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB;
 
-    ota.partition_start = first_sector * PICO_POE_FLASH_SECTOR_SIZE;
-    ota.partition_size  = ((last_sector + 1) - first_sector) * PICO_POE_FLASH_SECTOR_SIZE;
+    ota.partition_start = first_sector * CONDUIT_FLASH_SECTOR_SIZE;
+    ota.partition_size  = ((last_sector + 1) - first_sector) * CONDUIT_FLASH_SECTOR_SIZE;
     ota.addr_delta = 0;
     ota.bytes_written = 0;
     ota.blocks_received = 0;
@@ -224,12 +224,12 @@ static ota_err_t process_uf2_block(const uf2_block_t *block) {
 
     // Erase sectors as needed. Use flash_safe_execute so core 1 (the RMII
     // ethernet loop, running from flash) is locked out during each XIP pause.
-    uint32_t sector_idx = write_offset / PICO_POE_FLASH_SECTOR_SIZE;
-    uint32_t end_sector  = (write_offset + block->payload_size - 1) / PICO_POE_FLASH_SECTOR_SIZE;
+    uint32_t sector_idx = write_offset / CONDUIT_FLASH_SECTOR_SIZE;
+    uint32_t end_sector  = (write_offset + block->payload_size - 1) / CONDUIT_FLASH_SECTOR_SIZE;
 
     for (uint32_t s = sector_idx; s <= end_sector; s++) {
         if ((int32_t)s > ota.last_erased_sector) {
-            uint32_t erase_addr = ota.partition_start + s * PICO_POE_FLASH_SECTOR_SIZE;
+            uint32_t erase_addr = ota.partition_start + s * CONDUIT_FLASH_SECTOR_SIZE;
             int erc = flash_safe_execute(flash_safe_erase, (void *)(uintptr_t)erase_addr, 5000);
             if (erc != PICO_OK) {
                 printf("[ota] flash_safe_execute(erase) failed %d\n", erc);

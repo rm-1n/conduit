@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-flash_and_test.py — Build, flash, and test the PICO-POE firmware.
+flash_and_test.py — Build, flash, and test the CONDUIT firmware.
 
 Usage:
     python3 flash_and_test.py                # build + flash + test
@@ -36,7 +36,7 @@ SERIAL_PORT    = os.environ.get("SERIAL_PORT",     "/dev/cu.usbmodem1101")
 
 FIRMWARE_DIR   = os.path.dirname(os.path.abspath(__file__))
 BUILD_DIR      = os.path.join(FIRMWARE_DIR, "build")
-UF2_PATH       = os.path.join(BUILD_DIR, "app", "pico_poe_app.uf2")
+UF2_PATH       = os.path.join(BUILD_DIR, "app", "conduit_app.uf2")
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -242,7 +242,7 @@ def test_arp():
 def main():
     global DEVICE_IP
 
-    parser = argparse.ArgumentParser(description="Build, flash, and test PICO-POE firmware")
+    parser = argparse.ArgumentParser(description="Build, flash, and test CONDUIT firmware")
     parser.add_argument("--flash-only", action="store_true", help="Build and flash, skip tests")
     parser.add_argument("--test-only",  action="store_true", help="Skip build/flash, just run tests")
     parser.add_argument("--serial",     action="store_true", help="Capture serial output after flash")
@@ -252,7 +252,7 @@ def main():
     DEVICE_IP = args.ip
 
     print(f"\n{'='*50}")
-    print(f"  PICO-POE Flash & Test")
+    print(f"  CONDUIT Flash & Test")
     print(f"  Device IP: {DEVICE_IP}")
     print(f"{'='*50}\n")
 

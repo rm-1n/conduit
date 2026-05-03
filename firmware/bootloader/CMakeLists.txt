@@ -7,28 +7,28 @@ cmake_minimum_required(VERSION 3.13)
 # embedded PT (see ../app/CMakeLists.txt) and a singleton partition-table
 # image flashed once at provision time (see the partition_table_uf2 target).
 
-add_executable(pico_poe_bootloader
+add_executable(conduit_bootloader
     main.c
 )
 
-target_link_libraries(pico_poe_bootloader
+target_link_libraries(conduit_bootloader
     pico_stdlib
 )
 
-pico_enable_stdio_usb(pico_poe_bootloader 0)
-pico_enable_stdio_uart(pico_poe_bootloader 0)
+pico_enable_stdio_usb(conduit_bootloader 0)
+pico_enable_stdio_uart(conduit_bootloader 0)
 
-pico_embed_pt_in_binary(pico_poe_bootloader ${CMAKE_CURRENT_LIST_DIR}/partitions.json)
+pico_embed_pt_in_binary(conduit_bootloader ${CMAKE_CURRENT_LIST_DIR}/partitions.json)
 
 if(EXISTS "${CMAKE_SOURCE_DIR}/keys/private.pem")
-    pico_sign_binary(pico_poe_bootloader ${CMAKE_SOURCE_DIR}/keys/private.pem)
+    pico_sign_binary(conduit_bootloader ${CMAKE_SOURCE_DIR}/keys/private.pem)
 endif()
-pico_hash_binary(pico_poe_bootloader)
+pico_hash_binary(conduit_bootloader)
 
-pico_set_uf2_family(pico_poe_bootloader "absolute")
-pico_package_uf2_output(pico_poe_bootloader)
+pico_set_uf2_family(conduit_bootloader "absolute")
+pico_package_uf2_output(conduit_bootloader)
 
-pico_add_extra_outputs(pico_poe_bootloader)
+pico_add_extra_outputs(conduit_bootloader)
 
 # --- Singleton partition-table UF2 (primary boot-path artifact) -------------
 # Flashed once during provisioning to register the A/B layout on a blank

@@ -101,7 +101,7 @@ if (bytes.byteLength < FLOOR) {
 // Reopen the bytes via h5wasm and assert contents
 // ---------------------------------------------------------------------------
 
-const tmp = await mkdtemp(join(tmpdir(), 'pico-poe-h5-'));
+const tmp = await mkdtemp(join(tmpdir(), 'conduit-h5-'));
 const outPath = join(tmp, 'out.h5');
 await writeFile(outPath, bytes);
 console.log(`wrote     : ${outPath}  (also re-opening via h5wasm in-memory)`);

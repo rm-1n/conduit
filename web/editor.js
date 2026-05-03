@@ -116,12 +116,12 @@
       message: d.message,
       severity: sevMap[d.severity || 'error'],
     }));
-    monaco.editor.setModelMarkers(editorInstance.getModel(), 'pico-poe-cc', markers);
+    monaco.editor.setModelMarkers(editorInstance.getModel(), 'conduit-cc', markers);
   }
 
   function clearMarkers() {
     if (!editorInstance) return;
-    window.monaco.editor.setModelMarkers(editorInstance.getModel(), 'pico-poe-cc', []);
+    window.monaco.editor.setModelMarkers(editorInstance.getModel(), 'conduit-cc', []);
   }
 
   // Register a debounced/direct content-change callback. Callers may subscribe
@@ -151,8 +151,8 @@
     return res;
   }
 
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.editor = {
+  window.Conduit = window.Conduit || {};
+  window.Conduit.editor = {
     mount: mountAndFlush,
     getSource,
     setSource,

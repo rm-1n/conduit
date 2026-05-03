@@ -99,8 +99,8 @@
     return chunks;
   }
 
-  root.PicoPoE = root.PicoPoE || {};
-  root.PicoPoE.elf = {
+  root.Conduit = root.Conduit || {};
+  root.Conduit.elf = {
     parseElf,
     loadableChunks,
     constants: { PT_LOAD, PF_X, PF_W, PF_R, EM_ARM },

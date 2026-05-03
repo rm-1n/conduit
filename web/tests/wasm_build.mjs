@@ -1,7 +1,7 @@
 // Unit test: the locally-built Emception runtime at web/assets/emception/
 // can cross-compile a minimal C program for Cortex-M33, produce a valid
 // ARM ELF, and that ELF round-trips through elf.js + uf2.js into a UF2
-// the pico-poe device would accept.
+// the conduit device would accept.
 //
 // Bypasses web/lib/emception/src/FileSystem.mjs (which is browser-only:
 // IDBFS, createLazyFolder, cross-origin fetch). We load the raw Emscripten
@@ -33,7 +33,7 @@ globalThis.require = createRequire(import.meta.url);
 globalThis.__dirname = dirname(llvmBoxMjs);
 globalThis.__filename = llvmBoxMjs;
 
-// ---- Load elf.js + uf2.js into globalThis.PicoPoE ----
+// ---- Load elf.js + uf2.js into globalThis.Conduit ----
 for (const f of ['elf.js', 'uf2.js']) {
   const src = await readFile(join(webRoot, f), 'utf8');
   (0, eval)(src);
@@ -206,8 +206,8 @@ assert(eType === 2 || eType === 3, `app.elf e_type=${eType} (want ET_EXEC=2 or E
 console.log(`  ✓ app.elf is ARM, e_type=${eType}`);
 
 // Parse via elf.js and verify a flash-range PT_LOAD is present
-const elf = globalThis.PicoPoE.elf.parseElf(elfBytes);
-const chunks = globalThis.PicoPoE.elf.loadableChunks(elf);
+const elf = globalThis.Conduit.elf.parseElf(elfBytes);
+const chunks = globalThis.Conduit.elf.loadableChunks(elf);
 assert(chunks.length >= 1, `at least 1 loadable chunk, got ${chunks.length}`);
 const first = chunks[0];
 assert(first.paddr >= 0x10000000 && first.paddr < 0x20000000,
@@ -216,7 +216,7 @@ console.log(`  ✓ ${chunks.length} loadable chunk(s); first at 0x${first.paddr.
 
 // ---- TEST 3: ELF → UF2 via uf2.js ----
 console.log('\n=== TEST 3: WASM-built ELF → UF2 ===');
-const uf2 = globalThis.PicoPoE.elfToUf2(elfBytes);
+const uf2 = globalThis.Conduit.elfToUf2(elfBytes);
 assert(uf2.byteLength >= 512, 'UF2 is at least 1 block');
 assert.equal(uf2.byteLength % 512, 0, 'UF2 is a multiple of 512 bytes');
 const blocks = uf2.byteLength / 512;

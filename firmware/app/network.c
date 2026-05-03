@@ -1,6 +1,6 @@
 #include "network.h"
-#include "pico_poe_config.h"
-#ifndef PICO_POE_MINIMAL
+#include "conduit_config.h"
+#ifndef CONDUIT_MINIMAL
 #include "http_server.h"
 #endif
 
@@ -90,7 +90,7 @@ static void link_callback(struct netif *netif) {
             link_down_at = get_absolute_time();
             link_down_at_valid = true;
         }
-#ifndef PICO_POE_MINIMAL
+#ifndef CONDUIT_MINIMAL
         // Reap streaming PCBs immediately so the small MEMP_NUM_TCP_PCB
         // pool is free for the browser's reconnect SYNs the moment the
         // cable returns. Without this they sit in keepalive limbo for
@@ -117,9 +117,9 @@ int network_init(void) {
     set_sys_clock_khz(100000, true);
 
     // Initialize PoE status pin (GP27) as input with pull-down
-    gpio_init(PICO_POE_POE_STATUS_PIN);
-    gpio_set_dir(PICO_POE_POE_STATUS_PIN, GPIO_IN);
-    gpio_pull_down(PICO_POE_POE_STATUS_PIN);
+    gpio_init(CONDUIT_POE_STATUS_PIN);
+    gpio_set_dir(CONDUIT_POE_STATUS_PIN, GPIO_IN);
+    gpio_pull_down(CONDUIT_POE_STATUS_PIN);
 
     // Board-level init (resets PHY, sets EN_1V8, configures clock, stdio_init_all)
     arch_pico_init();
@@ -158,14 +158,14 @@ int network_init(void) {
     netif_set_default(&g_netif);
     {
         ip4_addr_t ip, mask, gw;
-        ip4addr_aton(PICO_POE_STATIC_IP, &ip);
-        ip4addr_aton(PICO_POE_STATIC_MASK, &mask);
-        ip4addr_aton(PICO_POE_STATIC_GW, &gw);
+        ip4addr_aton(CONDUIT_STATIC_IP, &ip);
+        ip4addr_aton(CONDUIT_STATIC_MASK, &mask);
+        ip4addr_aton(CONDUIT_STATIC_GW, &gw);
         netif_set_addr(&g_netif, &ip, &mask, &gw);
     }
     netif_set_up(&g_netif);
 
-    printf("[net] Static IP: %s\n", PICO_POE_STATIC_IP);
+    printf("[net] Static IP: %s\n", CONDUIT_STATIC_IP);
 
     return 0;
 }
@@ -201,7 +201,7 @@ uint32_t network_get_uptime_s(void) {
 }
 
 bool network_get_poe_status(void) {
-    return gpio_get(PICO_POE_POE_STATUS_PIN);
+    return gpio_get(CONDUIT_POE_STATUS_PIN);
 }
 
 void network_poll(void) {

@@ -1,7 +1,7 @@
-# PICO-POE OTA — integration guide
+# CONDUIT OTA — integration guide
 
 This document is for anyone writing a client (web page, CLI tool, scripts)
-that updates PICO-POE firmware over the network.
+that updates CONDUIT firmware over the network.
 
 It assumes the board is already provisioned (the first-install UF2 has been
 flashed via BOOTSEL) and reachable on the LAN at a known IP.
@@ -10,7 +10,7 @@ flashed via BOOTSEL) and reachable on the LAN at a known IP.
 
 - **Transport:** HTTP/1.1, plain text, no TLS.
 - **Auth:** pre-shared token in the `X-Auth-Token` header. Default
-  `"changeme"`, overridden at compile time with `-DPICO_POE_AUTH_TOKEN=...`.
+  `"changeme"`, overridden at compile time with `-DCONDUIT_AUTH_TOKEN=...`.
 - **Upload is chunked.** A single large POST overflows the RMII RX ring
   and hangs the device. Split the UF2 into `≤ 8 KB` chunks and send each
   as its own POST.
@@ -28,8 +28,8 @@ Both are produced by the same build (`firmware/build/app/`):
 
 | File | Bootable on plain power-on? | Purpose |
 |---|---|---|
-| `pico_poe_app_initial.uf2` | yes | First install via BOOTSEL. |
-| `pico_poe_app.uf2` | only via flash-update reboot | OTA payload. Carries the TBYB flag so a failed update is rolled back by the RP2350 bootrom. |
+| `conduit_app_initial.uf2` | yes | First install via BOOTSEL. |
+| `conduit_app.uf2` | only via flash-update reboot | OTA payload. Carries the TBYB flag so a failed update is rolled back by the RP2350 bootrom. |
 
 A partition-table UF2 is also produced at `firmware/build/bootloader/partition_table.uf2` — used once during the BOOTSEL provisioning sequence.
 
@@ -66,7 +66,7 @@ No auth. Returns JSON:
   "rx_drops": 0,               // RMII ring drops since boot (should stay 0)
   "boot_type": "normal",       // "normal" | "flash_update" | "bootsel" | ...
   "tbyb_pending": false,       // true = update is unconfirmed, POST /api/commit
-  "device": "pico-poe"
+  "device": "conduit"
 }
 ```
 
@@ -297,14 +297,14 @@ For the very first install:
    export PATH=~/.pico-sdk/toolchain/14_2_Rel1/bin:$PATH
    cmake --build build -j$(sysctl -n hw.ncpu)
    ```
-   This produces both `pico_poe_app_initial.uf2` and `pico_poe_app.uf2`.
+   This produces both `conduit_app_initial.uf2` and `conduit_app.uf2`.
 2. Hold BOOTSEL and plug USB. Device appears as a flash drive.
 3. Copy `firmware/build/bootloader/partition_table.uf2`, wait for device
    to re-mount, then `picotool reboot -u -f`.
-4. Copy `firmware/build/app/pico_poe_app_initial.uf2` to partition A:
-   `picotool load -p 0 -F .../pico_poe_app_initial.uf2 && picotool reboot`.
+4. Copy `firmware/build/app/conduit_app_initial.uf2` to partition A:
+   `picotool load -p 0 -F .../conduit_app_initial.uf2 && picotool reboot`.
 
-Or just run `pico-poe provision -d <ip>` which does the above.
+Or just run `conduit provision -d <ip>` which does the above.
 
 After that, the device is OTA-ready and all subsequent updates ship the
-TBYB-flagged `pico_poe_app.uf2` through the HTTP flow above.
+TBYB-flagged `conduit_app.uf2` through the HTTP flow above.

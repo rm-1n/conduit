@@ -1,6 +1,6 @@
 // Tiny harness that loads browser-flavoured JS files into the current
 // Node process. Most modules in web/ are IIFEs that attach to
-// `window.PicoPoE`; the harness fakes a `window` and `localStorage`
+// `window.Conduit`; the harness fakes a `window` and `localStorage`
 // before sourcing them so the unit tests can exercise the public API
 // without spinning up a browser.
 
@@ -25,12 +25,12 @@ class MemStorage {
 
 export function makeWindow() {
   const fakeWin = {
-    PicoPoE: {},
+    Conduit: {},
     localStorage: new MemStorage(),
     addEventListener() {},
     removeEventListener() {},
     dispatchEvent() {},
-    // CustomEvent shim — picopoe events are fired/dispatched but our
+    // CustomEvent shim — conduit events are fired/dispatched but our
     // tests don't need to observe them.
     CustomEvent: class { constructor(t, d) { this.type = t; this.detail = d?.detail; } },
     document: {
@@ -50,7 +50,7 @@ export function makeWindow() {
 }
 
 // Source a browser file in a fresh-ish global scope. Returns the
-// `window` object so tests can read off PicoPoE.<feature>.
+// `window` object so tests can read off Conduit.<feature>.
 export function loadModule(filename, win = makeWindow()) {
   const src = readFileSync(join(webRoot, filename), 'utf8');
   // Provide window/localStorage/document as locals so `(function(){})()`

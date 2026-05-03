@@ -69,7 +69,7 @@
        wiring (button IDs, classes) is unchanged. -->
   <header class="ide-topbar">
     <div class="brand">
-      <h1>PICO-POE</h1>
+      <h1>CONDUIT</h1>
       <span class="brand-sub">Firmware IDE</span>
     </div>
 
@@ -89,7 +89,7 @@
            token is no longer surfaced in the topbar — it sits hidden
            with the firmware default and is loaded from localStorage
            if a non-default value was previously persisted. To change
-           it from a non-default firmware build: edit `picopoe.token`
+           it from a non-default firmware build: edit `conduit.token`
            in localStorage from DevTools (or restore the visible
            field if a real settings UI lands later). -->
       <input id="ide-auth-token" type="hidden" value="changeme">
@@ -239,7 +239,7 @@
         </div>
         <!-- Editable persistent command presets. Click to send, edit
              pencil to change, trash to remove, + to add a new one.
-             State lives in localStorage under picopoe.cmdPresets. -->
+             State lives in localStorage under conduit.cmdPresets. -->
         <div class="cmd-presets" id="ide-cmd-presets" aria-label="Saved command presets"></div>
       </div>
 
@@ -277,11 +277,11 @@
   // --- Theme toggle ---
   function setTheme(t) {
     root.setAttribute('data-theme', t);
-    try { localStorage.setItem('picopoe.theme', t); } catch (_) {}
+    try { localStorage.setItem('conduit.theme', t); } catch (_) {}
     $('topbar-theme-light').setAttribute('aria-pressed', t === 'light');
     $('topbar-theme-dark').setAttribute('aria-pressed',  t === 'dark');
   }
-  try { setTheme(localStorage.getItem('picopoe.theme') || 'dark'); } catch (_) { setTheme('dark'); }
+  try { setTheme(localStorage.getItem('conduit.theme') || 'dark'); } catch (_) { setTheme('dark'); }
   $('topbar-theme-light').addEventListener('click', () => setTheme('light'));
   $('topbar-theme-dark').addEventListener('click',  () => setTheme('dark'));
 
@@ -292,8 +292,8 @@
       if (sel && sel.value) return sel.value;
       const f = document.getElementById('ide-quick-ip');
       const v = f && f.value.trim();
-      return v || 'pico-poe';
-    } catch (_) { return 'pico-poe'; }
+      return v || 'conduit';
+    } catch (_) { return 'conduit'; }
   }
   function renderCrumbs() {
     // Device crumb shows just the bound device name. The link dot lives
@@ -313,7 +313,7 @@
   }
   renderCrumbs();
   // Re-render the device crumb whenever the user picks a device in the IDE.
-  window.addEventListener('picopoe:devices-updated', renderCrumbs);
+  window.addEventListener('conduit:devices-updated', renderCrumbs);
   document.addEventListener('change', (e) => {
     if (e.target && e.target.id === 'ide-device-select') renderCrumbs();
   });
@@ -323,14 +323,14 @@
 
 <!-- Bump ?v=N whenever IDE flow semantics or the SDK object bundle change,
      otherwise returning browsers silently run stale JS / link stale .o files.
-     The runtime console prints PICOPOE_ASSET_VERSION on boot. -->
-<script>window.PICOPOE_ASSET_VERSION = '2026-05-03-strip-dup-prefix';</script>
+     The runtime console prints CONDUIT_ASSET_VERSION on boot. -->
+<script>window.CONDUIT_ASSET_VERSION = '2026-05-03-strip-dup-prefix';</script>
 <!-- uPlot — high-performance time-series plotting via CDN. Pinned for
      reproducibility; bump VERSION carefully (uPlot's API has been stable
      since 1.6 but theme/options sometimes drift). -->
 <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.iife.min.js"></script>
 <!-- Inline SVG icon helper. Loaded early so other scripts can call
-     PicoPoE.icons.set(buttonEl, 'pause') without races. -->
+     Conduit.icons.set(buttonEl, 'pause') without races. -->
 <script src="icons.js?v=121"></script>
 <script src="upload.js?v=121"></script>
 <script src="elf.js?v=121"></script>

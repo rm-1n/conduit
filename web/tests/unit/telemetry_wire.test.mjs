@@ -1,5 +1,5 @@
 // Unit tests for the telemetry wire-format parser exposed at
-// window.PicoPoE.telemetryWire.parseRecord. The parser is the function
+// window.Conduit.telemetryWire.parseRecord. The parser is the function
 // that decodes /api/data?stream=1 frames into per-record events for
 // the data store + chart, so any subtle drift here causes silent
 // telemetry loss in production.
@@ -9,7 +9,7 @@ import { strict as assert } from 'node:assert';
 import { loadModule } from './_load.mjs';
 
 const win = loadModule('telemetry.js');
-const wire = win.PicoPoE.telemetryWire;
+const wire = win.Conduit.telemetryWire;
 
 // ---- Helpers --------------------------------------------------------
 
@@ -185,7 +185,7 @@ test('parseRecord recovers from corruption mid-stream via resync', () => {
 });
 
 test('dtypeSize matches the wire-format table', () => {
-  // KEEP IN SYNC with firmware/app/data_buffer.h (poe_dtype_t)
+  // KEEP IN SYNC with firmware/app/data_buffer.h (conduit_dtype_t)
   assert.equal(wire.dtypeSize(0), 1);  // I8
   assert.equal(wire.dtypeSize(1), 1);  // U8
   assert.equal(wire.dtypeSize(2), 2);

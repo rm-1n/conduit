@@ -1,4 +1,4 @@
-"""HTTP client for PICO-POE device REST API."""
+"""HTTP client for CONDUIT device REST API."""
 
 # PEP 563 — defers annotation evaluation so PEP 604 syntax (`dict | None`,
 # `list[dict]`) parses cleanly on Python 3.9. Without this the function
@@ -11,7 +11,7 @@ DEFAULT_TIMEOUT = 5.0
 UPLOAD_TIMEOUT = 120.0
 
 
-class PicoPoEDevice:
+class ConduitDevice:
     def __init__(self, ip: str, token: str = ""):
         self.base = f"http://{ip}"
         self.token = token
@@ -71,7 +71,7 @@ class PicoPoEDevice:
 
 
 def scan_subnet(subnet: str, timeout: float = 2.0) -> list[dict]:
-    """Scan a /24 subnet for PICO-POE devices. Returns list of status dicts."""
+    """Scan a /24 subnet for CONDUIT devices. Returns list of status dicts."""
     import asyncio
 
     async def _probe(client: httpx.AsyncClient, ip: str) -> dict | None:

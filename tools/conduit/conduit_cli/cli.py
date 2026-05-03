@@ -1,15 +1,15 @@
-"""PICO-POE CLI — manage devices from the command line."""
+"""CONDUIT CLI — manage devices from the command line."""
 
 import os
 import sys
 import click
-from .api import PicoPoEDevice, scan_subnet
+from .api import ConduitDevice, scan_subnet
 from . import dev
 
 
 @click.group()
 def main():
-    """PICO-POE device management tool."""
+    """CONDUIT device management tool."""
 
 
 @main.command()
@@ -17,8 +17,8 @@ def main():
 @click.option("-t", "--token", required=True, help="Auth token")
 @click.option("-f", "--file", "filepath", required=True, type=click.Path(exists=True), help="Path to .uf2 file")
 def upload(device, token, filepath):
-    """Upload firmware to a PICO-POE device."""
-    dev = PicoPoEDevice(device, token)
+    """Upload firmware to a CONDUIT device."""
+    dev = ConduitDevice(device, token)
 
     with open(filepath, "rb") as f:
         data = f.read()
@@ -39,7 +39,7 @@ def upload(device, token, filepath):
 @click.option("-d", "--device", required=True, help="Device IP address")
 def status(device):
     """Get device status."""
-    dev = PicoPoEDevice(device)
+    dev = ConduitDevice(device)
     try:
         s = dev.status()
         click.echo(f"Version:   {s.get('version', '?')}")
@@ -58,7 +58,7 @@ def status(device):
 @main.command()
 @click.option("-s", "--subnet", required=True, help="Subnet prefix (e.g. 192.168.1)")
 def scan(subnet):
-    """Scan a /24 subnet for PICO-POE devices."""
+    """Scan a /24 subnet for CONDUIT devices."""
     click.echo(f"Scanning {subnet}.0/24...")
     results = scan_subnet(subnet)
     if not results:
@@ -78,12 +78,12 @@ def cmd(name, kvargs, device, token):
     """Send a command to /api/cmd.
 
     Usage:
-        pico-poe cmd <name> [k=v ...] -d <ip> -t <token>
+        conduit cmd <name> [k=v ...] -d <ip> -t <token>
 
     Examples:
-        pico-poe cmd gpio_init   pin=15 dir=out -d 192.168.178.200 -t changeme
-        pico-poe cmd gpio_toggle pin=15        -d 192.168.178.200 -t changeme
-        pico-poe cmd adc_read    channel=0     -d 192.168.178.200 -t changeme
+        conduit cmd gpio_init   pin=15 dir=out -d 192.168.178.200 -t changeme
+        conduit cmd gpio_toggle pin=15        -d 192.168.178.200 -t changeme
+        conduit cmd adc_read    channel=0     -d 192.168.178.200 -t changeme
     """
     args = {}
     for kv in kvargs:
@@ -92,7 +92,7 @@ def cmd(name, kvargs, device, token):
             sys.exit(2)
         k, v = kv.split("=", 1)
         args[k] = v
-    dev_obj = PicoPoEDevice(device, token)
+    dev_obj = ConduitDevice(device, token)
     try:
         body = dev_obj.command(name, **args)
         import json as _json
@@ -108,8 +108,8 @@ def cmd(name, kvargs, device, token):
 @click.option("-d", "--device", required=True, help="Device IP address")
 @click.option("-t", "--token", required=True, help="Auth token")
 def reboot(device, token):
-    """Reboot a PICO-POE device."""
-    dev_obj = PicoPoEDevice(device, token)
+    """Reboot a CONDUIT device."""
+    dev_obj = ConduitDevice(device, token)
     try:
         dev_obj.reboot()
         click.echo("Reboot command sent.")
@@ -142,15 +142,15 @@ def build(firmware_dir, sdk, toolchain):
 @click.option("--serial/--no-serial", default=False, help="Capture serial output after flash")
 @click.option("--serial-port", envvar="SERIAL_PORT", default=dev.DEFAULT_SERIAL_PORT, help="USB serial device")
 @click.option("--tbyb", is_flag=True, default=False,
-              help="Diagnostic: load the TBYB-flagged pico_poe_app.uf2 instead "
-                   "of pico_poe_app_initial.uf2. The TBYB image needs an OTA "
+              help="Diagnostic: load the TBYB-flagged conduit_app.uf2 instead "
+                   "of conduit_app_initial.uf2. The TBYB image needs an OTA "
                    "flash-update reboot + /api/commit to persist; via the BOOTSEL "
                    "USB path it boots once and rolls back, leaving the device "
                    "unreachable. Use only for testing the rollback path.")
 def flash(firmware_dir, sdk, toolchain, picotool, serial, serial_port, tbyb):
     """Build firmware, flash via picotool, and reboot.
 
-    Defaults to the non-TBYB pico_poe_app_initial.uf2 so a USB reflash always
+    Defaults to the non-TBYB conduit_app_initial.uf2 so a USB reflash always
     leaves the device in a clean, network-reachable state. Use --tbyb only if
     you specifically want to exercise the watchdog rollback path.
     """
@@ -194,9 +194,9 @@ def diag(serial_port, output, duration):
     output file pins which subsystem stopped first.
 
     Examples:
-        pico-poe diag                                     # stream to stdout, Ctrl-C to stop
-        pico-poe diag -o diag.log                         # also write to a file
-        pico-poe diag -o diag.log --duration 28800        # 8h soak then exit
+        conduit diag                                     # stream to stdout, Ctrl-C to stop
+        conduit diag -o diag.log                         # also write to a file
+        conduit diag -o diag.log --duration 28800        # 8h soak then exit
     """
     dev.diag_capture(serial_port, output_path=output, duration=duration)
 
@@ -225,16 +225,16 @@ def test(device, wait):
 def flash_and_test(device, firmware_dir, sdk, toolchain, picotool, serial, serial_port):
     """Build, flash, wait for boot, and run all tests.
 
-    Flashes the non-TBYB pico_poe_app_initial.uf2 so the device comes up on
+    Flashes the non-TBYB conduit_app_initial.uf2 so the device comes up on
     a normal boot path (no watchdog rollback gating). For TBYB testing use
-    `pico-poe ab-cycle` over OTA instead.
+    `conduit ab-cycle` over OTA instead.
     """
     import time
 
     firmware_dir = firmware_dir or dev.DEFAULT_FIRMWARE_DIR
 
     print(f"\n{'='*50}")
-    print(f"  PICO-POE Flash & Test")
+    print(f"  CONDUIT Flash & Test")
     print(f"  Device IP: {device}")
     print(f"{'='*50}\n")
 

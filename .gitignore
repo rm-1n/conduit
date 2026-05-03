@@ -1,4 +1,4 @@
-# PICO-POE repository ignore rules.
+# Conduit repository ignore rules.
 #
 # Tracked: source (firmware/, web/*.{html,css,js}, tools/), KiCad project
 # files (schematics, PCB, BOM-source), CI workflows, top-level docs, and
@@ -61,7 +61,7 @@ firmware/build/
 # per-dir gitignore so the directory survives in the worktree.
 !firmware/keys/.gitignore
 
-# ---- Python tooling (tools/pico-poe/ and any helper scripts) -------------
+# ---- Python tooling (tools/conduit/ and any helper scripts) -------------
 __pycache__/
 *.py[cod]
 *.egg-info/

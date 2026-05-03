@@ -16,7 +16,7 @@ import { loadModule } from './_load.mjs';
 
 function fresh() {
   // Each test gets a new dataStore so state is isolated.
-  return loadModule('data_store.js').PicoPoE.dataStore;
+  return loadModule('data_store.js').Conduit.dataStore;
 }
 
 test('empty session: listChannels empty, stats zeroed, session bounds null', () => {

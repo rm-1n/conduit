@@ -1,4 +1,4 @@
-"""Unit tests for pico_poe_cli.api — the HTTP wrapper around /api/*.
+"""Unit tests for conduit_cli.api — the HTTP wrapper around /api/*.
 
 The api module is thin enough that tests are essentially "did we send
 the right request?" — captured via monkeypatched httpx callables.
@@ -8,7 +8,7 @@ import json
 import httpx
 import pytest
 
-from pico_poe_cli import api
+from conduit_cli import api
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ def test_status_sends_correct_url(monkeypatch):
     rec = CallRecorder(FakeResponse(200, {"version": "1.2.0", "ip": "10.0.0.5"}))
     monkeypatch.setattr(httpx, "get", rec)
 
-    dev = api.PicoPoEDevice("10.0.0.5", token="anytoken")
+    dev = api.ConduitDevice("10.0.0.5", token="anytoken")
     out = dev.status()
 
     assert out["version"] == "1.2.0"
@@ -69,7 +69,7 @@ def test_status_sends_correct_url(monkeypatch):
 
 def test_status_propagates_http_error(monkeypatch):
     monkeypatch.setattr(httpx, "get", CallRecorder(FakeResponse(503, None)))
-    dev = api.PicoPoEDevice("10.0.0.5")
+    dev = api.ConduitDevice("10.0.0.5")
     with pytest.raises(httpx.HTTPStatusError):
         dev.status()
 
@@ -81,7 +81,7 @@ def test_command_builds_query_with_name_and_args(monkeypatch):
     rec = CallRecorder(FakeResponse(200, {"ok": True, "result": 42}))
     monkeypatch.setattr(httpx, "post", rec)
 
-    dev = api.PicoPoEDevice("10.0.0.5", token="changeme")
+    dev = api.ConduitDevice("10.0.0.5", token="changeme")
     out = dev.command("set_amp", value=1.5, channel=0)
 
     assert out == {"ok": True, "result": 42}
@@ -96,7 +96,7 @@ def test_command_builds_query_with_name_and_args(monkeypatch):
 def test_command_drops_none_args(monkeypatch):
     rec = CallRecorder(FakeResponse(200, {"ok": True}))
     monkeypatch.setattr(httpx, "post", rec)
-    dev = api.PicoPoEDevice("10.0.0.5", token="t")
+    dev = api.ConduitDevice("10.0.0.5", token="t")
     dev.command("foo", a=1, b=None, c="hello")
     p = rec.calls[0]["params"]
     assert "b" not in p
@@ -107,7 +107,7 @@ def test_command_drops_none_args(monkeypatch):
 def test_command_omits_auth_header_when_no_token(monkeypatch):
     rec = CallRecorder(FakeResponse(200, {"ok": True}))
     monkeypatch.setattr(httpx, "post", rec)
-    dev = api.PicoPoEDevice("10.0.0.5")  # no token
+    dev = api.ConduitDevice("10.0.0.5")  # no token
     dev.command("ping")
     headers = rec.calls[0]["headers"]
     assert "X-Auth-Token" not in headers
@@ -119,7 +119,7 @@ def test_command_omits_auth_header_when_no_token(monkeypatch):
 def test_upload_sends_octet_stream_with_extended_timeout(monkeypatch):
     rec = CallRecorder(FakeResponse(200, {"status": "ok"}))
     monkeypatch.setattr(httpx, "post", rec)
-    dev = api.PicoPoEDevice("10.0.0.5", token="t")
+    dev = api.ConduitDevice("10.0.0.5", token="t")
 
     payload = b"\x55" * 4096
     out = dev.upload(payload)
@@ -140,7 +140,7 @@ def test_upload_sends_octet_stream_with_extended_timeout(monkeypatch):
 def test_reboot_sends_post_with_auth(monkeypatch):
     rec = CallRecorder(FakeResponse(200, {"ok": True}))
     monkeypatch.setattr(httpx, "post", rec)
-    dev = api.PicoPoEDevice("10.0.0.5", token="t")
+    dev = api.ConduitDevice("10.0.0.5", token="t")
     dev.reboot()
     assert rec.calls[0]["url"] == "http://10.0.0.5/api/reboot"
     assert rec.calls[0]["headers"]["X-Auth-Token"] == "t"
@@ -152,5 +152,5 @@ def test_reboot_sends_post_with_auth(monkeypatch):
 def test_headers_are_pure():
     """Sanity check on the auth-header construction:
     no token → empty dict; with token → only X-Auth-Token set."""
-    assert api.PicoPoEDevice("ip")._headers() == {}
-    assert api.PicoPoEDevice("ip", "t")._headers() == {"X-Auth-Token": "t"}
+    assert api.ConduitDevice("ip")._headers() == {}
+    assert api.ConduitDevice("ip", "t")._headers() == {"X-Auth-Token": "t"}
