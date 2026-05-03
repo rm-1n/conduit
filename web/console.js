@@ -262,12 +262,16 @@
       }
       lastUptimeUs = uptimeUs;
     } else {
-      // Continuation (rare — conduit_log callers generally end with "\n"). Drop
-      // if we have no anchor yet (e.g. started mid-record after a ring
-      // fast-forward); otherwise inherit the last record's uptime.
+      // Continuation (rare — conduit_log callers generally end with "\n"),
+      // OR a real record whose leading "[" got eaten at a chunk boundary
+      // and arrived as "<digits>]\t<msg>" with no anchor. Strip that
+      // debris too — same reasoning as the dup-strip in the matched
+      // branch above; without it, the raw "<digits>]\t" renders as a
+      // garbage prefix on an otherwise-clean line.
       if (lastUptimeUs === null) return;
       uptimeUs = lastUptimeUs;
-      msg = line;
+      const orphan = line.match(/^\d+\]\t(.*)$/);
+      msg = orphan ? orphan[1] : line;
     }
 
     // First record of a run: anchor wall-clock and open the run
@@ -304,7 +308,7 @@
     if (showTimestamps) {
       renderAppend(`[${uptimeUs}]\t${msg}\n`);
     } else {
-      renderAppend(m ? `${msg}\n` : `${line}\n`);
+      renderAppend(`${msg}\n`);
     }
   }
 
