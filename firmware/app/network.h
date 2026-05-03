@@ -33,9 +33,4 @@ bool network_get_poe_status(void);
 // Must be called periodically from the main loop (handles DHCP fallback)
 void network_poll(void);
 
-// Total times the active wedge detector has fired the TX SM reset +
-// gARP burst. Surfaced in diag so we can see how often the recovery
-// is needed (and confirm it's actually firing in the wild).
-uint32_t network_get_wedge_recoveries(void);
-
 #endif // NETWORK_H

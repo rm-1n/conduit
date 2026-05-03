@@ -240,25 +240,16 @@ int main() {
 #ifndef PICO_POE_MINIMAL
             diag_print_line();
 #else
-            // Minimal-firmware heartbeat: just enough to see link
-            // state, MDIO bad-read rate, the unicast-to-us counter,
-            // and any wedge_check_cb activity. Pulled from the
-            // existing rmii driver counters + network.c accessors.
+            // Minimal-firmware heartbeat: link, MDIO/MDC health, RX
+            // CRC errors. mdc(+d) below configured MDC frequency (25 kHz)
+            // means edges are being preempted → bit-bang loses bits.
             extern volatile uint32_t g_rmii_rx_to_us;
             extern volatile uint32_t g_rmii_rx_tcp_syn;
             extern volatile uint32_t g_rmii_rx_frames;
             extern volatile uint32_t g_rmii_tx_attempts;
-            // mdc_fires shows the actual MDC IRQ rate per heartbeat;
-            // expected = MDC freq (25,000 at 25 kHz) per ~1 s. A lower
-            // delta means edges are being preempted — the cause of
-            // 0xFFFF reads.
             static uint32_t last_mdc = 0;
             uint32_t mdc_now = netif_rmii_ethernet_mdc_isr_fires();
             uint32_t mdc_d = mdc_now - last_mdc; last_mdc = mdc_now;
-            // crc_d shows the per-second CRC error delta — if it
-            // climbs after a cable replug and rxu stays flat, the
-            // RX SM is out of sync and reset_rx_path needs to fire
-            // (or didn't fire / didn't resync).
             static uint32_t last_crc = 0;
             uint32_t crc_now = netif_rmii_ethernet_rx_crc_errors();
             uint32_t crc_d = crc_now - last_crc; last_crc = crc_now;

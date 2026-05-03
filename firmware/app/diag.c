@@ -135,7 +135,7 @@ void diag_print_line(void) {
            "rxu=%lu(+%lu) rxs=%lu(+%lu) "
            "acpt=%lu(+%lu) strm=%lu(+%lu) "
            "ipdrop=%lu(+%lu) tcpdrop=%lu(+%lu) tcperr=%lu(+%lu) tcpchk=%lu(+%lu) "
-           "mdio=%lu/%lu wedge_rec=%lu commit_pending=%d\n",
+           "mdio=%lu/%lu crc=%lu commit_pending=%d\n",
            network_is_link_up(), network_get_ip_str(),
            (unsigned long)c1, (unsigned long)dc1,
            (unsigned long)m->used,  (unsigned long)m->avail,
@@ -153,6 +153,6 @@ void diag_print_line(void) {
            (unsigned long)tcperr,  (unsigned long)dtcperr,
            (unsigned long)tcpchk,  (unsigned long)dtcpchk,
            (unsigned long)mdio_bad, (unsigned long)mdio_total,
-           (unsigned long)network_get_wedge_recoveries(),
+           (unsigned long)netif_rmii_ethernet_rx_crc_errors(),
            (int)ota_commit_pending());
 }
