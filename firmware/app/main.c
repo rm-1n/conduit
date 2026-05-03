@@ -13,15 +13,17 @@
 #include "hardware/watchdog.h"
 
 #include "network.h"
+#include "pico_poe_config.h"
+#include "rmii_ethernet/netif.h"
+#include "lan8720a.h"
+#ifndef PICO_POE_MINIMAL
 #include "http_server.h"
 #include "ota.h"
 #include "log_buffer.h"
 #include "data_buffer.h"
 #include "commands.h"
-#include "pico_poe_config.h"
-#include "rmii_ethernet/netif.h"
-#include "lan8720a.h"
 #include "diag.h"
+#endif
 
 // Symbol from the rmii_ethernet driver — the inner step of its loop.
 // We call this from our own wrapper instead of the driver's loop so we
@@ -65,6 +67,13 @@ __attribute__((weak)) void pico_poe_loop(void)  {}
 // loop then stops patting and lets rom_reboot's countdown complete.
 volatile bool g_reboot_pending = false;
 
+// Core-1 liveness counter — bumped every pass through core1_entry's
+// poll loop. Read by Core 0's heartbeat to detect a wedged Core 1.
+// Defined here in main.c (not diag.c) so the minimal-firmware build
+// still has it when diag.c isn't compiled in. The full build's
+// diag.h declares it `extern` and uses it from `diag_print_line`.
+volatile uint32_t g_core1_iter = 0;
+
 #define USER_LOOP_PERIOD_US 1000    // 1 kHz
 #define DIAG_PRINT_EVERY    1000    // once per ~1 s
 
@@ -93,6 +102,7 @@ int main() {
         while (1) tight_loop_contents();
     }
 
+#ifndef PICO_POE_MINIMAL
     // Initialize the runtime-console ring buffer. log() routes here (NOT
     // to USB stdio); printf stays USB-only for local debugging.
     log_buffer_init();
@@ -119,6 +129,12 @@ int main() {
 
     // Start the HTTP API server (registers callbacks, no lwIP polling here)
     http_server_init();
+#else
+    // Minimal-firmware diagnostic build: no log_buffer, no data_buffer,
+    // no commands, no OTA, no HTTP server. Just RMII + lwIP + ICMP. The
+    // tiny heartbeat printf in the user loop below replaces diag.c.
+    printf("\n=== PICO-POE MINIMAL diag build ===\n");
+#endif
 
     // Read PHY registers before launching Core 1 (avoids MDIO bus race)
     uint16_t bsr = netif_rmii_ethernet_mdio_read(phy_address, LAN8720A_BASIC_STATUS_REG);
@@ -221,7 +237,43 @@ int main() {
                     link_down_warned = true;
                 }
             }
+#ifndef PICO_POE_MINIMAL
             diag_print_line();
+#else
+            // Minimal-firmware heartbeat: just enough to see link
+            // state, MDIO bad-read rate, the unicast-to-us counter,
+            // and any wedge_check_cb activity. Pulled from the
+            // existing rmii driver counters + network.c accessors.
+            extern volatile uint32_t g_rmii_rx_to_us;
+            extern volatile uint32_t g_rmii_rx_tcp_syn;
+            extern volatile uint32_t g_rmii_rx_frames;
+            extern volatile uint32_t g_rmii_tx_attempts;
+            // mdc_fires shows the actual MDC IRQ rate per heartbeat;
+            // expected = MDC freq (25,000 at 25 kHz) per ~1 s. A lower
+            // delta means edges are being preempted — the cause of
+            // 0xFFFF reads.
+            static uint32_t last_mdc = 0;
+            uint32_t mdc_now = netif_rmii_ethernet_mdc_isr_fires();
+            uint32_t mdc_d = mdc_now - last_mdc; last_mdc = mdc_now;
+            // crc_d shows the per-second CRC error delta — if it
+            // climbs after a cable replug and rxu stays flat, the
+            // RX SM is out of sync and reset_rx_path needs to fire
+            // (or didn't fire / didn't resync).
+            static uint32_t last_crc = 0;
+            uint32_t crc_now = netif_rmii_ethernet_rx_crc_errors();
+            uint32_t crc_d = crc_now - last_crc; last_crc = crc_now;
+            printf("[min] link=%d rx=%lu tx=%lu rxu=%lu rxs=%lu "
+                   "mdio=%lu/%lu mdc=%lu(+%lu) crc=%lu(+%lu)\n",
+                   (int)network_is_link_up(),
+                   (unsigned long)g_rmii_rx_frames,
+                   (unsigned long)g_rmii_tx_attempts,
+                   (unsigned long)g_rmii_rx_to_us,
+                   (unsigned long)g_rmii_rx_tcp_syn,
+                   (unsigned long)netif_rmii_ethernet_mdio_bad_reads(),
+                   (unsigned long)netif_rmii_ethernet_mdio_total_reads(),
+                   (unsigned long)mdc_now, (unsigned long)mdc_d,
+                   (unsigned long)crc_now, (unsigned long)crc_d);
+#endif
         }
         sleep_us(USER_LOOP_PERIOD_US);
     }

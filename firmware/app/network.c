@@ -1,6 +1,8 @@
 #include "network.h"
 #include "pico_poe_config.h"
+#ifndef PICO_POE_MINIMAL
 #include "http_server.h"
+#endif
 
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
@@ -81,114 +83,23 @@ static void schedule_garp_burst(struct netif *netif) {
 // Why active polling instead of passive heartbeat: in testing, a
 // passive 30s gARP heartbeat would fire after cable replug but not
 // recover the upstream — either the gARPs weren't reaching the wire
-// (TX SM stuck) or the Fritz!Box was ignoring them. The recovery has
-// to be louder and self-triggering. 5s tick + 2 stall ticks = ~10s
-// detection latency, which is acceptable for a wedge.
-#define WEDGE_TICK_MS         5000
-#define WEDGE_STALL_TICKS     2
-
+// (TX SM stuck) or the Fritz!Box was ignoring them. The recovery
+// has to be louder and self-triggering.
+//
+// g_wedge_recoveries kept as a counter for backward-compat (diag.c
+// surfaces it; once that reference is removed too this can go).
 static volatile uint32_t g_wedge_recoveries = 0;
 uint32_t network_get_wedge_recoveries(void) { return g_wedge_recoveries; }
 
-static void wedge_check_cb(void *arg) {
-    struct netif *netif = (struct netif *)arg;
-
-    // Driver-side counters. We read into locals because the volatile
-    // values can move between the comparison checks below.
-    extern volatile uint32_t g_rmii_rx_frames;
-    extern volatile uint32_t g_rmii_rx_to_us;
-    uint32_t rx  = g_rmii_rx_frames;
-    uint32_t rxu = g_rmii_rx_to_us;
-
-    static uint32_t last_rx = 0;
-    static uint32_t last_rxu = 0;
-    static uint8_t  stall_ticks = 0;
-    static uint8_t  consecutive_recoveries = 0;
-    static bool     was_link_up = false;
-    #define WEDGE_RECOVERIES_BEFORE_PHY_RESET 2
-
-    bool link_up = netif_is_link_up(netif);
-    bool rx_climbing  = (rx  != last_rx);
-    bool rxu_climbing = (rxu != last_rxu);
-
-    if (!link_up) {
-        // Link down — reset state, nothing to do until it comes back.
-        stall_ticks = 0;
-    } else if (!was_link_up) {
-        // First tick after link came up — counters are about to start
-        // moving; don't count this as a stall sample.
-        stall_ticks = 0;
-    } else if (rxu_climbing) {
-        // Healthy: unicast is arriving. Clear the stall counter and
-        // emit a routine announce + gateway-probe to refresh upstream
-        // MAC tables (the gateway probe also keeps our ARP entry in
-        // its table warm). Also clear the consecutive-recoveries count
-        // since the path is proven good.
-        stall_ticks = 0;
-        consecutive_recoveries = 0;
-        announce_tick_cb(netif);
-    } else if (rx_climbing) {
-        // Wedge fingerprint: rx climbs (broadcasts arriving, RX path
-        // healthy) but rxu doesn't (unicast to us missing). Count
-        // consecutive stall ticks; trigger recovery once we've seen
-        // STALL_TICKS in a row to avoid false positives on a
-        // momentarily quiet LAN.
-        stall_ticks++;
-        if (stall_ticks >= WEDGE_STALL_TICKS) {
-            consecutive_recoveries++;
-            if (consecutive_recoveries >= WEDGE_RECOVERIES_BEFORE_PHY_RESET) {
-                // Soft recovery (TX SM reset + announce burst) has
-                // already failed N times in a row without rxu
-                // climbing — escalate to a full PHY hard-reset.
-                // Costs ~200 ms and a brief link blip, but this is
-                // the only path that's actually re-presented the
-                // device on the wire after sticky upstream-MAC-table
-                // failures (Fritz!Box class issues).
-                printf("[net] TX wedge persists after %u soft recoveries — "
-                       "escalating to PHY hard-reset\n",
-                       consecutive_recoveries);
-                netif_rmii_ethernet_phy_reset();
-                // The link blip from PHY reset will trip
-                // link_callback's down→up path, which fires its own
-                // gARP burst. Reset the consecutive count so we give
-                // the new link state a clean window to prove itself.
-                consecutive_recoveries = 0;
-            } else {
-                printf("[net] TX wedge detected (rxu flat for %us, rx +%u, "
-                       "soft recovery #%u) — resetting TX path + "
-                       "announce/gw-probe burst\n",
-                       stall_ticks * (WEDGE_TICK_MS / 1000),
-                       (unsigned)(rx - last_rx),
-                       consecutive_recoveries);
-                netif_rmii_ethernet_reset_tx_path();
-                announce_tick_cb(netif);     // immediate gARP + gw probe
-                schedule_garp_burst(netif);  // 4 more spread over 5 s
-            }
-            __atomic_add_fetch(&g_wedge_recoveries, 1, __ATOMIC_RELAXED);
-            stall_ticks = 0;
-        }
-    } else {
-        // Truly idle LAN (no rx, no rxu). Don't count as a stall —
-        // there's no traffic to compare against. Still kick an
-        // announce + gateway probe so upstream entries don't age out
-        // and we keep proving the unicast path works.
-        announce_tick_cb(netif);
-    }
-
-    last_rx = rx;
-    last_rxu = rxu;
-    was_link_up = link_up;
-
-    // Diagnostic: prove the tick is alive. If we stop seeing this print
-    // every ~5s while debugging the wedge, the sys_timeout chain
-    // is broken (probably pool exhaustion — see MEMP_NUM_SYS_TIMEOUT
-    // in lwipopts.h).
-    printf("[net] wedge tick: link=%d stall=%u rxu_d=%d rx_d=%d\n",
-           link_up, stall_ticks,
-           rxu_climbing ? 1 : 0, rx_climbing ? 1 : 0);
-
-    sys_timeout(WEDGE_TICK_MS, wedge_check_cb, netif);
-}
+// REMOVED 2026-05-03: wedge_check_cb. The whole wedge-detect-and-
+// recover apparatus (PHY link cycle on rxu stall, BCR.PowerDown
+// kick on sustained link-down) was built when the MDIO bit-bang
+// returned 60 % bad reads at 50 kHz MDC — we couldn't trust BSR,
+// so we layered active recovery on top. Lowering MDC to 25 kHz
+// made the bit-bang reliable, and live testing then showed the
+// recoveries themselves were causing cascading link flaps that
+// hurt more than helped. The driver's own 500 ms BSR poll +
+// link_callback handle real link transitions correctly now.
 
 static void link_callback(struct netif *netif) {
     bool up = netif_is_link_up(netif);
@@ -202,9 +113,6 @@ static void link_callback(struct netif *netif) {
     // swap, so we only run recovery on the first transition that's
     // had >=2 s of confirmed link-down.
     #define CABLE_REPLUG_MIN_DOWN_MS  2000
-    // Static struct can't be initialised with compound literal `nil_time`
-    // (not a constant expression), so use a `_valid` flag to mark whether
-    // the timestamp has been set since boot / since the last replug.
     static absolute_time_t link_down_at;
     static bool            link_down_at_valid = false;
     printf("[net] link %s\n", up ? "up" : "down");
@@ -216,28 +124,45 @@ static void link_callback(struct netif *netif) {
             real_replug = (down_ms >= CABLE_REPLUG_MIN_DOWN_MS);
             link_down_at_valid = false;
         }
+        // ALWAYS reset the RX path on link-up, regardless of how
+        // long the link was down. The PIO RX SM clocks off our
+        // generated REF_CLK and samples RX0/RX1/CRS_DV from the
+        // PHY; any down→up transition (real cable replug OR
+        // brief auto-neg settle flap) phase-shifts the SM relative
+        // to RX_DV. Every subsequent frame then fails FCS — visible
+        // as g_rmii_rx_crc_errors climbing while rxu / rxs stay
+        // flat. Multi-cycle test 2026-05-03: with the reset gated
+        // behind real_replug (≥2 s down), quick replugs (down<2 s)
+        // wedged for 3.8–11 s; with the reset on every link-up,
+        // recovery is consistently <500 ms (median 253 ms). Cost
+        // is ~50 µs and the reset is idempotent, so firing it on
+        // auto-neg flaps is harmless.
+        //
+        // We MUST NOT call reset_tx_path here: the TX SM sidesets
+        // RETCLK (= REF_CLK to the PHY) every cycle. Stopping it
+        // momentarily kills REF_CLK, which forces the PHY's RX
+        // path to re-sync from scratch — making the wedge worse,
+        // not better.
+        netif_rmii_ethernet_reset_rx_path();
         if (real_replug) {
-            // Triple-recovery on a real cable replug. Direct-link
-            // testing (no switch in path) showed that the netif toggle
-            // alone allows ONE transmit (the gratuitous ARP) and then
-            // the PIO TX state machine wedges — apparently the first
-            // packet sent into the freshly-disturbed PHY corrupts the
-            // SM state. Resetting the TX SM AFTER the netif toggle
-            // unsticks it; we then send the gARP through a known-good
-            // TX path.
-            printf("[net] real cable replug — toggling netif + resetting TX SM\n");
+            // The lwIP-side state cycle is heavier (clears ARP
+            // cache, drops netif state) and IS disruptive to any
+            // active TCP connection. Keep it gated behind the
+            // ≥2 s `real_replug` guard so brief auto-neg flaps
+            // don't tear down working sessions.
             netif_set_down(netif);
             netif_set_up(netif);
-            netif_rmii_ethernet_reset_tx_path();
         }
         // Tell upstream switches/routers that our MAC is back on this
-        // port, without waiting for them to ARP for us.
+        // port. With reliable MDIO + reset_tx_path above, this gARP
+        // actually leaves the wire and the switch re-learns us.
         etharp_gratuitous(netif);
         if (real_replug) {
-            // One immediate gARP isn't enough on a Fritz!Box: by the
-            // time it leaves the wire the upstream port may still be
-            // in settle/learn mode and drop it. Burst 4 more across
-            // 5 s so at least one lands while the upstream is ready.
+            // One immediate gARP isn't enough on some upstreams
+            // (Fritz!Box-class L2): the port may still be in
+            // settle/learn mode when the first gARP arrives. Burst
+            // 4 more spaced across 5 s so at least one lands while
+            // the upstream is ready.
             schedule_garp_burst(netif);
         }
     } else {
@@ -249,11 +174,13 @@ static void link_callback(struct netif *netif) {
             link_down_at = get_absolute_time();
             link_down_at_valid = true;
         }
+#ifndef PICO_POE_MINIMAL
         // Reap streaming PCBs immediately so the small MEMP_NUM_TCP_PCB
         // pool is free for the browser's reconnect SYNs the moment the
         // cable returns. Without this they sit in keepalive limbo for
         // ~50 s and the reconnects time out.
         http_server_on_link_down();
+#endif
     }
 }
 
@@ -323,10 +250,6 @@ int network_init(void) {
     netif_set_up(&g_netif);
 
     printf("[net] Static IP: %s\n", PICO_POE_STATIC_IP);
-
-    // Arm the active TX-wedge detector. Re-arms itself every tick;
-    // safe to leave running across cable cycles.
-    sys_timeout(WEDGE_TICK_MS, wedge_check_cb, &g_netif);
 
     return 0;
 }

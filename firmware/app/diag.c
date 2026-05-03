@@ -34,8 +34,10 @@
 #include "network.h"
 #include "ota.h"
 #include "http_server.h"
+#include "rmii_ethernet/netif.h"
 
-volatile uint32_t g_core1_iter = 0;
+// g_core1_iter lives in main.c (so the minimal-firmware build can also
+// reference it without dragging diag.c in). diag.h declares it extern.
 
 // Walk the three TCP-PCB lists and count entries. Cheap (lists are at
 // most a few items) and avoids allocating.
@@ -121,13 +123,19 @@ void diag_print_line(void) {
     u32_t dtcpchk  = tcpchk  - last_tcpchk;
     last_ipdrop = ipdrop; last_tcpdrop = tcpdrop; last_tcperr = tcperr; last_tcpchk = tcpchk;
 
+    // MDIO comms reliability — bad reads (BSR=0xFFFF responses) /
+    // total reads. A non-trivial baseline ratio means our bit-bang
+    // is dropping bits, not just the PHY tristating during recovery.
+    uint32_t mdio_total = netif_rmii_ethernet_mdio_total_reads();
+    uint32_t mdio_bad   = netif_rmii_ethernet_mdio_bad_reads();
+
     printf("[diag] link=%d ip=%s c1=%lu(+%lu) "
            "heap=%lu/%lu pbuf=%u/%u tcp_pcb=%u/%u "
            "tcp=%ua/%ut/%ul rx=%lu(+%lu) tx=%lu(+%lu) "
            "rxu=%lu(+%lu) rxs=%lu(+%lu) "
            "acpt=%lu(+%lu) strm=%lu(+%lu) "
            "ipdrop=%lu(+%lu) tcpdrop=%lu(+%lu) tcperr=%lu(+%lu) tcpchk=%lu(+%lu) "
-           "wedge_rec=%lu commit_pending=%d\n",
+           "mdio=%lu/%lu wedge_rec=%lu commit_pending=%d\n",
            network_is_link_up(), network_get_ip_str(),
            (unsigned long)c1, (unsigned long)dc1,
            (unsigned long)m->used,  (unsigned long)m->avail,
@@ -144,6 +152,7 @@ void diag_print_line(void) {
            (unsigned long)tcpdrop, (unsigned long)dtcpdrop,
            (unsigned long)tcperr,  (unsigned long)dtcperr,
            (unsigned long)tcpchk,  (unsigned long)dtcpchk,
+           (unsigned long)mdio_bad, (unsigned long)mdio_total,
            (unsigned long)network_get_wedge_recoveries(),
            (int)ota_commit_pending());
 }

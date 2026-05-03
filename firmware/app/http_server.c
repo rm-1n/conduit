@@ -84,6 +84,13 @@ typedef struct {
     // /api/data stream flag. STREAMING covers both /api/log?stream=1 and
     // /api/data?stream=1; this bit tells http_poll which ring to drain.
     bool data_stream;
+    // Wall-clock of the last byte http_poll wrote to this PCB (real
+    // record bytes OR a keepalive). When STREAMING ring is empty for
+    // STREAM_KEEPALIVE_MS we emit a tiny in-band marker so the
+    // browser's 1 s stall watchdog has something to count against —
+    // without this, a quiet device looks identical to a wedged TX
+    // path and the indicator flaps "no data" forever.
+    absolute_time_t last_tx_at;
 } http_conn_t;
 
 // --------------------------------------------------------------------------
@@ -914,41 +921,88 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
     }
 
     if (conn->state == CONN_STATE_STREAMING) {
+        u16_t avail = tcp_sndbuf(pcb);
+        if (avail == 0) return ERR_OK;  // wait for ACK; retry next poll
         uint32_t total = conn->data_stream
             ? data_buffer_total_written()
             : log_buffer_total_written();
-        if (total == conn->log_since) return ERR_OK;
-        u16_t avail = tcp_sndbuf(pcb);
-        if (avail == 0) return ERR_OK;  // wait for ACK; retry next poll
-        // Sized to absorb a full slow-timer tick of telemetry at 40 KB/s
-        // (4 KB per 100 ms) with comfortable headroom for ACK/window
-        // dynamics. Smaller buffers force the data ring to backlog and
-        // eventually overflow → dropped samples → browser sees voids.
-        static uint8_t out[8192];
-        size_t cap = (avail < sizeof(out)) ? avail : sizeof(out);
-        uint32_t next = conn->log_since;
-        size_t n = conn->data_stream
-            ? data_buffer_read(conn->log_since, out, cap, &next)
-            : log_buffer_read(conn->log_since, out, cap, &next);
-        // Always advance log_since to whatever the ring reader resolved
-        // to — even on n==0. If conn->log_since was past total (stale
-        // browser cursor across a reboot), data_buffer_read clamped its
-        // local since to total and returned 0; without writing back, we'd
-        // spin here until total caught up to the stale value (~10 minutes
-        // at 250 Hz). Pair with the entry-side clamp in handle_data /
-        // handle_log so the very first poll already starts at a sane cursor.
-        conn->log_since = next;
-        if (n == 0) return ERR_OK;
-        err_t e = tcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
-        if (e == ERR_MEM) return ERR_OK;  // sndbuf race — retry next poll
-        if (e != ERR_OK) {
-            conn->state = CONN_STATE_DONE;
-            conn_close(pcb, conn);
+        bool have_real_data = (total != conn->log_since);
+        if (have_real_data) {
+            // Sized to absorb a full slow-timer tick of telemetry at 40 KB/s
+            // (4 KB per 100 ms) with comfortable headroom for ACK/window
+            // dynamics. Smaller buffers force the data ring to backlog and
+            // eventually overflow → dropped samples → browser sees voids.
+            static uint8_t out[8192];
+            size_t cap = (avail < sizeof(out)) ? avail : sizeof(out);
+            uint32_t next = conn->log_since;
+            size_t n = conn->data_stream
+                ? data_buffer_read(conn->log_since, out, cap, &next)
+                : log_buffer_read(conn->log_since, out, cap, &next);
+            // Always advance log_since to whatever the ring reader resolved
+            // to — even on n==0. If conn->log_since was past total (stale
+            // browser cursor across a reboot), data_buffer_read clamped its
+            // local since to total and returned 0; without writing back, we'd
+            // spin here until total caught up to the stale value (~10 minutes
+            // at 250 Hz). Pair with the entry-side clamp in handle_data /
+            // handle_log so the very first poll already starts at a sane cursor.
+            conn->log_since = next;
+            if (n == 0) return ERR_OK;
+            err_t e = tcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
+            if (e == ERR_MEM) return ERR_OK;  // sndbuf race — retry next poll
+            if (e != ERR_OK) {
+                conn->state = CONN_STATE_DONE;
+                conn_close(pcb, conn);
+                return ERR_OK;
+            }
+            tcp_output(pcb);
+            conn->last_tx_at = get_absolute_time();
             return ERR_OK;
         }
+
+        // No real data. Emit a tiny keepalive when the connection has
+        // been silent for STREAM_KEEPALIVE_MS so the browser stall
+        // watchdog (1 s) sees bytes from a quiet-but-healthy device.
+        // For data streams: a 16-byte zero-payload record with a
+        // reserved msg_id (POE_DATA_KEEPALIVE_MSG_ID) — the browser
+        // parser skips it before chart/store push.
+        // For log streams: a single newline — browser drops empty
+        // lines at the top of processLine().
+        #define STREAM_KEEPALIVE_MS  500
+        if (!time_reached(delayed_by_ms(conn->last_tx_at, STREAM_KEEPALIVE_MS))) {
+            return ERR_OK;
+        }
+        if (conn->data_stream) {
+            if (avail < POE_DATA_RECORD_HEADER) return ERR_OK;
+            uint8_t hdr[POE_DATA_RECORD_HEADER];
+            hdr[0] = POE_DATA_MAGIC;
+            hdr[1] = POE_DATA_VERSION;
+            hdr[2] = (uint8_t)(POE_DATA_KEEPALIVE_MSG_ID & 0xFF);
+            hdr[3] = (uint8_t)((POE_DATA_KEEPALIVE_MSG_ID >> 8) & 0xFF);
+            hdr[4] = (uint8_t)POE_DTYPE_U8;
+            hdr[5] = 0; hdr[6] = 0;       // n = 0 (LE u16)
+            hdr[7] = 0;                   // reserved
+            uint64_t now_us = (uint64_t)to_us_since_boot(get_absolute_time());
+            for (int i = 0; i < 8; i++) hdr[8 + i] = (uint8_t)(now_us >> (8 * i));
+            err_t e = tcp_write(pcb, hdr, sizeof(hdr), TCP_WRITE_FLAG_COPY);
+            if (e == ERR_MEM) return ERR_OK;
+            if (e != ERR_OK) {
+                conn->state = CONN_STATE_DONE;
+                conn_close(pcb, conn);
+                return ERR_OK;
+            }
+        } else {
+            if (avail < 1) return ERR_OK;
+            const char nl = '\n';
+            err_t e = tcp_write(pcb, &nl, 1, TCP_WRITE_FLAG_COPY);
+            if (e == ERR_MEM) return ERR_OK;
+            if (e != ERR_OK) {
+                conn->state = CONN_STATE_DONE;
+                conn_close(pcb, conn);
+                return ERR_OK;
+            }
+        }
         tcp_output(pcb);
-        // log_since already advanced above (kept idempotent across the
-        // n==0 early-return).
+        conn->last_tx_at = get_absolute_time();
     }
     return ERR_OK;
 }

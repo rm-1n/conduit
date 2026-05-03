@@ -20,12 +20,11 @@
   'use strict';
 
   const RECONNECT_OK_MS    = 100;
-  // Sleep between failed reconnect attempts. Tight (was 2 s, now 750 ms)
-  // so a cable replug recovers in ≤1 s instead of feeling laggy. The
-  // device's HTTP server accepts new TCP within ~50 ms of link-up, so
-  // the only cost of polling more often is a few extra failed fetches
-  // while the cable is genuinely out — not a bottleneck.
-  const RECONNECT_ERR_MS   = 750;
+  // Sleep between failed reconnect attempts. Browser cost of polling
+  // more often is a few extra failed fetches while the cable is
+  // genuinely out — not a bottleneck. 400 ms means a clean replug
+  // recovers in well under 1 s.
+  const RECONNECT_ERR_MS   = 400;
   const IP_CHECK_MS        = 1000;
   const SCHEMA_REFRESH_MIN_MS = 1000;
   const PERSIST_BATCH_MAX  = 64;
@@ -33,24 +32,21 @@
   // Stall watchdog: if the open stream goes silent for this long we
   // assume the underlying TCP is half-dead (Wi-Fi flap, ethernet
   // unplug, NAT timeout, browser idle suspend) and abort so the loop
-  // reconnects cleanly. Tuned tight — at ~250 Hz emit rate, every
-  // 100 ms tick should land a packet. 1.5 s is well clear of any
-  // legitimate gap on a healthy stream and close enough that a cable
-  // pull turns the link indicator red within ~2 s instead of staring
-  // at a green dot for ages. Was 3 s; the firmware now aborts open
-  // TCP PCBs on link-down (within ~500 ms via the rmii poll) so most
-  // cable pulls deliver an RST that lands well before this fires.
-  const STALL_MS           = 1500;
-  const STALL_CHECK_MS     = 250;
+  // reconnects cleanly. The firmware emits a 16-byte keepalive record
+  // every ~500 ms when the data ring is otherwise idle (see
+  // POE_DATA_KEEPALIVE_MSG_ID), so 1 s is one missed keepalive plus
+  // jitter — anything longer is genuinely broken.
+  const STALL_MS           = 1000;
+  const STALL_CHECK_MS     = 150;
   // Connect-phase timeout — between issuing fetch() and the first byte
   // landing. Without this, a device that's just rebooted (TCP accepts
   // but firmware isn't ready to serve) leaves runStream blocked
   // indefinitely on `await fetch(...)` or `await reader.read()`. The
   // stall watchdog can't help here because it skips when lastByteMs is
-  // still 0. 2.5 s is well above the round-trip on LAN even for a slow
-  // device + handshake; was 5 s, dropped because the slowest legitimate
-  // path (TCP connect during PHY auto-neg restart) settles in ~1.5 s.
-  const CONNECT_TIMEOUT_MS = 2500;
+  // still 0. 1.5 s comfortably covers a LAN handshake + headers; the
+  // device's first poll iteration delivers the first byte (real data
+  // or keepalive) within ~500 ms of accept.
+  const CONNECT_TIMEOUT_MS = 1500;
   // Schema fetch timeout. Same reason — a hung /api/data_schema would
   // wedge runStream's awaited refreshSchema and prevent the data fetch
   // from ever issuing.
@@ -99,6 +95,12 @@
   const FRAME_MAGIC   = 0xFE;
   const FRAME_VERSION = 0x01;
   const FRAME_HEADER_BYTES = 16;
+  // Reserved msg_id used by firmware http_poll's idle keepalive
+  // (see firmware/app/data_buffer.h POE_DATA_KEEPALIVE_MSG_ID). Records
+  // with this id arrive at most every ~500 ms when the device's data
+  // ring is empty; we count them as "stream is alive" but skip the
+  // chart/store push in drain().
+  const KEEPALIVE_MSG_ID = 0xFFFF;
   function parseRecord(buf, offset) {
     offset = offset | 0;
     const len = buf.byteLength;
@@ -129,6 +131,7 @@
   window.PicoPoE.telemetryWire = {
     parseRecord, dtypeSize, readElem,
     MAGIC: FRAME_MAGIC, VERSION: FRAME_VERSION, HEADER_BYTES: FRAME_HEADER_BYTES,
+    KEEPALIVE_MSG_ID,
   };
 
   let stateEl = null;
@@ -185,13 +188,61 @@
   let drainSeenAnyRecord = false;
   let drainResyncCount   = 0;
 
-  function setState(text, cls) {
+  // Discriminated state machine for the indicator label.
+  //   'connected'    (green) — bytes flowing within STALL_MS
+  //   'no data'      (amber) — TCP open + headers received but stale;
+  //                            elapsed seconds appended live
+  //   'reconnecting' (red)   — between runStream invocations; elapsed
+  //                            seconds appended live
+  //   'paused'       (off)   — external pause (OTA)
+  //   'no device'    (off)   — getIp returned null
+  //   'disconnected' (off)   — initial / stop()
+  // The single-word label was indistinguishable when stuck — the user
+  // couldn't tell whether the browser was actively retrying or wedged.
+  let currentStage = 'disconnected';
+  let stageEnteredAt = 0;
+  function setStage(stage) {
+    currentStage = stage;
+    stageEnteredAt = performance.now();
+    renderStage();
+  }
+  function renderStage() {
     if (!stateEl) return;
+    let text, cls;
+    switch (currentStage) {
+      case 'connected':
+        text = 'connected';
+        cls  = 'ok';
+        break;
+      case 'no data': {
+        const s = Math.max(0, Math.round((performance.now() - stageEnteredAt) / 1000));
+        text = s > 0 ? `no data (${s}s)` : 'no data';
+        cls  = 'err';
+        break;
+      }
+      case 'reconnecting': {
+        const s = Math.max(0, Math.round((performance.now() - stageEnteredAt) / 1000));
+        text = s > 0 ? `reconnecting (${s}s)…` : 'reconnecting…';
+        cls  = 'err';
+        break;
+      }
+      case 'paused':       text = 'paused';       cls = '';    break;
+      case 'no device':    text = 'no device';    cls = '';    break;
+      case 'disconnected': text = 'disconnected'; cls = '';    break;
+      default:             text = currentStage;   cls = '';    break;
+    }
     stateEl.textContent = text;
-    // CSS .status-dot[data-state] paints the colored dot; cls is 'ok' /
-    // 'err' / null. We keep null → 'off' (gray) for the disconnected state.
     stateEl.setAttribute('data-state',
       cls === 'ok' ? 'ok' : cls === 'err' ? 'err' : 'off');
+  }
+  // Back-compat alias for older internal call sites; map the small set
+  // we actually used to the new stage names.
+  function setState(text, cls) {
+    if (text === 'connected')      setStage('connected');
+    else if (text === 'paused')    setStage('paused');
+    else if (text === 'no device') setStage('no device');
+    else if (text === 'reconnecting…' || text === 'reconnecting') setStage('reconnecting');
+    else setStage('disconnected');
   }
 
   // Telemetry now writes straight into the in-memory data_store
@@ -264,6 +315,17 @@
       if (r.kind === 'resync') { i++; drainResyncCount++; continue; }
       // r.kind === 'record'
       const { msgId, dtype, n, uptimeUs, recordBytes } = r;
+      // Firmware-side keepalive: 16-byte zero-payload record emitted
+      // when the data ring is otherwise idle, so our stall watchdog
+      // sees bytes from a quiet-but-healthy device. Skip everything
+      // past the bookkeeping below — chart, store, schema cache,
+      // reboot-detection — none of it should react to keepalives.
+      // lastByteMs (and the runStream chunk-level timer) already
+      // ticked when these bytes arrived.
+      if (msgId === KEEPALIVE_MSG_ID) {
+        i += recordBytes;
+        continue;
+      }
       const esz = dtypeSize(dtype);
       // Copy out the payload before advancing — drain() may slice the
       // parseBuf below, which would invalidate a subarray view.
@@ -496,6 +558,15 @@
       }
 
       activeAbort = new AbortController();
+      // Stage transitions to "reconnecting" the moment we leave the
+      // previous stream's "connected" / "no data" state — this is
+      // what the user sees as "actively retrying" instead of stuck.
+      // setStage rolls the elapsed counter back to 0 so the user
+      // sees fresh progress per attempt.
+      if (currentStage !== 'connected' && currentStage !== 'paused' &&
+          currentStage !== 'no device') {
+        setStage('reconnecting');
+      }
       try {
         await runStream(ip, activeAbort.signal);
         diag('runStream.endedCleanly');
@@ -503,7 +574,7 @@
       } catch (e) {
         if (e && e.name === 'AbortError') { diag('runStream.aborted'); continue; }
         diag('runStream.error', { message: String(e && e.message || e) });
-        setState('disconnected', 'err');
+        setStage('reconnecting');
         await sleep(RECONNECT_ERR_MS);
       } finally {
         activeAbort = null;
@@ -532,11 +603,21 @@
   function watchStall() {
     if (stallHandle) return;
     stallHandle = setInterval(() => {
+      // Re-render the live elapsed counter for stages that show one,
+      // independent of the stall/abort logic below. Keeps the indicator
+      // ticking ("reconnecting (3s)…") so the user can tell it's
+      // actually progressing rather than wedged.
+      if (currentStage === 'no data' || currentStage === 'reconnecting') {
+        renderStage();
+      }
       if (stopped || paused || !activeAbort) return;
       if (lastByteMs === 0) return;
       if (performance.now() - lastByteMs > STALL_MS) {
         diag('stall.abort', { quietMs: Math.round(performance.now() - lastByteMs) });
-        setState('reconnecting…', 'err');
+        // Stall on a connected stream → enter the "no data" stage,
+        // abort to force reconnect. The streamLoop catch will then
+        // transition us into "reconnecting".
+        setStage('no data');
         try { activeAbort.abort(); } catch (_) {}
         // Telemetry and the runtime console share the same TCP fate:
         // if the device's link went down, both streams are dead. The
@@ -632,6 +713,11 @@
         if (chart && chart.reset) chart.reset();
         // firstStream stays false so a future network blip (not OTA)
         // still inserts a chart.gap() — only the OTA path nukes the ring.
+        // Force the indicator into "reconnecting" so it doesn't inherit
+        // the pre-pause "connected" — without this, the post-OTA gap
+        // before bytes arrive looks like a healthy stream that's
+        // mysteriously not updating the chart.
+        setStage('reconnecting');
         if (pauseWaiter) { pauseWaiter(); pauseWaiter = null; }
       },
       isPaused() { return paused; },

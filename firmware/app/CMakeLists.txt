@@ -150,7 +150,7 @@ function(pico_poe_define_app TARGET)
     # Binary version for A/B partition selection — bump MINOR per OTA test
     # cycle. The RP2350 bootrom compares versions across partitions and
     # boots the newer.
-    pico_set_binary_version(${TARGET} MAJOR 1 MINOR 66)
+    pico_set_binary_version(${TARGET} MAJOR 9 MINOR 99)
 
     # Embed the A/B partition table so the bootrom can discover the layout
     # and pick between A and B based on binary version.
@@ -171,7 +171,60 @@ function(pico_poe_define_app TARGET)
     pico_add_extra_outputs(${TARGET})
 endfunction()
 
-# The two variants. Both always build; the first-install UF2 is small
-# enough that the extra link time is negligible.
+# The two full variants. Both always build; the first-install UF2 is
+# small enough that the extra link time is negligible.
 pico_poe_define_app(pico_poe_app         TBYB)
 pico_poe_define_app(pico_poe_app_initial)
+
+# ---- Minimal diagnostic variant ---------------------------------------------
+#
+# Strips HTTP server, OTA, telemetry/log buffers, commands, and diag.c —
+# leaves just RMII + lwIP + ICMP echo. Used to isolate cable-replug recovery
+# from any TCP/HTTP/browser influence. Same partition table embed and signing
+# as the full app so it boots from partition A under the existing bootloader,
+# but has its own UF2 output (`pico_poe_min_initial.uf2`) and uses the
+# PICO_POE_MINIMAL define to compile out the strippable code in main.c +
+# network.c. Flash via picotool directly:
+#   picotool load -F build/app/pico_poe_min_initial.uf2 && picotool reboot
+function(pico_poe_define_app_minimal TARGET)
+    add_executable(${TARGET}
+        main.c
+        network.c
+    )
+
+    target_include_directories(${TARGET} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_SOURCE_DIR}/include
+    )
+
+    target_compile_definitions(${TARGET} PRIVATE PICO_POE_MINIMAL=1)
+    target_compile_options(${TARGET} PRIVATE -fno-builtin-log)
+
+    target_link_libraries(${TARGET}
+        pico_stdlib
+        pico_multicore
+        pico_unique_id
+        pico_flash
+        hardware_flash
+        hardware_sync
+        hardware_watchdog
+        hardware_gpio
+        hardware_adc
+        pico_poe_rmii
+    )
+
+    pico_enable_stdio_usb(${TARGET} 1)
+    pico_enable_stdio_uart(${TARGET} 0)
+
+    pico_set_binary_version(${TARGET} MAJOR 9 MINOR 99)
+    pico_embed_pt_in_binary(${TARGET} ${CMAKE_SOURCE_DIR}/bootloader/partitions.json)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/keys/private.pem")
+        pico_sign_binary(${TARGET} ${CMAKE_SOURCE_DIR}/keys/private.pem)
+    endif()
+    pico_hash_binary(${TARGET})
+    pico_set_uf2_family(${TARGET} "rp2350-arm-s")
+    pico_package_uf2_output(${TARGET})
+    pico_add_extra_outputs(${TARGET})
+endfunction()
+
+pico_poe_define_app_minimal(pico_poe_min_initial)
