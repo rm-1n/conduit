@@ -1,5 +1,5 @@
 /**
- * PICO-POE Application Entry Point
+ * CONDUIT Application Entry Point
  *
  * Core 0: Network init → HTTP server → diagnostics
  * Core 1: RMII Ethernet polling loop (all lwIP work happens here)
@@ -13,10 +13,10 @@
 #include "hardware/watchdog.h"
 
 #include "network.h"
-#include "pico_poe_config.h"
+#include "conduit_config.h"
 #include "rmii_ethernet/netif.h"
 #include "lan8720a.h"
-#ifndef PICO_POE_MINIMAL
+#ifndef CONDUIT_MINIMAL
 #include "http_server.h"
 #include "ota.h"
 #include "log_buffer.h"
@@ -49,16 +49,16 @@ extern void netif_rmii_ethernet_poll(void);
 // symbols; the weak defaults here are no-ops so the firmware still links
 // and boots when no user code has been uploaded.
 //
-//   pico_poe_setup() — called once, after network/HTTP/core1 are up.
-//   pico_poe_loop()  — called at 1 kHz on core 0, between watchdog pats.
+//   conduit_setup() — called once, after network/HTTP/core1 are up.
+//   conduit_loop()  — called at 1 kHz on core 0, between watchdog pats.
 //
 // The loop hook runs alongside lwIP on core 1, so heavy CPU work in user
 // code won't starve the ethernet/HTTP server. The rate is intentionally
 // sleep-based (sleep_us) rather than hardware-timer-driven — simpler, and
 // good enough for blink/GPIO/sensor-poll use cases. Users who need a
-// precise periodic interrupt should set one up inside pico_poe_setup().
-__attribute__((weak)) void pico_poe_setup(void) {}
-__attribute__((weak)) void pico_poe_loop(void)  {}
+// precise periodic interrupt should set one up inside conduit_setup().
+__attribute__((weak)) void conduit_setup(void) {}
+__attribute__((weak)) void conduit_loop(void)  {}
 
 // rom_reboot() configures the same hardware watchdog to fire after its
 // delay_ms. Core 0's main loop calls watchdog_update() every 1 ms, which
@@ -102,19 +102,19 @@ int main() {
         while (1) tight_loop_contents();
     }
 
-#ifndef PICO_POE_MINIMAL
+#ifndef CONDUIT_MINIMAL
     // Initialize the runtime-console ring buffer. log() routes here (NOT
     // to USB stdio); printf stays USB-only for local debugging.
     log_buffer_init();
     // Binary data ring backing transmit(). Init early so user code in
-    // pico_poe_setup() (or the first iteration of pico_poe_loop()) can
+    // conduit_setup() (or the first iteration of conduit_loop()) can
     // call transmit() without missing the auto-registration step.
     data_buffer_init();
     // Register built-in /api/cmd handlers (gpio_*, adc_read). User code
-    // can poe_command_register() additional handlers from pico_poe_setup().
+    // can conduit_command_register() additional handlers from conduit_setup().
     commands_init();
 
-    printf("\n=== PICO-POE v%s ===\n", PICO_POE_VERSION_STRING);
+    printf("\n=== CONDUIT v%s ===\n", CONDUIT_VERSION_STRING);
 
     // Latch boot_type / TBYB-pending state before anything else can touch
     // the bootrom. Needed for /api/status and /api/commit semantics.
@@ -122,10 +122,10 @@ int main() {
 
     // Seed the runtime console with a boot banner so users see something
     // immediately when the web IDE attaches, even before their own log()
-    // calls fire. Firmware calls poe_log() directly; user code uses the
-    // `log` alias defined in pico_poe_user.h.
-    poe_log("[poe] firmware v%s booted (%s), ip %s\n",
-            PICO_POE_VERSION_STRING, ota_boot_type_str(), network_get_ip_str());
+    // calls fire. Firmware calls conduit_log() directly; user code uses the
+    // `log` alias defined in conduit_user.h.
+    conduit_log("[poe] firmware v%s booted (%s), ip %s\n",
+            CONDUIT_VERSION_STRING, ota_boot_type_str(), network_get_ip_str());
 
     // Start the HTTP API server (registers callbacks, no lwIP polling here)
     http_server_init();
@@ -133,7 +133,7 @@ int main() {
     // Minimal-firmware diagnostic build: no log_buffer, no data_buffer,
     // no commands, no OTA, no HTTP server. Just RMII + lwIP + ICMP. The
     // tiny heartbeat printf in the user loop below replaces diag.c.
-    printf("\n=== PICO-POE MINIMAL diag build ===\n");
+    printf("\n=== CONDUIT MINIMAL diag build ===\n");
 #endif
 
     // Read PHY registers before launching Core 1 (avoids MDIO bus race)
@@ -153,12 +153,12 @@ int main() {
 
     printf("[main] Core 1 launched, entering diagnostic loop\n");
 
-#ifdef PICO_POE_SIMULATE_HANG
+#ifdef CONDUIT_SIMULATE_HANG
     // Rollback sanity check: pretend we wedged just after init. Watchdog
     // will reset us before COMMIT_AFTER_TICKS, ROM rolls back to the
     // previous partition because explicit_buy never ran.
     watchdog_enable(WATCHDOG_TIMEOUT_MS, true);
-    printf("[main] PICO_POE_SIMULATE_HANG set — hanging forever\n");
+    printf("[main] CONDUIT_SIMULATE_HANG set — hanging forever\n");
     while (1) tight_loop_contents();
 #endif
 
@@ -171,7 +171,7 @@ int main() {
     // Run user-supplied one-shot setup before entering the periodic loop.
     // The web IDE ships a strong definition that overrides the weak stub
     // at the top of this file.
-    pico_poe_setup();
+    conduit_setup();
 
     // Main loop — Core 0 runs user's 1 kHz loop hook, pats the watchdog,
     // and prints a diagnostic line every ~1 s. No lwIP calls from here
@@ -211,7 +211,7 @@ int main() {
             continue;
         }
         watchdog_update();
-        pico_poe_loop();
+        conduit_loop();
 
         // Health check — once per diag print interval (≈ 1 s) is plenty
         // of resolution for a 60-second grace window.
@@ -237,7 +237,7 @@ int main() {
                     link_down_warned = true;
                 }
             }
-#ifndef PICO_POE_MINIMAL
+#ifndef CONDUIT_MINIMAL
             diag_print_line();
 #else
             // Minimal-firmware heartbeat: link, MDIO/MDC health, RX

@@ -1,5 +1,5 @@
 /**
- * PICO-POE A/B Bootloader
+ * CONDUIT A/B Bootloader
  *
  * Signed bootloader that loads the partition table, picks the correct
  * A/B partition (supporting flash updates), and chains into the application.

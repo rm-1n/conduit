@@ -5,7 +5,7 @@
 // and hands them to this module. Records survive tab close and can later
 // be exported as HDF5 by web/log_export.js.
 //
-// Schema (DB: "picopoe-logs", version 1):
+// Schema (DB: "conduit-logs", version 1):
 //   records: key = auto-increment, indexes:
 //              by_run      → [stream_epoch]            (fast per-run scan)
 //              by_run_time → [stream_epoch, uptime_us] (in-order iterate)
@@ -22,7 +22,7 @@
 (function () {
   'use strict';
 
-  const DB_NAME = 'picopoe-logs';
+  const DB_NAME = 'conduit-logs';
   const DB_VERSION = 2;
   const STORE_RECORDS = 'records';
   const STORE_RUNS = 'runs';
@@ -351,8 +351,8 @@
     });
   }
 
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.logStore = {
+  window.Conduit = window.Conduit || {};
+  window.Conduit.logStore = {
     open, startRun, setRunSchema, append, allRecords, allRuns,
     deleteRun, clear, stats, evictUntilUnder, appendData, allDataRecords,
   };

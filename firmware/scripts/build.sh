@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build PICO-POE firmware (bootloader + app)
+# Build CONDUIT firmware (bootloader + app)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -26,8 +26,8 @@ cmake --build "$BUILD_DIR" -j "$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/n
 
 echo ""
 echo "=== Build complete ==="
-echo "Bootloader: $BUILD_DIR/bootloader/pico_poe_bootloader.uf2"
-echo "App:        $BUILD_DIR/app/pico_poe_app.uf2"
+echo "Bootloader: $BUILD_DIR/bootloader/conduit_bootloader.uf2"
+echo "App:        $BUILD_DIR/app/conduit_app.uf2"
 echo ""
 echo "Flash order:"
 echo "  1. Hold BOOTSEL, connect USB, release → drag bootloader UF2"

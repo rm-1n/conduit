@@ -247,8 +247,8 @@
   //                       the cold-boot A/B selection.
   async function finalizeElf(elfBytes, opts) {
     const { setTbyb = true, version: versionOverride = null } = opts || {};
-    const elf = root.PicoPoE.elf.parseElf(elfBytes);
-    const chunks = root.PicoPoE.elf.loadableChunks(elf);
+    const elf = root.Conduit.elf.parseElf(elfBytes);
+    const chunks = root.Conduit.elf.loadableChunks(elf);
     if (!chunks.length) throw new Error('no loadable chunks');
 
     const existing = findExistingBlock(chunks);
@@ -361,6 +361,6 @@
     return { extraChunks, patches, hash, newBlockFlashAddr, existingBlockFlashAddr };
   }
 
-  root.PicoPoE = root.PicoPoE || {};
-  root.PicoPoE.finalize = { finalizeElf };
+  root.Conduit = root.Conduit || {};
+  root.Conduit.finalize = { finalizeElf };
 })(typeof window !== 'undefined' ? window : globalThis);

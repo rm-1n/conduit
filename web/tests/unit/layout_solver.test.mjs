@@ -21,8 +21,8 @@ import { strict as assert } from 'node:assert';
 import { loadModule } from './_load.mjs';
 
 const win = loadModule('ide.js');
-const solveLayout = win.PicoPoE && win.PicoPoE.layout && win.PicoPoE.layout.solve;
-if (!solveLayout) throw new Error('window.PicoPoE.layout.solve not exposed by ide.js');
+const solveLayout = win.Conduit && win.Conduit.layout && win.Conduit.layout.solve;
+if (!solveLayout) throw new Error('window.Conduit.layout.solve not exposed by ide.js');
 
 // Default mins lifted from style.css / index.html. Kept here so the
 // tests detect drift if either side bumps a min without updating

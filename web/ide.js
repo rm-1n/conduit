@@ -17,7 +17,7 @@
   const BLINK_TEMPLATE = `#include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include <math.h>
-#include "pico_poe_user.h"   // log(), transmit(), on_command()
+#include "conduit_user.h"   // log(), transmit(), on_command()
 
 #define LED_PIN 25
 
@@ -31,7 +31,7 @@ static volatile float    sine_amplitude     = 1.0f;
 // Try it: bottom-right "Cmd" row → name=set_blink, args=value=200
 //
 // Callbacks run on the network stack's TCP-callback context. Keep them
-// fast — flip a flag here, do the heavy work in pico_poe_loop().
+// fast — flip a flag here, do the heavy work in conduit_loop().
 //
 // Return NULL on success (the framework replies {"ok":true,"value":<v>})
 // or a static error string (HTTP 400, {"ok":false,"error":"..."}).
@@ -53,7 +53,7 @@ static const char *on_set_amp(float value) {
 
 // Runs once after boot. Wire up your pins + peripherals here, and
 // register any custom commands.
-void pico_poe_setup(void) {
+void conduit_setup(void) {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
@@ -67,7 +67,7 @@ void pico_poe_setup(void) {
     on_command("set_blink", I32, on_set_blink);
     on_command("set_amp",   F32, on_set_amp);
 
-    log("hello from pico_poe_setup()\\n");
+    log("hello from conduit_setup()\\n");
 }
 
 // Runs at 1 kHz on core 0. Keep it fast — heavy work starves the network
@@ -76,7 +76,7 @@ void pico_poe_setup(void) {
 // log() prints to the runtime console pane.
 // transmit() streams numeric data to the live chart pane (and IndexedDB).
 // Names are UPPER_SNAKE_CASE and auto-register on first call.
-void pico_poe_loop(void) {
+void conduit_loop(void) {
     static uint32_t ticks = 0;
     static bool led_on = false;
     ticks++;
@@ -114,7 +114,7 @@ void pico_poe_loop(void) {
   //     edited; silently update to the new template.
   //   - Otherwise → user has edits we don't want to lose; keep the saved
   //     source but warn in the build log so they know how to reset.
-  const SOURCE_STORAGE_KEY = 'picopoe_source_v2';
+  const SOURCE_STORAGE_KEY = 'conduit_source_v2';
   const TEMPLATE_VERSION = 4;
 
   let editorMounted = false;
@@ -141,8 +141,8 @@ void pico_poe_loop(void) {
 
   function resetTemplate() {
     try { localStorage.removeItem(SOURCE_STORAGE_KEY); } catch (_) {}
-    if (window.PicoPoE && window.PicoPoE.editor && window.PicoPoE.editor.setSource) {
-      window.PicoPoE.editor.setSource(BLINK_TEMPLATE);
+    if (window.Conduit && window.Conduit.editor && window.Conduit.editor.setSource) {
+      window.Conduit.editor.setSource(BLINK_TEMPLATE);
     }
     persistSource(BLINK_TEMPLATE);
     logLine('Editor reset to default template.');
@@ -151,7 +151,7 @@ void pico_poe_loop(void) {
   async function ensureEditor() {
     if (editorMounted) return;
     editorMounted = true;
-    const api = window.PicoPoE && window.PicoPoE.editor;
+    const api = window.Conduit && window.Conduit.editor;
     if (!api) {
       logLine('editor.js not loaded; source edit disabled');
       return;
@@ -201,7 +201,7 @@ void pico_poe_loop(void) {
   // the DOM with a new --var name.
   // ---------------------------------------------------------------------
 
-  const LAYOUT_KEY = 'picopoe.layout';
+  const LAYOUT_KEY = 'conduit.layout';
   const DEFAULT_MIN_PANE_PX = 120;   // per-resizer min, override via data-min-px
 
   function loadLayout() {
@@ -221,7 +221,7 @@ void pico_poe_loop(void) {
   // telemetry then log) so cascading constraints settle in a single
   // pass. See web/tests/unit/layout_solver.test.mjs for the contract.
   // The DOM-driven clamp paths below call this; tests drive it
-  // directly via window.PicoPoE.layout.solve.
+  // directly via window.Conduit.layout.solve.
   function solveLayout({ ideLayoutPx, telemetryPct, logPct, mins }) {
     const m = mins || { log: 360, console: 420, telemetry: 420, resizer: 6 };
     // Clamp telemetry first (outer): main column needs at least
@@ -252,8 +252,8 @@ void pico_poe_loop(void) {
     }
     return { telemetryPct: telPct, logPct: cLogPct };
   }
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.layout = { solve: solveLayout };
+  window.Conduit = window.Conduit || {};
+  window.Conduit.layout = { solve: solveLayout };
 
   // Compute a resizer's allowed [min%, max%] band against its current
   // container width. Used both during drag (live clamp) and on init /
@@ -372,7 +372,7 @@ void pico_poe_loop(void) {
     // left (away from the right edge = "pull the panel back out").
     const toggleBtn = document.getElementById('ide-toggle-telemetry');
     const main = document.getElementById('ide-main-layout');
-    const icons = window.PicoPoE && window.PicoPoE.icons;
+    const icons = window.Conduit && window.Conduit.icons;
     if (toggleBtn && main) {
       const apply = (hidden) => {
         main.classList.toggle('telemetry-hidden', !!hidden);
@@ -417,8 +417,8 @@ void pico_poe_loop(void) {
     const dlBtn = document.getElementById('ide-telemetry-download');
     if (dlBtn) {
       dlBtn.addEventListener('click', async () => {
-        const exporter = window.PicoPoE && window.PicoPoE.logExport;
-        const nc = window.PicoPoE && window.PicoPoE.netcon;
+        const exporter = window.Conduit && window.Conduit.logExport;
+        const nc = window.Conduit && window.Conduit.netcon;
         if (!exporter) {
           if (nc) nc.err('Download failed: log exporter not loaded');
           return;
@@ -435,10 +435,10 @@ void pico_poe_loop(void) {
           dlBtn.disabled = true;
           dlBtn.title = 'Preparing HDF5…';
           // Push any in-flight batches to IndexedDB before reading.
-          if (window.PicoPoE.console   && window.PicoPoE.console.flushPersist)
-            window.PicoPoE.console.flushPersist();
-          if (window.PicoPoE.telemetry && window.PicoPoE.telemetry.flushPersist)
-            window.PicoPoE.telemetry.flushPersist();
+          if (window.Conduit.console   && window.Conduit.console.flushPersist)
+            window.Conduit.console.flushPersist();
+          if (window.Conduit.telemetry && window.Conduit.telemetry.flushPersist)
+            window.Conduit.telemetry.flushPersist();
           const summary = await exporter.downloadHdf5({
             cutoffWallMs,
             onProgress: ({ pct, label }) => prog.update(pct, label),
@@ -583,7 +583,7 @@ void pico_poe_loop(void) {
 
   function initIde() {
     console.log('[ide.js] demo polish; v=' +
-                (window.PICOPOE_ASSET_VERSION || 'unknown'));
+                (window.CONDUIT_ASSET_VERSION || 'unknown'));
 
     const deviceSelect = document.getElementById('ide-device-select');
     const rescanBtn = document.getElementById('ide-rescan-btn');
@@ -595,7 +595,7 @@ void pico_poe_loop(void) {
     // getIp() returns null → no auto-reconnect, even though the
     // device is reachable.
     try {
-      const s = JSON.parse(localStorage.getItem('picopoe') || '{}');
+      const s = JSON.parse(localStorage.getItem('conduit') || '{}');
       if (s.token) token.value = s.token;
       const ipInput = document.getElementById('ide-quick-ip');
       if (ipInput && !ipInput.value && s.quick_ip) ipInput.value = s.quick_ip;
@@ -603,12 +603,12 @@ void pico_poe_loop(void) {
 
     const persist = () => {
       try {
-        const s = JSON.parse(localStorage.getItem('picopoe') || '{}');
+        const s = JSON.parse(localStorage.getItem('conduit') || '{}');
         s.ide_ip = deviceSelect.value;
         s.token  = token.value;
         const ipInput = document.getElementById('ide-quick-ip');
         if (ipInput) s.quick_ip = ipInput.value.trim();
-        localStorage.setItem('picopoe', JSON.stringify(s));
+        localStorage.setItem('conduit', JSON.stringify(s));
       } catch (_) {}
     };
     // Persist the quick-IP field on every edit so the next reload
@@ -620,9 +620,9 @@ void pico_poe_loop(void) {
       persist();
       // Let the console tear down its cursor so the next poll gets the
       // current-cursor reset of the newly-selected device.
-      if (window.PicoPoE && window.PicoPoE.console) {
-        window.PicoPoE.console.resetCursor();
-        window.PicoPoE.console.clear();
+      if (window.Conduit && window.Conduit.console) {
+        window.Conduit.console.resetCursor();
+        window.Conduit.console.clear();
       }
     });
     token.addEventListener('change', persist);
@@ -630,11 +630,11 @@ void pico_poe_loop(void) {
     // Populate the dropdown from the last scan's results.
     function refreshDeviceList() {
       const prevValue = deviceSelect.value || (() => {
-        try { return JSON.parse(localStorage.getItem('picopoe') || '{}').ide_ip || ''; }
+        try { return JSON.parse(localStorage.getItem('conduit') || '{}').ide_ip || ''; }
         catch (_) { return ''; }
       })();
-      const known = (window.PicoPoE && typeof window.PicoPoE.getKnownDevices === 'function')
-        ? window.PicoPoE.getKnownDevices() : [];
+      const known = (window.Conduit && typeof window.Conduit.getKnownDevices === 'function')
+        ? window.Conduit.getKnownDevices() : [];
       deviceSelect.innerHTML = '';
       if (known.length === 0) {
         const opt = document.createElement('option');
@@ -657,14 +657,14 @@ void pico_poe_loop(void) {
       else if (known.length > 0) deviceSelect.value = known[0].ip;
     }
     refreshDeviceList();
-    window.addEventListener('picopoe:devices-updated', refreshDeviceList);
+    window.addEventListener('conduit:devices-updated', refreshDeviceList);
 
     // Rescan button: scan the /24 of the currently-known or quick IP.
     rescanBtn.addEventListener('click', async () => {
       let subnet = document.getElementById('subnet').value.trim();
       if (!subnet) {
         const quick = document.getElementById('ide-quick-ip').value.trim();
-        const known = window.PicoPoE.getKnownDevices();
+        const known = window.Conduit.getKnownDevices();
         if (quick && quick.split('.').length >= 3) {
           subnet = quick.split('.').slice(0, 3).join('.');
         } else if (known.length && known[0].ip) {
@@ -678,7 +678,7 @@ void pico_poe_loop(void) {
       rescanBtn.disabled = true;
       connStatus(`Scanning ${subnet}.0/24…`);
       try {
-        const found = await window.PicoPoE.startScan({ subnet });
+        const found = await window.Conduit.startScan({ subnet });
         connStatus(`${found.length} device(s)`, 'ok');
       } catch (e) {
         connStatus(`scan error: ${e.message || e}`, 'err');
@@ -697,7 +697,7 @@ void pico_poe_loop(void) {
       quickBtn.disabled = true;
       connStatus(`Probing ${ip}…`);
       try {
-        const result = await window.PicoPoE.probeAndRemember(ip);
+        const result = await window.Conduit.probeAndRemember(ip);
         if (result) {
           connStatus(`Added ${ip} (v${result.version}, ${result.partition})`, 'ok');
           deviceSelect.value = ip;
@@ -732,15 +732,15 @@ void pico_poe_loop(void) {
       try {
         if (refreshBtn) refreshBtn.disabled = true;
         connStatus(`Reconnecting ${ip}…`);
-        const result = await window.PicoPoE.probeAndRemember(ip);
+        const result = await window.Conduit.probeAndRemember(ip);
         if (!result) { connStatus(`no response from ${ip}`, 'err'); return; }
         // Cycle telemetry: pause aborts the in-flight fetch + clears
         // chart, resume starts a fresh stream against the now-verified
         // device. Console has the same effect via resetCursor + clear.
-        const tel = window.PicoPoE && window.PicoPoE.telemetry;
+        const tel = window.Conduit && window.Conduit.telemetry;
         if (tel && tel.pause)  tel.pause();
         if (tel && tel.resume) tel.resume();
-        const con = window.PicoPoE && window.PicoPoE.console;
+        const con = window.Conduit && window.Conduit.console;
         if (con && con.resetCursor) con.resetCursor();
         if (con && con.clear)       con.clear();
         connStatus(`Reconnected (v${result.version}, ${result.partition})`, 'ok');
@@ -788,12 +788,12 @@ void pico_poe_loop(void) {
 
     // Persist source on every edit (debounced).
     let persistSrcTimer = 0;
-    if (window.PicoPoE && window.PicoPoE.editor && window.PicoPoE.editor.onChange) {
-      window.PicoPoE.editor.onChange(() => {
+    if (window.Conduit && window.Conduit.editor && window.Conduit.editor.onChange) {
+      window.Conduit.editor.onChange(() => {
         clearTimeout(persistSrcTimer);
         persistSrcTimer = setTimeout(() => {
           try {
-            const src = window.PicoPoE.editor.getSource();
+            const src = window.Conduit.editor.getSource();
             if (src != null) persistSource(src);
           } catch (_) {}
         }, 400);
@@ -815,7 +815,7 @@ void pico_poe_loop(void) {
 
   async function buildUf2(opts) {
     const { version = null } = opts || {};
-    const api = window.PicoPoE || {};
+    const api = window.Conduit || {};
     if (typeof api.elfToUf2 !== 'function') {
       throw new Error('UF2 pipeline not available (uf2.js missing).');
     }
@@ -864,7 +864,7 @@ void pico_poe_loop(void) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'pico_poe_app.uf2';
+      a.download = 'conduit_app.uf2';
       a.click();
       URL.revokeObjectURL(url);
       logLine(`built ${uf2.byteLength} bytes, ${uf2.byteLength / 512} UF2 blocks`);
@@ -895,7 +895,7 @@ void pico_poe_loop(void) {
 
     const stampVer = nextStampedVersion();
     try {
-      const pre = await window.PicoPoE.getStatus(ip);
+      const pre = await window.Conduit.getStatus(ip);
       logLine(`device at v${pre.version} on partition ${pre.partition} — stamping v${stampVer.major}.${stampVer.minor}`);
     } catch (e) {
       logLine(`precheck failed (${e.message}); stamping v${stampVer.major}.${stampVer.minor} anyway`);
@@ -926,19 +926,19 @@ void pico_poe_loop(void) {
     //     "half-closed" state in the browser; without an explicit abort
     //     the next reconnect can take 10+ s.
     // Wrapping in try/finally guarantees we resume even on upload errors.
-    const tlm = window.PicoPoE && window.PicoPoE.telemetry;
+    const tlm = window.Conduit && window.Conduit.telemetry;
     if (tlm && tlm.pause) tlm.pause();
     // Same treatment for the runtime console — without this, its
     // /api/log fetch sits half-open through the reboot and the LED
     // stays misleadingly green for ~10 s after the device drops off
     // the network. pauseStream flips it to 'updating…' immediately;
     // resumeStream after commit drops cursor + reconnects.
-    const con = window.PicoPoE && window.PicoPoE.console;
+    const con = window.Conduit && window.Conduit.console;
     if (con && con.pauseStream) con.pauseStream();
 
     let result;
     try {
-      result = await window.PicoPoE.updateFirmware({
+      result = await window.Conduit.updateFirmware({
         ip, token, data: uf2,
         onProgress: ({ pct, loaded, total }) => {
           // Upload covers 50..95% of the overall bar; the last 5% is
@@ -973,7 +973,7 @@ void pico_poe_loop(void) {
     // is confusing because the chip you just successfully OTA'd reads
     // as if nothing happened.
     if (result.post && result.post.version) {
-      window.PicoPoE.updateKnownDevice(ip, {
+      window.Conduit.updateKnownDevice(ip, {
         version:   result.post.version,
         partition: result.post.partition,
         mac:       result.post.mac,
@@ -983,7 +983,7 @@ void pico_poe_loop(void) {
       // Rollback / unreachable: write the pre-state so the dropdown
       // still reflects what's actually running, not the (uncommitted)
       // attempted version.
-      window.PicoPoE.updateKnownDevice(ip, {
+      window.Conduit.updateKnownDevice(ip, {
         version:   result.pre.version,
         partition: result.pre.partition,
         mac:       result.pre.mac,
@@ -1057,7 +1057,7 @@ void pico_poe_loop(void) {
   // localStorage). On the very first run we use a sensible cold-cache
   // estimate. The bar fills at a constant rate and the per-stage
   // label tells the user which phase is currently running.
-  const BUILD_DURATION_KEY = 'picopoe.lastBuildMs';
+  const BUILD_DURATION_KEY = 'conduit.lastBuildMs';
   const BUILD_DURATION_DEFAULT_MS = 30_000;   // typical cold-cache run
   let buildStartMs = 0;
   let estimatedBuildMs = BUILD_DURATION_DEFAULT_MS;
@@ -1094,7 +1094,7 @@ void pico_poe_loop(void) {
   // is kept clear of connection content; build/upload progress still
   // uses setStatus.
   function connStatus(text, kind) {
-    const con = window.PicoPoE && window.PicoPoE.console;
+    const con = window.Conduit && window.Conduit.console;
     if (con && con.note) con.note(text, kind);
     else console.log('[conn]', text);
   }

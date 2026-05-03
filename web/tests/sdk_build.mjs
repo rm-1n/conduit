@@ -154,12 +154,12 @@ const BLINK = `
 
 #define LED_PIN 25
 
-void pico_poe_setup(void) {
+void conduit_setup(void) {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 }
 
-void pico_poe_loop(void) {
+void conduit_loop(void) {
     static uint32_t n = 0;
     if (++n >= 500) {
         n = 0;
@@ -249,6 +249,6 @@ const elf = new Uint8Array(Module.FS.readFile('/app.elf'));
 console.log(`  app.elf = ${elf.byteLength} B`);
 
 // ---- UF2 ----
-const uf2 = globalThis.PicoPoE.elfToUf2(elf);
+const uf2 = globalThis.Conduit.elfToUf2(elf);
 console.log(`\n=== UF2: ${uf2.byteLength} B (${uf2.byteLength / 512} blocks) ===`);
 console.log('\nSUCCESS: SDK blink compiled + linked + UF2-converted.');

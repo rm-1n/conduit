@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-// Initialize the raw TCP HTTP server on PICO_POE_HTTP_PORT
+// Initialize the raw TCP HTTP server on CONDUIT_HTTP_PORT
 void http_server_init(void);
 
 // Reap persistent stream PCBs (/api/log?stream=1, /api/data?stream=1)

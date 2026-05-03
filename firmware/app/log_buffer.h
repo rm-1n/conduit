@@ -24,15 +24,15 @@ void log_buffer_init(void);
 // that don't start with "[<digits>]\t") as belonging to the previous
 // record's timestamp.
 //
-// Note: named poe_log (not log) because the Pico SDK's pico_double library
+// Note: named conduit_log (not log) because the Pico SDK's pico_double library
 // already claims the linker name `log` via --wrap=log for double-precision
-// natural log. Our web IDE user header (pico_poe_user.h) textually aliases
-// `log` to `poe_log` so user code can still type log("...").
+// natural log. Our web IDE user header (conduit_user.h) textually aliases
+// `log` to `conduit_log` so user code can still type log("...").
 //
 // Each record shares a 256-byte stack buffer with the timestamp prefix
 // (~22 bytes), so the user payload is effectively capped at ~232 bytes.
 // Longer messages are truncated.
-void poe_log(const char *fmt, ...)
+void conduit_log(const char *fmt, ...)
     __attribute__((format(printf, 1, 2)));
 
 // Copy up to `max` bytes starting at absolute cursor `since` into `out`.
@@ -46,6 +46,6 @@ size_t log_buffer_read(uint32_t since, uint8_t *out, size_t max,
 // only see new output going forward.
 uint32_t log_buffer_total_written(void);
 
-// How many times poe_log() has been entered. Pair with the byte total
+// How many times conduit_log() has been entered. Pair with the byte total
 // to distinguish "callers stopped calling" from "calls were dropped".
 uint32_t log_buffer_call_count(void);

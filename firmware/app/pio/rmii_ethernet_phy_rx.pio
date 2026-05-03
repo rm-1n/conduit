@@ -5,10 +5,10 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  *
- * Modified for PICO-POE board pin mapping.
+ * Modified for CONDUIT board pin mapping.
  */
 
-// GPIO assignments for PICO-POE board
+// GPIO assignments for CONDUIT board
 .define public PICO_RMII_ETHERNET_SM_RX       1
 .define public PICO_RMII_ETHERNET_SM_TX       0
 .define public PICO_RMII_ETHERNET_RX_PIN      6  // rx pin start: RX0(GP6), RX1(GP7), CRS_DV(GP8)

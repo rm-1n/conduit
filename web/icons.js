@@ -89,8 +89,8 @@
     }
   }
 
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.icons = { svg, set, hydrate, NAMES: Object.keys(PATHS) };
+  window.Conduit = window.Conduit || {};
+  window.Conduit.icons = { svg, set, hydrate, NAMES: Object.keys(PATHS) };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => hydrate());

@@ -4,9 +4,9 @@ set(LWIP_PATH "${PICO_SDK_PATH}/lib/lwip")
 set(RMII_LIB_DIR "${CMAKE_SOURCE_DIR}/lib/pico-rmii-ethernet_nce")
 
 # ---- lwIP library (from SDK) ----
-add_library(pico_poe_lwip INTERFACE)
+add_library(conduit_lwip INTERFACE)
 
-target_sources(pico_poe_lwip INTERFACE
+target_sources(conduit_lwip INTERFACE
     ${LWIP_PATH}/src/core/altcp.c
     ${LWIP_PATH}/src/core/altcp_alloc.c
     ${LWIP_PATH}/src/core/altcp_tcp.c
@@ -41,7 +41,7 @@ target_sources(pico_poe_lwip INTERFACE
     ${RMII_LIB_DIR}/src/lwip/sys_arch.c
 )
 
-target_include_directories(pico_poe_lwip INTERFACE
+target_include_directories(conduit_lwip INTERFACE
     ${LWIP_PATH}/src/include
     # Our lwipopts.h takes precedence (searched first)
     ${CMAKE_CURRENT_LIST_DIR}
@@ -50,53 +50,53 @@ target_include_directories(pico_poe_lwip INTERFACE
 )
 
 # ---- RMII Ethernet driver ----
-add_library(pico_poe_rmii INTERFACE)
+add_library(conduit_rmii INTERFACE)
 
-target_sources(pico_poe_rmii INTERFACE
+target_sources(conduit_rmii INTERFACE
     ${RMII_LIB_DIR}/src/rmii_ethernet.c
 )
 
-target_include_directories(pico_poe_rmii INTERFACE
+target_include_directories(conduit_rmii INTERFACE
     ${RMII_LIB_DIR}/src/include
 )
 
 # Generate PIO headers from our PATCHED .pio files (not the submodule originals)
-pico_generate_pio_header(pico_poe_rmii ${CMAKE_CURRENT_LIST_DIR}/pio/rmii_ethernet_phy_rx.pio)
-pico_generate_pio_header(pico_poe_rmii ${CMAKE_CURRENT_LIST_DIR}/pio/rmii_ethernet_phy_tx.pio)
+pico_generate_pio_header(conduit_rmii ${CMAKE_CURRENT_LIST_DIR}/pio/rmii_ethernet_phy_rx.pio)
+pico_generate_pio_header(conduit_rmii ${CMAKE_CURRENT_LIST_DIR}/pio/rmii_ethernet_phy_tx.pio)
 
-target_link_libraries(pico_poe_rmii INTERFACE
+target_link_libraries(conduit_rmii INTERFACE
     hardware_pio
     hardware_dma
     hardware_pwm
     pico_stdlib
     pico_unique_id
-    pico_poe_lwip
+    conduit_lwip
 )
 
 # ---- Rollback sanity knob ---------------------------------------------------
-# `cmake -B build -DPICO_POE_SIMULATE_HANG=ON` hangs the app right after
+# `cmake -B build -DCONDUIT_SIMULATE_HANG=ON` hangs the app right after
 # init; combined with the watchdog + TBYB this drives the ROM-level
 # rollback path so we can verify it works end-to-end.
-option(PICO_POE_SIMULATE_HANG "Hang after init to exercise the TBYB watchdog rollback" OFF)
+option(CONDUIT_SIMULATE_HANG "Hang after init to exercise the TBYB watchdog rollback" OFF)
 
 # ---- App executable helper --------------------------------------------------
 #
 # The app ships as two UF2s built from the same source:
 #
-#   pico_poe_app.uf2          - TBYB-flagged. The RP2350 bootrom boots it only
+#   conduit_app.uf2          - TBYB-flagged. The RP2350 bootrom boots it only
 #                               after a flash-update reboot. Intended for OTA
 #                               updates where rom_explicit_buy / rollback
 #                               semantics apply.
 #
-#   pico_poe_app_initial.uf2  - No TBYB flag. Boots on any plain power-on.
+#   conduit_app_initial.uf2  - No TBYB flag. Boots on any plain power-on.
 #                               Used for the first install via BOOTSEL
-#                               (`pico-poe provision`) — subsequent updates go
+#                               (`conduit provision`) — subsequent updates go
 #                               through the TBYB build.
 #
 # Both binaries are otherwise identical (same partition table, version, and
 # signing/hashing) so they round-trip cleanly through the A/B selector.
 
-function(pico_poe_define_app TARGET)
+function(conduit_define_app TARGET)
     set(options TBYB)
     cmake_parse_arguments(APP "${options}" "" "" ${ARGN})
 
@@ -126,8 +126,8 @@ function(pico_poe_define_app TARGET)
     if(APP_TBYB)
         target_compile_definitions(${TARGET} PRIVATE PICO_CRT0_IMAGE_TYPE_TBYB=1)
     endif()
-    if(PICO_POE_SIMULATE_HANG)
-        target_compile_definitions(${TARGET} PRIVATE PICO_POE_SIMULATE_HANG=1)
+    if(CONDUIT_SIMULATE_HANG)
+        target_compile_definitions(${TARGET} PRIVATE CONDUIT_SIMULATE_HANG=1)
     endif()
 
     target_link_libraries(${TARGET}
@@ -140,7 +140,7 @@ function(pico_poe_define_app TARGET)
         hardware_watchdog
         hardware_gpio
         hardware_adc
-        pico_poe_rmii
+        conduit_rmii
     )
 
     # Console output via USB
@@ -173,8 +173,8 @@ endfunction()
 
 # The two full variants. Both always build; the first-install UF2 is
 # small enough that the extra link time is negligible.
-pico_poe_define_app(pico_poe_app         TBYB)
-pico_poe_define_app(pico_poe_app_initial)
+conduit_define_app(conduit_app         TBYB)
+conduit_define_app(conduit_app_initial)
 
 # ---- Minimal diagnostic variant ---------------------------------------------
 #
@@ -182,11 +182,11 @@ pico_poe_define_app(pico_poe_app_initial)
 # leaves just RMII + lwIP + ICMP echo. Used to isolate cable-replug recovery
 # from any TCP/HTTP/browser influence. Same partition table embed and signing
 # as the full app so it boots from partition A under the existing bootloader,
-# but has its own UF2 output (`pico_poe_min_initial.uf2`) and uses the
-# PICO_POE_MINIMAL define to compile out the strippable code in main.c +
+# but has its own UF2 output (`conduit_min_initial.uf2`) and uses the
+# CONDUIT_MINIMAL define to compile out the strippable code in main.c +
 # network.c. Flash via picotool directly:
-#   picotool load -F build/app/pico_poe_min_initial.uf2 && picotool reboot
-function(pico_poe_define_app_minimal TARGET)
+#   picotool load -F build/app/conduit_min_initial.uf2 && picotool reboot
+function(conduit_define_app_minimal TARGET)
     add_executable(${TARGET}
         main.c
         network.c
@@ -197,7 +197,7 @@ function(pico_poe_define_app_minimal TARGET)
         ${CMAKE_SOURCE_DIR}/include
     )
 
-    target_compile_definitions(${TARGET} PRIVATE PICO_POE_MINIMAL=1)
+    target_compile_definitions(${TARGET} PRIVATE CONDUIT_MINIMAL=1)
     target_compile_options(${TARGET} PRIVATE -fno-builtin-log)
 
     target_link_libraries(${TARGET}
@@ -210,7 +210,7 @@ function(pico_poe_define_app_minimal TARGET)
         hardware_watchdog
         hardware_gpio
         hardware_adc
-        pico_poe_rmii
+        conduit_rmii
     )
 
     pico_enable_stdio_usb(${TARGET} 1)
@@ -227,4 +227,4 @@ function(pico_poe_define_app_minimal TARGET)
     pico_add_extra_outputs(${TARGET})
 endfunction()
 
-pico_poe_define_app_minimal(pico_poe_min_initial)
+conduit_define_app_minimal(conduit_min_initial)

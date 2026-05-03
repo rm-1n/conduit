@@ -69,7 +69,7 @@ def build_firmware(firmware_dir, sdk_path, toolchain_bin):
     ncpu = os.cpu_count() or 4
     _run(f"cmake --build build -j{ncpu}", env=env, cwd=firmware_dir)
 
-    uf2 = os.path.join(firmware_dir, "build", "app", "pico_poe_app.uf2")
+    uf2 = os.path.join(firmware_dir, "build", "app", "conduit_app.uf2")
     if not os.path.isfile(uf2):
         fail(f"UF2 not found at {uf2}")
         sys.exit(1)
@@ -86,8 +86,8 @@ def firmware_uf2_paths(firmware_dir):
     path triggers."""
     return (
         os.path.join(firmware_dir, "build", "bootloader", "partition_table.uf2"),
-        os.path.join(firmware_dir, "build", "app", "pico_poe_app_initial.uf2"),
-        os.path.join(firmware_dir, "build", "app", "pico_poe_app.uf2"),
+        os.path.join(firmware_dir, "build", "app", "conduit_app_initial.uf2"),
+        os.path.join(firmware_dir, "build", "app", "conduit_app.uf2"),
     )
 
 
@@ -700,7 +700,7 @@ def ab_cycle(ip, token, next_uf2_path):
 
     if pre_partition not in ("A", "B"):
         fail(f"Device is not on an A/B partition (got {pre_partition!r}). "
-             "Run `pico-poe provision` first.")
+             "Run `conduit provision` first.")
         return False
 
     if not ota_upload(ip, token, next_uf2_path):

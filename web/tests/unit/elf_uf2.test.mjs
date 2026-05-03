@@ -13,11 +13,11 @@ import { strict as assert } from 'node:assert';
 import { loadModule } from './_load.mjs';
 
 // Load elf.js + uf2.js into the same window — uf2 looks up
-// PicoPoE.elf via the shared root.
+// Conduit.elf via the shared root.
 const win = loadModule('elf.js');
 loadModule('uf2.js', win);
-const elfMod = win.PicoPoE.elf;
-const uf2Mod = win.PicoPoE.uf2;
+const elfMod = win.Conduit.elf;
+const uf2Mod = win.Conduit.uf2;
 
 // ---- Synthetic ELF builder -----------------------------------------
 

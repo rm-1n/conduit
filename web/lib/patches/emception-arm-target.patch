@@ -1,4 +1,4 @@
-Two Emception build-script tweaks needed for the pico-poe browser IDE:
+Two Emception build-script tweaks needed for the conduit browser IDE:
 
 1. Enable the LLVM ARM backend in Emception's WASM build, so the resulting
    clang can cross-compile C source for ARM Cortex-M33 (thumbv8m.main-none-eabi)

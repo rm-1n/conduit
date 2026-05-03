@@ -1,5 +1,5 @@
-#ifndef PICO_POE_DIAG_H
-#define PICO_POE_DIAG_H
+#ifndef CONDUIT_DIAG_H
+#define CONDUIT_DIAG_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -26,4 +26,4 @@ extern volatile uint32_t g_core1_iter;
 // DIAG_PRINT_EVERY tick.
 void diag_print_line(void);
 
-#endif /* PICO_POE_DIAG_H */
+#endif /* CONDUIT_DIAG_H */

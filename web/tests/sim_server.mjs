@@ -1,4 +1,4 @@
-// sim_server.mjs — Minimal headless emulator of the PICO-POE device's
+// sim_server.mjs — Minimal headless emulator of the CONDUIT device's
 // HTTP API. Stand-in for a real board so the browser IDE can be driven
 // for UI screenshots, layout/density verification, and Playwright tests
 // without flashing hardware.
@@ -71,7 +71,7 @@ const CHANNELS = [
     sample()     { return seqCounter++; } },
 ];
 
-// Command registry — analog of firmware's on_command()/poe_command_register().
+// Command registry — analog of firmware's on_command()/conduit_command_register().
 // Handlers receive the parsed query args object and return either
 //   { ok: true,  result: <anything> }  — surfaced in the netcon as the
 //                                        success payload; mirrors the
@@ -235,7 +235,7 @@ function sendJson(res, code, body) {
 
 function handleStatus(_req, res) {
   sendJson(res, 200, {
-    device:    'pico-poe',
+    device:    'conduit',
     version:   VERSION,
     partition: PARTITION,
     mac:       '00:DE:AD:BE:EF:01',

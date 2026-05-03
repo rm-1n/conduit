@@ -1,7 +1,7 @@
 // chart.js — uPlot-backed live telemetry charts.
 //
 // Architecture: plots are PURE DISPLAYS over the central in-memory time-
-// series store (window.PicoPoE.dataStore). Each Chart owns a uPlot
+// series store (window.Conduit.dataStore). Each Chart owns a uPlot
 // canvas + per-plot view config (window length, channel filter, legend
 // visibility, per-plot zoom-cutoff) but NOT the underlying samples.
 // Every render slices the dataStore for the requested wall-clock window
@@ -16,17 +16,17 @@
 // lives ONCE in the telemetry-pane header (#ide-telemetry-stats).
 //
 // External API (kept stable so telemetry.js doesn't need to change):
-//   window.PicoPoE.chart.push({ name, n, dtype, wallMs, values })
+//   window.Conduit.chart.push({ name, n, dtype, wallMs, values })
 //                                                      → notify all charts
-//   window.PicoPoE.chart.clear()                       → all charts (per-plot cutoff)
-//   window.PicoPoE.chart.reset()                       → all charts (full rebuild)
-//   window.PicoPoE.chart.gap()                         → no-op (gaps detected from wallMs deltas)
+//   window.Conduit.chart.clear()                       → all charts (per-plot cutoff)
+//   window.Conduit.chart.reset()                       → all charts (full rebuild)
+//   window.Conduit.chart.gap()                         → no-op (gaps detected from wallMs deltas)
 //
 // Multi-plot API:
-//   window.PicoPoE.charts.list()              → Chart[]
-//   window.PicoPoE.charts.add(opts?)          → Chart
-//   window.PicoPoE.charts.remove(id)          → bool
-//   window.PicoPoE.charts.persist()           → ()
+//   window.Conduit.charts.list()              → Chart[]
+//   window.Conduit.charts.add(opts?)          → Chart
+//   window.Conduit.charts.remove(id)          → bool
+//   window.Conduit.charts.persist()           → ()
 
 (function () {
   'use strict';
@@ -116,7 +116,7 @@
   function updateCentralStats() {
     if (!centralStatsEl) centralStatsEl = document.getElementById('ide-telemetry-stats');
     if (!centralStatsEl) return;
-    const ds = window.PicoPoE && window.PicoPoE.dataStore;
+    const ds = window.Conduit && window.Conduit.dataStore;
     if (!ds) { centralStatsEl.textContent = ''; return; }
     const s = ds.stats();
     if (s.channels === 0 || s.samples === 0) {
@@ -221,7 +221,7 @@
     // The user can drag-zoom or change window to bring older samples back
     // into view if they want; clearing doesn't destroy anything.
     clear() {
-      const ds = window.PicoPoE && window.PicoPoE.dataStore;
+      const ds = window.Conduit && window.Conduit.dataStore;
       this.clearedSinceMs = (ds && ds.sessionEndWallMs != null)
         ? ds.sessionEndWallMs : Date.now();
       this._syncToUplot();
@@ -275,7 +275,7 @@
     // ------------------------------------------------------------------
 
     _buildDom() {
-      const icons = window.PicoPoE && window.PicoPoE.icons;
+      const icons = window.Conduit && window.Conduit.icons;
 
       this.root = document.createElement('div');
       this.root.className = 'plot';
@@ -294,7 +294,7 @@
       this.dragHandle.addEventListener('mouseup',   () => { this.root.draggable = false; });
       this.root.addEventListener('dragstart', (ev) => {
         ev.dataTransfer.effectAllowed = 'move';
-        ev.dataTransfer.setData('text/picopoe-plot', this.id);
+        ev.dataTransfer.setData('text/conduit-plot', this.id);
         this.root.classList.add('dragging');
         document.body.classList.add('plot-dragging');
       });
@@ -348,7 +348,7 @@
           // Freeze: capture both the data cutoff (so the slice stops
           // accumulating new samples) and the current scale (so future
           // zooms know where we were when frozen).
-          const ds = window.PicoPoE && window.PicoPoE.dataStore;
+          const ds = window.Conduit && window.Conduit.dataStore;
           this.pauseAtMs = (ds && ds.sessionEndWallMs != null)
                            ? ds.sessionEndWallMs : Date.now();
           if (this.uplot) {
@@ -608,7 +608,7 @@
       // captured lastT at chart-build time and plots added later
       // showed labels offset against earlier plots' references.
       const livePresent = () => {
-        const ds = window.PicoPoE && window.PicoPoE.dataStore;
+        const ds = window.Conduit && window.Conduit.dataStore;
         return (ds && ds.sessionEndWallMs != null) ? ds.sessionEndWallMs / 1000 : 0;
       };
 
@@ -750,7 +750,7 @@
       if (this.paused && this.frozenMin != null && this.frozenMax != null) {
         this.uplot.setScale('x', { min: this.frozenMin, max: this.frozenMax });
       } else if (!this.userZoomed) {
-        const ds = window.PicoPoE && window.PicoPoE.dataStore;
+        const ds = window.Conduit && window.Conduit.dataStore;
         const lastTms = ds && ds.sessionEndWallMs;
         if (lastTms != null) {
           const max = lastTms / 1000;
@@ -851,7 +851,7 @@
     // null breakpoints when consecutive samples are more than
     // GAP_THRESHOLD_S apart.
     _buildRenderData() {
-      const ds = window.PicoPoE && window.PicoPoE.dataStore;
+      const ds = window.Conduit && window.Conduit.dataStore;
       if (!ds || this.knownChannels.size === 0) {
         // Empty placeholder — uPlot needs at least one column.
         const labels = this._seriesLabels();
@@ -1077,7 +1077,7 @@
   // ---------------------------------------------------------------------
 
   const charts = [];
-  const LAYOUT_KEY = 'picopoe.plots';
+  const LAYOUT_KEY = 'conduit.plots';
   let layoutSaveTimer = null;
 
   function emitLayoutChange() {
@@ -1171,7 +1171,7 @@
     }
 
     parent.addEventListener('dragover', (ev) => {
-      const id = ev.dataTransfer && ev.dataTransfer.types.includes('text/picopoe-plot');
+      const id = ev.dataTransfer && ev.dataTransfer.types.includes('text/conduit-plot');
       if (!id) return;
       ev.preventDefault();
       ev.dataTransfer.dropEffect = 'move';
@@ -1185,7 +1185,7 @@
       target.classList.add(above ? 'drop-above' : 'drop-below');
     });
     parent.addEventListener('drop', (ev) => {
-      const srcId = ev.dataTransfer && ev.dataTransfer.getData('text/picopoe-plot');
+      const srcId = ev.dataTransfer && ev.dataTransfer.getData('text/conduit-plot');
       if (!srcId) return;
       ev.preventDefault();
       const target = closestPlot(ev.target);
@@ -1219,14 +1219,14 @@
   }
 
   // Public API.
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.chart = {
+  window.Conduit = window.Conduit || {};
+  window.Conduit.chart = {
     push:  (rec) => { for (const c of charts) c.push(rec); },
     clear: ()    => { for (const c of charts) c.clear(); },
     reset: ()    => { for (const c of charts) c.reset(); },
     gap:   ()    => { /* no-op — see Chart.gap() */ },
   };
-  window.PicoPoE.charts = {
+  window.Conduit.charts = {
     list:    () => charts.slice(),
     add:     addChart,
     remove:  removeChartById,
@@ -1234,7 +1234,7 @@
   };
 
   // Diagnostic: dump every chart's view config (no buffers anymore).
-  window.PICOPOE_TLM_DUMP = () => charts.map((c) => ({
+  window.CONDUIT_TLM_DUMP = () => charts.map((c) => ({
     id: c.id, title: c.title, windowS: c.windowS,
     paused: c.paused, userZoomed: c.userZoomed,
     clearedSinceMs: c.clearedSinceMs,

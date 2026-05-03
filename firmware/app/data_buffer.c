@@ -15,30 +15,30 @@ static volatile uint32_t g_total = 0;
 static spin_lock_t *g_lock;
 static bool     g_inited = false;
 
-static char     g_names[POE_DATA_MAX_NAMES][POE_DATA_NAME_MAX];
+static char     g_names[CONDUIT_DATA_MAX_NAMES][CONDUIT_DATA_NAME_MAX];
 
 // Per-session "already warned about this name" set. Bounded so a tight
 // loop emitting a bad name can't flood the log buffer. Pointer-equality
 // match — works perfectly for string-literal names from the transmit()
 // macro (the common case); for non-literal names you may see a few extra
 // warnings, harmless.
-#define POE_WARNED_MAX 8
-static const char *g_warned[POE_WARNED_MAX];
+#define CONDUIT_WARNED_MAX 8
+static const char *g_warned[CONDUIT_WARNED_MAX];
 static uint8_t g_warned_count = 0;
 static uint8_t g_warned_next  = 0;
 
-size_t poe_dtype_size(poe_dtype_t dtype) {
+size_t conduit_dtype_size(conduit_dtype_t dtype) {
     switch (dtype) {
-        case POE_DTYPE_I8:
-        case POE_DTYPE_U8:   return 1;
-        case POE_DTYPE_I16:
-        case POE_DTYPE_U16:  return 2;
-        case POE_DTYPE_I32:
-        case POE_DTYPE_U32:
-        case POE_DTYPE_F32:  return 4;
-        case POE_DTYPE_I64:
-        case POE_DTYPE_U64:
-        case POE_DTYPE_F64:  return 8;
+        case CONDUIT_DTYPE_I8:
+        case CONDUIT_DTYPE_U8:   return 1;
+        case CONDUIT_DTYPE_I16:
+        case CONDUIT_DTYPE_U16:  return 2;
+        case CONDUIT_DTYPE_I32:
+        case CONDUIT_DTYPE_U32:
+        case CONDUIT_DTYPE_F32:  return 4;
+        case CONDUIT_DTYPE_I64:
+        case CONDUIT_DTYPE_U64:
+        case CONDUIT_DTYPE_F64:  return 8;
         default: return 0;
     }
 }
@@ -57,14 +57,14 @@ void data_buffer_init(void) {
     g_inited = true;
 }
 
-// UPPER_SNAKE_CASE: non-empty, ≤ POE_DATA_NAME_MAX-1 chars, first char
+// UPPER_SNAKE_CASE: non-empty, ≤ CONDUIT_DATA_NAME_MAX-1 chars, first char
 // must be A-Z (not a digit, not an underscore — keeps generated HDF5
 // dataset names looking sensible), all chars in [A-Z0-9_].
 static bool is_valid_name(const char *name) {
     if (!name) return false;
     size_t len = 0;
-    while (name[len] != '\0' && len < POE_DATA_NAME_MAX) len++;
-    if (len == 0 || len > POE_DATA_NAME_MAX - 1) return false;
+    while (name[len] != '\0' && len < CONDUIT_DATA_NAME_MAX) len++;
+    if (len == 0 || len > CONDUIT_DATA_NAME_MAX - 1) return false;
     if (!(name[0] >= 'A' && name[0] <= 'Z')) return false;
     for (size_t i = 0; i < len; i++) {
         char c = name[i];
@@ -79,31 +79,31 @@ static bool warn_once(const char *name) {
     for (uint8_t i = 0; i < g_warned_count; i++) {
         if (g_warned[i] == name) return false;
     }
-    if (g_warned_count < POE_WARNED_MAX) {
+    if (g_warned_count < CONDUIT_WARNED_MAX) {
         g_warned[g_warned_count++] = name;
     } else {
         g_warned[g_warned_next] = name;
-        g_warned_next = (uint8_t)((g_warned_next + 1) % POE_WARNED_MAX);
+        g_warned_next = (uint8_t)((g_warned_next + 1) % CONDUIT_WARNED_MAX);
     }
     return true;
 }
 
-int poe_data_lookup_or_register(const char *name) {
+int conduit_data_lookup_or_register(const char *name) {
     if (!g_inited) return -1;
     if (!is_valid_name(name)) return -1;
 
     uint32_t irq = spin_lock_blocking(g_lock);
-    for (uint16_t i = 0; i < POE_DATA_MAX_NAMES; i++) {
+    for (uint16_t i = 0; i < CONDUIT_DATA_MAX_NAMES; i++) {
         if (g_names[i][0] == '\0') continue;
         if (strcmp(g_names[i], name) == 0) {
             spin_unlock(g_lock, irq);
             return (int)i;
         }
     }
-    for (uint16_t i = 0; i < POE_DATA_MAX_NAMES; i++) {
+    for (uint16_t i = 0; i < CONDUIT_DATA_MAX_NAMES; i++) {
         if (g_names[i][0] == '\0') {
             size_t n = 0;
-            while (name[n] != '\0' && n < POE_DATA_NAME_MAX - 1) n++;
+            while (name[n] != '\0' && n < CONDUIT_DATA_NAME_MAX - 1) n++;
             memcpy(g_names[i], name, n);
             g_names[i][n] = '\0';
             spin_unlock(g_lock, irq);
@@ -117,18 +117,18 @@ int poe_data_lookup_or_register(const char *name) {
 // Build the framed record on the stack and push the whole thing under one
 // spinlock hold so partial writes can't break framing for concurrent
 // readers.
-static void emit_record(uint16_t msg_id, poe_dtype_t dtype, uint16_t n, const void *src) {
+static void emit_record(uint16_t msg_id, conduit_dtype_t dtype, uint16_t n, const void *src) {
     if (!src) return;
-    size_t esz = poe_dtype_size(dtype);
+    size_t esz = conduit_dtype_size(dtype);
     if (esz == 0) return;
     size_t payload_bytes = (size_t)n * esz;
-    size_t record_bytes = POE_DATA_RECORD_HEADER + payload_bytes;
+    size_t record_bytes = CONDUIT_DATA_RECORD_HEADER + payload_bytes;
     if (record_bytes > DATA_BUFFER_SIZE) return;
 
-    uint8_t hdr[POE_DATA_RECORD_HEADER];
+    uint8_t hdr[CONDUIT_DATA_RECORD_HEADER];
     uint64_t us = to_us_since_boot(get_absolute_time());
-    hdr[0] = POE_DATA_MAGIC;
-    hdr[1] = POE_DATA_VERSION;
+    hdr[0] = CONDUIT_DATA_MAGIC;
+    hdr[1] = CONDUIT_DATA_VERSION;
     hdr[2] = (uint8_t)(msg_id & 0xFF);
     hdr[3] = (uint8_t)((msg_id >> 8) & 0xFF);
     hdr[4] = (uint8_t)dtype;
@@ -145,24 +145,24 @@ static void emit_record(uint16_t msg_id, poe_dtype_t dtype, uint16_t n, const vo
     hdr[15] = (uint8_t)((us >> 56) & 0xFF);
 
     uint32_t irq = spin_lock_blocking(g_lock);
-    push_bytes_locked(hdr, POE_DATA_RECORD_HEADER);
+    push_bytes_locked(hdr, CONDUIT_DATA_RECORD_HEADER);
     push_bytes_locked((const uint8_t *)src, payload_bytes);
     spin_unlock(g_lock, irq);
 }
 
-void _poe_transmit_cached(int8_t *id_slot, const char *name,
-                          poe_dtype_t dtype, uint16_t n, const void *src) {
+void _conduit_transmit_cached(int8_t *id_slot, const char *name,
+                          conduit_dtype_t dtype, uint16_t n, const void *src) {
     if (!g_inited) return;
     if (id_slot && *id_slot >= 0) {
         emit_record((uint16_t)(uint8_t)*id_slot, dtype, n, src);
         return;
     }
-    int id = poe_data_lookup_or_register(name);
+    int id = conduit_data_lookup_or_register(name);
     if (id < 0) {
         if (warn_once(name)) {
-            poe_log("[poe] invalid telemetry name '%s' — must match "
+            conduit_log("[poe] invalid telemetry name '%s' — must match "
                     "[A-Z][A-Z0-9_]{0,30}; or registry full (max %d)\n",
-                    name ? name : "(null)", POE_DATA_MAX_NAMES);
+                    name ? name : "(null)", CONDUIT_DATA_MAX_NAMES);
         }
         return;
     }
@@ -211,7 +211,7 @@ size_t data_buffer_schema_json(char *out, size_t max) {
     if (pos + 1 < max) out[pos++] = '{';
     bool first = true;
     uint32_t irq = spin_lock_blocking(g_lock);
-    for (uint16_t i = 0; i < POE_DATA_MAX_NAMES; i++) {
+    for (uint16_t i = 0; i < CONDUIT_DATA_MAX_NAMES; i++) {
         if (g_names[i][0] == '\0') continue;
         int written = snprintf(out + pos, max - pos,
             "%s\"%u\":\"%s\"", first ? "" : ",", (unsigned)i, g_names[i]);

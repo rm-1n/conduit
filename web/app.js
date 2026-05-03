@@ -2,16 +2,16 @@
 //
 // This file used to drive the Devices tab (scanner table, device detail,
 // drop-zone upload). That whole tab is gone now; what's left is the core
-// "scan a /24 for PICO-POE boards" logic, still useful from the IDE's
+// "scan a /24 for CONDUIT boards" logic, still useful from the IDE's
 // device picker. No DOM rendering is done here — results are returned and
 // also cached in localStorage so the IDE dropdown can pick them up.
 //
-// Exposed on window.PicoPoE:
+// Exposed on window.Conduit:
 //   scanHost(ip, timeoutMs)        — probe one host, returns status JSON or null
 //   probeAndRemember(ip, opts)     — probe + cache on success
 //   startScan({ subnet })          — probe /24, returns array of hits
 //   getKnownDevices()              — read the cached list
-//   dispatch event 'picopoe:devices-updated' whenever the cache changes
+//   dispatch event 'conduit:devices-updated' whenever the cache changes
 
 const SCAN_TIMEOUT_MS = 1500;
 
@@ -31,7 +31,7 @@ async function scanHost(ip, timeoutMs) {
     clearTimeout(timer);
     if (!res.ok) return null;
     const data = await res.json();
-    if (data && data.device !== 'pico-poe') return null;
+    if (data && data.device !== 'conduit') return null;
     data._ip = ip;
     return data;
   } catch {
@@ -57,7 +57,7 @@ async function runWithConcurrency(items, concurrency, probe, onResult) {
 }
 
 // Scan `<subnet>.1` through `<subnet>.254` in bounded parallel. Returns the
-// list of reachable pico-poe devices and mirrors them into localStorage so
+// list of reachable conduit devices and mirrors them into localStorage so
 // the IDE's <select> can read them back without rescanning.
 async function startScan(opts) {
   const subnet = (opts && opts.subnet) || '';
@@ -76,21 +76,21 @@ async function startScan(opts) {
   );
 
   try {
-    const s = JSON.parse(localStorage.getItem('picopoe') || '{}');
+    const s = JSON.parse(localStorage.getItem('conduit') || '{}');
     s.knownDevices = hits.map((d) => ({
       ip: d._ip, version: d.version, partition: d.partition,
       mac: d.mac, board_id: d.board_id,
     }));
     s.knownDevicesTs = Date.now();
-    localStorage.setItem('picopoe', JSON.stringify(s));
+    localStorage.setItem('conduit', JSON.stringify(s));
   } catch (_) {}
-  window.dispatchEvent(new CustomEvent('picopoe:devices-updated', { detail: hits }));
+  window.dispatchEvent(new CustomEvent('conduit:devices-updated', { detail: hits }));
   return hits;
 }
 
 function getKnownDevices() {
   try {
-    const s = JSON.parse(localStorage.getItem('picopoe') || '{}');
+    const s = JSON.parse(localStorage.getItem('conduit') || '{}');
     return Array.isArray(s.knownDevices) ? s.knownDevices : [];
   } catch (_) { return []; }
 }
@@ -100,7 +100,7 @@ async function probeAndRemember(ip, opts) {
   const result = await scanHost(ip, timeoutMs);
   if (!result) return null;
   try {
-    const s = JSON.parse(localStorage.getItem('picopoe') || '{}');
+    const s = JSON.parse(localStorage.getItem('conduit') || '{}');
     const existing = Array.isArray(s.knownDevices) ? s.knownDevices : [];
     const merged = existing.filter((d) => d.ip !== ip);
     merged.unshift({
@@ -109,9 +109,9 @@ async function probeAndRemember(ip, opts) {
     });
     s.knownDevices = merged;
     s.knownDevicesTs = Date.now();
-    localStorage.setItem('picopoe', JSON.stringify(s));
+    localStorage.setItem('conduit', JSON.stringify(s));
   } catch (_) {}
-  window.dispatchEvent(new CustomEvent('picopoe:devices-updated'));
+  window.dispatchEvent(new CustomEvent('conduit:devices-updated'));
   return result;
 }
 
@@ -123,7 +123,7 @@ async function probeAndRemember(ip, opts) {
 function updateKnownDevice(ip, patch) {
   if (!ip || !patch) return;
   try {
-    const s = JSON.parse(localStorage.getItem('picopoe') || '{}');
+    const s = JSON.parse(localStorage.getItem('conduit') || '{}');
     const existing = Array.isArray(s.knownDevices) ? s.knownDevices : [];
     let found = false;
     const next = existing.map((d) => {
@@ -134,14 +134,14 @@ function updateKnownDevice(ip, patch) {
     if (!found) next.unshift({ ip, ...patch });
     s.knownDevices = next;
     s.knownDevicesTs = Date.now();
-    localStorage.setItem('picopoe', JSON.stringify(s));
+    localStorage.setItem('conduit', JSON.stringify(s));
   } catch (_) { return; }
-  window.dispatchEvent(new CustomEvent('picopoe:devices-updated'));
+  window.dispatchEvent(new CustomEvent('conduit:devices-updated'));
 }
 
-window.PicoPoE = window.PicoPoE || {};
-window.PicoPoE.scanHost = scanHost;
-window.PicoPoE.startScan = startScan;
-window.PicoPoE.getKnownDevices = getKnownDevices;
-window.PicoPoE.probeAndRemember = probeAndRemember;
-window.PicoPoE.updateKnownDevice = updateKnownDevice;
+window.Conduit = window.Conduit || {};
+window.Conduit.scanHost = scanHost;
+window.Conduit.startScan = startScan;
+window.Conduit.getKnownDevices = getKnownDevices;
+window.Conduit.probeAndRemember = probeAndRemember;
+window.Conduit.updateKnownDevice = updateKnownDevice;

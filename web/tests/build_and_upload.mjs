@@ -1,5 +1,5 @@
 // build_and_upload.mjs — End-to-end regression for the IDE's "Build & Upload"
-// button, run headlessly against a live PICO-POE board on the LAN.
+// button, run headlessly against a live CONDUIT board on the LAN.
 //
 // What it exercises (mirrors ide.js:onBuildUpload exactly):
 //   1. Fresh-module compile of the Arduino-hooks blink template, via the
@@ -17,11 +17,11 @@
 //                                         [--subnet=192.168.178]
 //                                         [--no-scan]
 //
-// Environment overrides: PICOPOE_IP, PICOPOE_TOKEN, PICOPOE_SUBNET.
+// Environment overrides: CONDUIT_IP, CONDUIT_TOKEN, CONDUIT_SUBNET.
 //
 // If no IP is given and scanning is enabled, probes the /24 of the host's
 // default interface (on macOS/Linux) or the subnet given by --subnet. The
-// first host that answers /api/status and reports {"device":"pico-poe"}
+// first host that answers /api/status and reports {"device":"conduit"}
 // is the target.
 //
 // Success criteria (all must hold):
@@ -32,7 +32,7 @@
 //   - Device comes back within 60 s and returns /api/status.
 //   - post.partition differs from pre.partition (A↔B flip) — the strongest
 //     signal that the ROM actually booted our new image. /api/status.version
-//     is the compile-time PICO_POE_VERSION_STRING, so it does NOT change
+//     is the compile-time CONDUIT_VERSION_STRING, so it does NOT change
 //     across uploads of the same firmware tree; we can't use it as a signal.
 //   - post.tbyb_pending was true immediately after reboot and becomes false
 //     after POST /api/commit.
@@ -64,13 +64,13 @@ function parseArgs(argv) {
   return out;
 }
 const args = parseArgs(process.argv.slice(2));
-const IP = args.ip || process.env.PICOPOE_IP || null;
-const TOKEN = args.token || process.env.PICOPOE_TOKEN || 'changeme';
-const SUBNET = args.subnet || process.env.PICOPOE_SUBNET || '192.168.178';
+const IP = args.ip || process.env.CONDUIT_IP || null;
+const TOKEN = args.token || process.env.CONDUIT_TOKEN || 'changeme';
+const SUBNET = args.subnet || process.env.CONDUIT_SUBNET || '192.168.178';
 const NO_SCAN = args['no-scan'] === true;
 
 // ---------- Load browser JS into a DOM-shimmed globalThis ----------
-// web/upload.js attaches to `window.PicoPoE`; map window → globalThis so we
+// web/upload.js attaches to `window.Conduit`; map window → globalThis so we
 // get the same exported functions as the browser build.
 globalThis.window = globalThis;
 
@@ -86,7 +86,7 @@ for (const f of ['elf.js', 'uf2.js', 'finalize.js', 'upload.js']) {
   (0, eval)(src);
 }
 const { elfToUf2, finalize, uploadFirmware, getStatus, waitForDevice,
-        commitFirmware, updateFirmware } = globalThis.PicoPoE;
+        commitFirmware, updateFirmware } = globalThis.Conduit;
 
 // ---------- Boot llvm-box (for compile + link) ----------
 globalThis.require = createRequire(import.meta.url);
@@ -189,17 +189,17 @@ for (const f of ['libc.a', 'libm.a', 'libnosys.a', 'libgcc.a',
 const BLINK_SOURCE = `
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
-#include "pico_poe_user.h"
+#include "conduit_user.h"
 
 #define LED_PIN 25
 
-void pico_poe_setup(void) {
+void conduit_setup(void) {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
-    log("hello from pico_poe_setup()\\n");
+    log("hello from conduit_setup()\\n");
 }
 
-void pico_poe_loop(void) {
+void conduit_loop(void) {
     static uint32_t n = 0;
     if (++n >= 500) {
         n = 0;
@@ -266,7 +266,7 @@ async function probe(ip, timeoutMs = 1500) {
     });
     if (!res.ok) return null;
     const body = await res.json();
-    if (body && body.device === 'pico-poe') return { ip, status: body };
+    if (body && body.device === 'conduit') return { ip, status: body };
   } catch (_) {}
   return null;
 }
@@ -294,10 +294,10 @@ if (!targetIp) {
   if (NO_SCAN) {
     console.error('no --ip given and --no-scan set'); process.exit(1);
   }
-  console.log(`→ scanning ${SUBNET}.0/24 for pico-poe devices...`);
+  console.log(`→ scanning ${SUBNET}.0/24 for conduit devices...`);
   const hits = await scanSubnet(SUBNET);
   if (hits.length === 0) {
-    console.error(`  no pico-poe device found on ${SUBNET}.0/24`);
+    console.error(`  no conduit device found on ${SUBNET}.0/24`);
     process.exit(1);
   }
   if (hits.length > 1) {
@@ -428,7 +428,7 @@ if (result.outcome === 'rollback') {
 }
 
 const { pre: resPre, post } = result;
-assert.equal(post.device, 'pico-poe', 'post-upload status.device mismatch');
+assert.equal(post.device, 'conduit', 'post-upload status.device mismatch');
 assert.notEqual(post.partition, resPre.partition,
   `partition should have flipped (pre=${resPre.partition} post=${post.partition}) — ` +
   `if unchanged, the ROM rolled back or the flash-update reboot never happened`);

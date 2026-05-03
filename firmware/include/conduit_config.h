@@ -1,24 +1,24 @@
-#ifndef PICO_POE_CONFIG_H
-#define PICO_POE_CONFIG_H
+#ifndef CONDUIT_CONFIG_H
+#define CONDUIT_CONFIG_H
 
 // =============================================================================
-// PICO-POE Board Configuration
+// CONDUIT Board Configuration
 // =============================================================================
 
 // Firmware version (increment MINOR for each release, MAJOR for breaking changes)
-#define PICO_POE_VERSION_MAJOR  1
-#define PICO_POE_VERSION_MINOR  2
-#define PICO_POE_VERSION_PATCH  0
-#define PICO_POE_VERSION_STRING "1.2.0"
+#define CONDUIT_VERSION_MAJOR  1
+#define CONDUIT_VERSION_MINOR  2
+#define CONDUIT_VERSION_PATCH  0
+#define CONDUIT_VERSION_STRING "1.2.0"
 
 // =============================================================================
 // Authentication
 // =============================================================================
 
 // Pre-shared token for upload/reboot API endpoints.
-// Override at compile time: -DPICO_POE_AUTH_TOKEN=\"your-secret-token\"
-#ifndef PICO_POE_AUTH_TOKEN
-#define PICO_POE_AUTH_TOKEN "changeme"
+// Override at compile time: -DCONDUIT_AUTH_TOKEN=\"your-secret-token\"
+#ifndef CONDUIT_AUTH_TOKEN
+#define CONDUIT_AUTH_TOKEN "changeme"
 #endif
 
 // =============================================================================
@@ -26,15 +26,15 @@
 // =============================================================================
 
 // DHCP timeout before falling back to static IP (milliseconds)
-#define PICO_POE_DHCP_TIMEOUT_MS  10000
+#define CONDUIT_DHCP_TIMEOUT_MS  10000
 
 // Static fallback IP configuration
-#define PICO_POE_STATIC_IP      "192.168.178.200"
-#define PICO_POE_STATIC_MASK    "255.255.255.0"
-#define PICO_POE_STATIC_GW      "192.168.178.1"
+#define CONDUIT_STATIC_IP      "192.168.178.200"
+#define CONDUIT_STATIC_MASK    "255.255.255.0"
+#define CONDUIT_STATIC_GW      "192.168.178.1"
 
 // HTTP server port
-#define PICO_POE_HTTP_PORT      80
+#define CONDUIT_HTTP_PORT      80
 
 // =============================================================================
 // CORS Configuration
@@ -42,16 +42,16 @@
 
 // Allowed origin for CORS requests (GitHub Pages domain)
 // Set to "*" during development, restrict to your GH Pages domain in production
-#ifndef PICO_POE_CORS_ORIGIN
-#define PICO_POE_CORS_ORIGIN    "*"
+#ifndef CONDUIT_CORS_ORIGIN
+#define CONDUIT_CORS_ORIGIN    "*"
 #endif
 
 // =============================================================================
-// Hardware Pin Mapping (PICO-POE board)
+// Hardware Pin Mapping (CONDUIT board)
 // =============================================================================
 
 // PoE status input (TLP290 optocoupler output, active = PoE powered)
-#define PICO_POE_POE_STATUS_PIN  27
+#define CONDUIT_POE_STATUS_PIN  27
 
 // =============================================================================
 // OTA Configuration
@@ -77,6 +77,6 @@
 #define UF2_PAYLOAD_SIZE  256
 
 // Flash sector size for erase operations
-#define PICO_POE_FLASH_SECTOR_SIZE  4096
+#define CONDUIT_FLASH_SECTOR_SIZE  4096
 
-#endif // PICO_POE_CONFIG_H
+#endif // CONDUIT_CONFIG_H

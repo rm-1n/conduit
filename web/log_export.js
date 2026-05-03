@@ -2,7 +2,7 @@
 //
 // This file is the thin glue that:
 //   1. Pulls each channel's slice out of the in-memory data store
-//      (window.PicoPoE.dataStore).
+//      (window.Conduit.dataStore).
 //   2. Hands the typed-array buffers off to log_export_worker.js via
 //      postMessage with TRANSFERABLE buffers (no structured-clone copy
 //      of the payload — the worker reclaims ownership).
@@ -88,7 +88,7 @@
 
     onProgress({ stage: 'telemetry', pct: 0, label: 'slicing channels…' });
     const tTlm0 = performance.now();
-    const ds = window.PicoPoE && window.PicoPoE.dataStore;
+    const ds = window.Conduit && window.Conduit.dataStore;
     if (!ds) throw new Error('data store not loaded');
     const channelsMeta = ds.listChannels();
     const sliceFrom = (fromWallMs != null)
@@ -130,8 +130,8 @@
       w.postMessage({
         type: 'build', reqId,
         channels: payload,
-        assetVersion: String(window.PICOPOE_ASSET_VERSION || ''),
-        h5wasmUrl: window.PICOPOE_H5WASM_URL || null,
+        assetVersion: String(window.CONDUIT_ASSET_VERSION || ''),
+        h5wasmUrl: window.CONDUIT_H5WASM_URL || null,
       }, transfers);
     });
 
@@ -156,7 +156,7 @@
     const stamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}` +
                   `${String(d.getDate()).padStart(2,'0')}-${String(d.getHours()).padStart(2,'0')}` +
                   `${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
-    const filename = `pico-poe-${stamp}.h5`;
+    const filename = `conduit-${stamp}.h5`;
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
@@ -171,8 +171,8 @@
   // idle time instead of after the click.
   function warmup() { ensureWorker(); }
 
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.logExport = {
+  window.Conduit = window.Conduit || {};
+  window.Conduit.logExport = {
     downloadHdf5,
     buildHdf5Bytes,
     warmup,

@@ -6,13 +6,13 @@
 // here and it link-fails, it's not in the cortex-m33/softfp multilib
 // archive we ship — pick a different name or ship a shim.
 //
-// Caveat (intentional, see pico_poe_user.h): including this header AFTER
-// "pico_poe_user.h" in the same translation unit will leave `log` aliased
-// to our printf-style `poe_log`, and calls to math `log` won't typecheck.
+// Caveat (intentional, see conduit_user.h): including this header AFTER
+// "conduit_user.h" in the same translation unit will leave `log` aliased
+// to our printf-style `conduit_log`, and calls to math `log` won't typecheck.
 // Workarounds:
-//   (a) #include <math.h> BEFORE "pico_poe_user.h", OR
+//   (a) #include <math.h> BEFORE "conduit_user.h", OR
 //   (b) use logf() / log2() / log10() / log1p() (none of those are aliased), OR
-//   (c) #undef log after including "pico_poe_user.h", at the cost of the
+//   (c) #undef log after including "conduit_user.h", at the cost of the
 //       printf-style log() shorthand for the rest of the TU.
 
 // IEEE 754 special values + classification macros. Provided by clang's

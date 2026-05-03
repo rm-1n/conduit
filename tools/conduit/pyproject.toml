@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pico-poe"
+name = "conduit"
 version = "1.0.0"
-description = "CLI tool for managing PICO-POE devices"
+description = "CLI tool for managing CONDUIT devices"
 requires-python = ">=3.9"
 dependencies = [
     "click>=8.0",
@@ -20,7 +20,7 @@ test = [
 ]
 
 [project.scripts]
-pico-poe = "pico_poe_cli.cli:main"
+conduit = "conduit_cli.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["pico_poe_cli*"]
+include = ["conduit_cli*"]

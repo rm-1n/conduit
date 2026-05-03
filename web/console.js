@@ -4,10 +4,10 @@
 //
 // Transport: persistent stream (see firmware/app/http_server.c handle_log):
 //   GET /api/log?since=N&stream=1   → server holds the TCP connection open
-//                                     and writes new bytes as poe_log()
+//                                     and writes new bytes as conduit_log()
 //                                     produces them. One request per run.
 //
-// Wire record: each poe_log() call emits "[<uptime_us>]\t<message>\n".
+// Wire record: each conduit_log() call emits "[<uptime_us>]\t<message>\n".
 // The timestamp prefix is assigned on-device at format time so the record's
 // `uptime_us` is not distorted by stream/network/browser delay.
 //
@@ -96,7 +96,7 @@
     if (persistBatch.length === 0) return;
     const batch = persistBatch;
     persistBatch = [];
-    const store = window.PicoPoE && window.PicoPoE.logStore;
+    const store = window.Conduit && window.Conduit.logStore;
     if (!store) return;
     store.append(batch).catch((e) => {
       // Non-fatal — display keeps working even if storage fails.
@@ -190,7 +190,7 @@
       // Pause toggle uses an icon-only button now; the play_arrow
       // glyph means "click to resume", pause means "click to pause".
       // Pending-byte count goes in the title since there's no label.
-      const icons = window.PicoPoE && window.PicoPoE.icons;
+      const icons = window.Conduit && window.Conduit.icons;
       if (icons) icons.set(pauseBtn, paused ? 'play_arrow' : 'pause', { size: 14 });
       const baseTitle = paused ? 'Resume' : 'Pause';
       pauseBtn.title = paused && pendingBuf.length > 0
@@ -262,7 +262,7 @@
       }
       lastUptimeUs = uptimeUs;
     } else {
-      // Continuation (rare — poe_log callers generally end with "\n"). Drop
+      // Continuation (rare — conduit_log callers generally end with "\n"). Drop
       // if we have no anchor yet (e.g. started mid-record after a ring
       // fast-forward); otherwise inherit the last record's uptime.
       if (lastUptimeUs === null) return;
@@ -281,7 +281,7 @@
       const offset = anchor - (uptimeUs / 1000);
       const streamEpoch = Date.now();
       currentRun = { streamEpoch, wallMsOffset: offset, lastUptimeUs: uptimeUs };
-      const store = window.PicoPoE && window.PicoPoE.logStore;
+      const store = window.Conduit && window.Conduit.logStore;
       if (store && store.startRun) {
         store.startRun({
           streamEpoch,
@@ -538,8 +538,8 @@
     watchStall();
     streamLoop();
 
-    window.PicoPoE = window.PicoPoE || {};
-    window.PicoPoE.console = {
+    window.Conduit = window.Conduit || {};
+    window.Conduit.console = {
       clear() { consoleEl.textContent = ''; pendingBuf = ''; updatePauseState(); },
       resetCursor() {
         cursor = null;

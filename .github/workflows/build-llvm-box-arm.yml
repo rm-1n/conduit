@@ -2,7 +2,7 @@
 # backend enabled, based on jprendes/emception. Emception ships with only the
 # WebAssembly target compiled in; we patch LLVM_TARGETS_TO_BUILD to include
 # ARM so `clang -target thumbv8m.main-none-eabi -mcpu=cortex-m33 ...` works
-# in the browser for the pico-poe IDE.
+# in the browser for the conduit IDE.
 #
 # Runs on-demand only (workflow_dispatch). Typical run time is several hours
 # on a GitHub-hosted ubuntu-latest runner — LLVM + Emscripten cold build.
@@ -95,7 +95,7 @@ jobs:
             `emception/llvm/llvm-box.{mjs,wasm}`, `emception/packages/*.pack.br`,
             `emception/packs.mjs`, and the supporting module glue.
 
-            Consumed by `web/compiler.js` at runtime in the pico-poe IDE.
+            Consumed by `web/compiler.js` at runtime in the conduit IDE.
           files: |
             llvm-box-arm.tar.gz
           fail_on_unmatched_files: true

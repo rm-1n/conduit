@@ -256,11 +256,11 @@
     return { outcome: 'rebooted', pre, post };
   }
 
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.uploadFirmware = uploadFirmware;
-  window.PicoPoE.commitFirmware = commitFirmware;
-  window.PicoPoE.getStatus = getStatus;
-  window.PicoPoE.waitForDevice = waitForDevice;
-  window.PicoPoE.updateFirmware = updateFirmware;
-  window.PicoPoE.OTA_CHUNK_SIZE = OTA_CHUNK_SIZE;
+  window.Conduit = window.Conduit || {};
+  window.Conduit.uploadFirmware = uploadFirmware;
+  window.Conduit.commitFirmware = commitFirmware;
+  window.Conduit.getStatus = getStatus;
+  window.Conduit.waitForDevice = waitForDevice;
+  window.Conduit.updateFirmware = updateFirmware;
+  window.Conduit.OTA_CHUNK_SIZE = OTA_CHUNK_SIZE;
 })();

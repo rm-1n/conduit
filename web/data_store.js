@@ -12,7 +12,7 @@
 // of the previous design and the user explicitly wants
 // session-start → now semantics with no across-reload retention.
 //
-// Public surface (window.PicoPoE.dataStore):
+// Public surface (window.Conduit.dataStore):
 //   append({ name, dtype, n, uptimeUs, wallMs, values })  – ingest
 //   resetSession()                                          – wipe all
 //   listChannels()                                          – channel meta
@@ -23,7 +23,7 @@
 (function () {
   'use strict';
 
-  // KEEP IN SYNC with poe_dtype_t in firmware/app/data_buffer.h.
+  // KEEP IN SYNC with conduit_dtype_t in firmware/app/data_buffer.h.
   const DTYPE_SIZE = [1, 1, 2, 2, 4, 4, 8, 8, 4, 8];
   const DTYPE_LABEL = ['I8','U8','I16','U16','I32','U32','I64','U64','F32','F64'];
 
@@ -194,8 +194,8 @@
     };
   }
 
-  window.PicoPoE = window.PicoPoE || {};
-  window.PicoPoE.dataStore = {
+  window.Conduit = window.Conduit || {};
+  window.Conduit.dataStore = {
     append, resetSession, listChannels, slice, stats,
     get sessionStartWallMs() { return sessionStartWallMs; },
     get sessionEndWallMs()   { return sessionEndWallMs; },

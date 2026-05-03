@@ -15,7 +15,7 @@ FIRMWARE_BUILD="$REPO_ROOT/firmware/build"
 OUT="$REPO_ROOT/web/assets/sdk"
 PICO_SDK_ROOT="${PICO_SDK_PATH:-$HOME/.pico-sdk/sdk/2.2.0}"
 
-[ -d "$FIRMWARE_BUILD/app/CMakeFiles/pico_poe_app.dir" ] || {
+[ -d "$FIRMWARE_BUILD/app/CMakeFiles/conduit_app.dir" ] || {
     echo "error: firmware/build missing. Run firmware/scripts/build.sh first."
     exit 1
 }
@@ -30,7 +30,7 @@ mkdir -p "$OUT"/{lib,startup,linker,headers}
 
 echo "=== Harvesting pico-sdk core .o files ==="
 # Bundle the FULL firmware build so user IDE code can link as a
-# supplement (Arduino-hooks: user provides strong pico_poe_setup/loop
+# supplement (Arduino-hooks: user provides strong conduit_setup/loop
 # overrides for the weak hooks in firmware's main.c). That requires
 # main.c.o, network.c.o, http_server.c.o, ota.c.o, the lwIP stack, the
 # RMII driver, tinyUSB, and the SDK modules they pull in. An earlier
@@ -41,7 +41,7 @@ echo "=== Harvesting pico-sdk core .o files ==="
 # Keep path structure relative to the CMake .dir root so no name
 # collisions between multiple timer.c.o / flash.c.o from different
 # sub-modules.
-pushd "$FIRMWARE_BUILD/app/CMakeFiles/pico_poe_app.dir" >/dev/null
+pushd "$FIRMWARE_BUILD/app/CMakeFiles/conduit_app.dir" >/dev/null
 find . -name '*.o' | tar -cf "$OUT/lib/pico-sdk-objects.tar" -T -
 popd >/dev/null
 # Count + size
@@ -92,8 +92,8 @@ find "$FIRMWARE_BUILD" -type d \( -name 'generated' -o -name 'pico_base' \) | wh
     rsync -a "$d/" "$OUT/headers/include/" 2>/dev/null || true
 done
 
-# Also ship a bundled firmware app-level pico_poe_config.h + the user-facing
-# pico_poe_user.h (transmit/log/on_command) so user code that wants
+# Also ship a bundled firmware app-level conduit_config.h + the user-facing
+# conduit_user.h (transmit/log/on_command) so user code that wants
 # board-specific macros and the IDE API can find them.
 if [ -d "$REPO_ROOT/firmware/include" ]; then
     rsync -a "$REPO_ROOT/firmware/include/" "$OUT/headers/include/"

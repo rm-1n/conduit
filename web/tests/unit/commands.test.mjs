@@ -7,7 +7,7 @@ import { strict as assert } from 'node:assert';
 import { loadModule } from './_load.mjs';
 
 const win = loadModule('commands.js');
-const { buildQuery, parseAdvArgs } = win.PicoPoE.cmd;
+const { buildQuery, parseAdvArgs } = win.Conduit.cmd;
 
 // ---- buildQuery -----------------------------------------------------
 

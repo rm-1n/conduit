@@ -5,7 +5,7 @@
 # pick up the new symbols without waiting on the
 # `.github/workflows/build-web-sdk.yml` artifact release.
 #
-# Prereq: a fresh `pico-poe build` so firmware/build/app/CMakeFiles/
+# Prereq: a fresh `conduit build` so firmware/build/app/CMakeFiles/
 #         contains the latest .o files.
 
 set -euo pipefail
@@ -13,11 +13,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-BUILD_DIR="firmware/build/app/CMakeFiles/pico_poe_app.dir"
+BUILD_DIR="firmware/build/app/CMakeFiles/conduit_app.dir"
 OUT="web/assets/sdk/lib/pico-sdk-objects.tar"
 
 if [[ ! -d "$BUILD_DIR" ]]; then
-  echo "✗ no build dir at $BUILD_DIR — run \`pico-poe build\` first" >&2
+  echo "✗ no build dir at $BUILD_DIR — run \`conduit build\` first" >&2
   exit 1
 fi
 

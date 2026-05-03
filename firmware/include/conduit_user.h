@@ -1,8 +1,8 @@
-// pico_poe_user.h — public API for user code written in the PICO-POE web IDE.
+// conduit_user.h — public API for user code written in the CONDUIT web IDE.
 //
 // Include this header from your main.c to get access to helpers that are
 // only useful in the IDE context: log() for the runtime console,
-// transmit() for the live telemetry chart, and poe_command_register() for
+// transmit() for the live telemetry chart, and conduit_command_register() for
 // remote control endpoints.
 
 #pragma once
@@ -25,17 +25,17 @@ extern "C" {
 // Output is truncated after 255 formatted bytes per call; split long
 // payloads into multiple calls if you need more.
 //
-// Internals: the real symbol is `poe_log` — the Pico SDK's pico_double
+// Internals: the real symbol is `conduit_log` — the Pico SDK's pico_double
 // library already claims the linker name `log` (for double-precision
-// natural log, via --wrap=log). We alias `log` to `poe_log` here so user
+// natural log, via --wrap=log). We alias `log` to `conduit_log` here so user
 // code reads naturally. That means if you later include <math.h> in the
 // same translation unit AFTER this header, math.log will also be renamed;
 // use logf()/log10() for math instead, or `#undef log` first.
-void poe_log(const char *fmt, ...)
+void conduit_log(const char *fmt, ...)
     __attribute__((format(printf, 1, 2)));
 
 #ifndef log
-#define log poe_log
+#define log conduit_log
 #endif
 
 // -----------------------------------------------------------------------
@@ -66,25 +66,25 @@ void poe_log(const char *fmt, ...)
 // Constraints:
 //   - Names: UPPER_SNAKE_CASE, ≤ 31 chars, must start with A-Z.
 //     Invalid names emit a one-time warning and are silently dropped.
-//   - At most 32 distinct names per session (POE_DATA_MAX_NAMES).
+//   - At most 32 distinct names per session (CONDUIT_DATA_MAX_NAMES).
 //   - One record (header + payload) must fit in the 32 KiB ring buffer.
 //   - The browser assumes (dtype, n) is constant per name within a run
 //     (HDF5 export depends on this).
 
-// Wire-format dtype enum — KEEP IN SYNC with poe_dtype_t in
+// Wire-format dtype enum — KEEP IN SYNC with conduit_dtype_t in
 // firmware/app/data_buffer.h. Both are part of the wire format.
 typedef enum {
-    POE_DTYPE_I8   = 0,
-    POE_DTYPE_U8   = 1,
-    POE_DTYPE_I16  = 2,
-    POE_DTYPE_U16  = 3,
-    POE_DTYPE_I32  = 4,
-    POE_DTYPE_U32  = 5,
-    POE_DTYPE_I64  = 6,
-    POE_DTYPE_U64  = 7,
-    POE_DTYPE_F32  = 8,
-    POE_DTYPE_F64  = 9,
-} poe_dtype_t;
+    CONDUIT_DTYPE_I8   = 0,
+    CONDUIT_DTYPE_U8   = 1,
+    CONDUIT_DTYPE_I16  = 2,
+    CONDUIT_DTYPE_U16  = 3,
+    CONDUIT_DTYPE_I32  = 4,
+    CONDUIT_DTYPE_U32  = 5,
+    CONDUIT_DTYPE_I64  = 6,
+    CONDUIT_DTYPE_U64  = 7,
+    CONDUIT_DTYPE_F32  = 8,
+    CONDUIT_DTYPE_F64  = 9,
+} conduit_dtype_t;
 
 // Built-in scalar typedefs. Scalars are length-1 arrays so the same
 // transmit() macro handles scalars and vectors uniformly. Access the
@@ -114,8 +114,8 @@ typedef float     F32x3[3];
 typedef float     F32x4[4];
 
 // Internal: the macro-emitted call. Don't invoke directly — use transmit().
-void _poe_transmit_cached(int8_t *id_slot, const char *name,
-                          poe_dtype_t dtype, uint16_t n, const void *src);
+void _conduit_transmit_cached(int8_t *id_slot, const char *name,
+                          conduit_dtype_t dtype, uint16_t n, const void *src);
 
 // transmit(name, T, ptr) — stream one record.
 //   name : UPPER_SNAKE_CASE string literal
@@ -127,51 +127,51 @@ void _poe_transmit_cached(int8_t *id_slot, const char *name,
 // array of unsupported elements) is a compile-time error rather than a
 // silent runtime drop.
 #define transmit(name, T, ptr) do {                                      \
-    static int8_t _poe_id = -1;                                          \
-    _poe_transmit_cached(&_poe_id, (name),                               \
+    static int8_t _conduit_id = -1;                                          \
+    _conduit_transmit_cached(&_conduit_id, (name),                               \
         _Generic( ((T*)0)[0][0],                                         \
-            int8_t:   POE_DTYPE_I8,  uint8_t:  POE_DTYPE_U8,             \
-            int16_t:  POE_DTYPE_I16, uint16_t: POE_DTYPE_U16,            \
-            int32_t:  POE_DTYPE_I32, uint32_t: POE_DTYPE_U32,            \
-            int64_t:  POE_DTYPE_I64, uint64_t: POE_DTYPE_U64,            \
-            float:    POE_DTYPE_F32, double:   POE_DTYPE_F64),           \
+            int8_t:   CONDUIT_DTYPE_I8,  uint8_t:  CONDUIT_DTYPE_U8,             \
+            int16_t:  CONDUIT_DTYPE_I16, uint16_t: CONDUIT_DTYPE_U16,            \
+            int32_t:  CONDUIT_DTYPE_I32, uint32_t: CONDUIT_DTYPE_U32,            \
+            int64_t:  CONDUIT_DTYPE_I64, uint64_t: CONDUIT_DTYPE_U64,            \
+            float:    CONDUIT_DTYPE_F32, double:   CONDUIT_DTYPE_F64),           \
         (uint16_t)(sizeof(T) / sizeof(((T*)0)[0][0])),                   \
         (ptr));                                                          \
 } while (0)
 
 // -----------------------------------------------------------------------
 // Commanding — register a handler for a remote command, called when the
-// browser (or the `pico-poe cmd` CLI) sends POST /api/cmd?name=<your_name>.
+// browser (or the `conduit cmd` CLI) sends POST /api/cmd?name=<your_name>.
 //
 //   static int handle_buzz(const char *args, char *out, size_t out_max) {
-//       int hz = poe_cmd_arg_int(args, "hz", 1000);
+//       int hz = conduit_cmd_arg_int(args, "hz", 1000);
 //       buzzer_play(hz);
 //       return snprintf(out, out_max, "{\"hz\":%d}", hz);
 //   }
 //
-//   void pico_poe_setup(void) {
-//       poe_command_register("buzz", handle_buzz);
+//   void conduit_setup(void) {
+//       conduit_command_register("buzz", handle_buzz);
 //   }
 //
 // The handler runs on the lwIP TCP-callback context (core 1). Keep it
 // fast — it's called inline during HTTP request handling. For long-
-// running work, set a flag and do the work in pico_poe_loop().
+// running work, set a flag and do the work in conduit_loop().
 //
 // Return value: number of bytes written into `out` (the JSON body of the
 // 200-OK reply). A negative return signals an error and the server
 // replies 500 with {"ok":false,"error":"command failed"}.
-typedef int (*poe_cmd_handler_t)(const char *args, char *out, size_t out_max);
-void poe_command_register(const char *name, poe_cmd_handler_t handler);
+typedef int (*conduit_cmd_handler_t)(const char *args, char *out, size_t out_max);
+void conduit_command_register(const char *name, conduit_cmd_handler_t handler);
 
 // Helpers for parsing the raw query-string `args` passed to a handler.
 // Returns the int / fallback if the key is missing or malformed.
-int    poe_cmd_arg_int  (const char *args, const char *key, int    fallback);
-long   poe_cmd_arg_long (const char *args, const char *key, long   fallback);
-float  poe_cmd_arg_float(const char *args, const char *key, float  fallback);
-double poe_cmd_arg_double(const char *args, const char *key, double fallback);
+int    conduit_cmd_arg_int  (const char *args, const char *key, int    fallback);
+long   conduit_cmd_arg_long (const char *args, const char *key, long   fallback);
+float  conduit_cmd_arg_float(const char *args, const char *key, float  fallback);
+double conduit_cmd_arg_double(const char *args, const char *key, double fallback);
 // Copies the value of `key` into `out`. Returns the number of bytes
 // written (excluding the terminator), or 0 if the key is missing.
-size_t poe_cmd_arg_str(const char *args, const char *key,
+size_t conduit_cmd_arg_str(const char *args, const char *key,
                        char *out, size_t out_max);
 
 // -----------------------------------------------------------------------
@@ -187,7 +187,7 @@ size_t poe_cmd_arg_str(const char *args, const char *key,
 //       return NULL;
 //   }
 //
-//   void pico_poe_setup(void) {
+//   void conduit_setup(void) {
 //       on_command("set_blink", I32, on_set_blink);
 //   }
 //
@@ -204,33 +204,33 @@ size_t poe_cmd_arg_str(const char *args, const char *key,
 //
 // For commands that don't fit this single-scalar shape (multi-arg,
 // vector, side-effect-only with no value), keep using
-// poe_command_register() with the raw (args, out, out_max) handler.
+// conduit_command_register() with the raw (args, out, out_max) handler.
 
-typedef const char *(*poe_cmd_cb_i8_t) (int8_t);
-typedef const char *(*poe_cmd_cb_u8_t) (uint8_t);
-typedef const char *(*poe_cmd_cb_i16_t)(int16_t);
-typedef const char *(*poe_cmd_cb_u16_t)(uint16_t);
-typedef const char *(*poe_cmd_cb_i32_t)(int32_t);
-typedef const char *(*poe_cmd_cb_u32_t)(uint32_t);
-typedef const char *(*poe_cmd_cb_i64_t)(int64_t);
-typedef const char *(*poe_cmd_cb_u64_t)(uint64_t);
-typedef const char *(*poe_cmd_cb_f32_t)(float);
-typedef const char *(*poe_cmd_cb_f64_t)(double);
+typedef const char *(*conduit_cmd_cb_i8_t) (int8_t);
+typedef const char *(*conduit_cmd_cb_u8_t) (uint8_t);
+typedef const char *(*conduit_cmd_cb_i16_t)(int16_t);
+typedef const char *(*conduit_cmd_cb_u16_t)(uint16_t);
+typedef const char *(*conduit_cmd_cb_i32_t)(int32_t);
+typedef const char *(*conduit_cmd_cb_u32_t)(uint32_t);
+typedef const char *(*conduit_cmd_cb_i64_t)(int64_t);
+typedef const char *(*conduit_cmd_cb_u64_t)(uint64_t);
+typedef const char *(*conduit_cmd_cb_f32_t)(float);
+typedef const char *(*conduit_cmd_cb_f64_t)(double);
 
 // Per-type registration funcs — typically not called directly; the
 // on_command() macro selects the right one via _Generic. Listed here so
 // the compiler can enforce callback signature matching at the macro
 // expansion site.
-void _poe_register_cb_i8 (const char *name, poe_cmd_cb_i8_t  cb);
-void _poe_register_cb_u8 (const char *name, poe_cmd_cb_u8_t  cb);
-void _poe_register_cb_i16(const char *name, poe_cmd_cb_i16_t cb);
-void _poe_register_cb_u16(const char *name, poe_cmd_cb_u16_t cb);
-void _poe_register_cb_i32(const char *name, poe_cmd_cb_i32_t cb);
-void _poe_register_cb_u32(const char *name, poe_cmd_cb_u32_t cb);
-void _poe_register_cb_i64(const char *name, poe_cmd_cb_i64_t cb);
-void _poe_register_cb_u64(const char *name, poe_cmd_cb_u64_t cb);
-void _poe_register_cb_f32(const char *name, poe_cmd_cb_f32_t cb);
-void _poe_register_cb_f64(const char *name, poe_cmd_cb_f64_t cb);
+void _poe_register_cb_i8 (const char *name, conduit_cmd_cb_i8_t  cb);
+void _poe_register_cb_u8 (const char *name, conduit_cmd_cb_u8_t  cb);
+void _poe_register_cb_i16(const char *name, conduit_cmd_cb_i16_t cb);
+void _poe_register_cb_u16(const char *name, conduit_cmd_cb_u16_t cb);
+void _poe_register_cb_i32(const char *name, conduit_cmd_cb_i32_t cb);
+void _poe_register_cb_u32(const char *name, conduit_cmd_cb_u32_t cb);
+void _poe_register_cb_i64(const char *name, conduit_cmd_cb_i64_t cb);
+void _poe_register_cb_u64(const char *name, conduit_cmd_cb_u64_t cb);
+void _poe_register_cb_f32(const char *name, conduit_cmd_cb_f32_t cb);
+void _poe_register_cb_f64(const char *name, conduit_cmd_cb_f64_t cb);
 
 // on_command(name, T, cb) — typed command registration symmetric to
 // transmit(name, T, ptr). T must be one of the scalar typedefs above

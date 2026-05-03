@@ -1,5 +1,5 @@
 /**
- * Raw TCP HTTP server for PICO-POE.
+ * Raw TCP HTTP server for CONDUIT.
  *
  * Implements a minimal HTTP/1.1 server using lwIP raw TCP API.
  * Routes:
@@ -15,7 +15,7 @@
 #include "http_server.h"
 #include "network.h"
 #include "ota.h"
-#include "pico_poe_config.h"
+#include "conduit_config.h"
 #include "log_buffer.h"
 #include "data_buffer.h"
 #include "commands.h"
@@ -97,7 +97,7 @@ typedef struct {
 // CORS / PNA headers appended to every response
 // --------------------------------------------------------------------------
 static const char *cors_headers =
-    "Access-Control-Allow-Origin: " PICO_POE_CORS_ORIGIN "\r\n"
+    "Access-Control-Allow-Origin: " CONDUIT_CORS_ORIGIN "\r\n"
     "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
     "Access-Control-Allow-Headers: X-Auth-Token, Content-Type, "
         "X-OTA-Start, X-OTA-Finish\r\n"
@@ -276,9 +276,9 @@ static void handle_status(struct tcp_pcb *pcb) {
         "\"rx_drops\":%u,"
         "\"boot_type\":\"%s\","
         "\"tbyb_pending\":%s,"
-        "\"device\":\"pico-poe\""
+        "\"device\":\"conduit\""
         "}",
-        PICO_POE_VERSION_STRING,
+        CONDUIT_VERSION_STRING,
         network_get_ip_str(),
         network_get_mac_str(),
         network_get_uptime_s(),
@@ -441,7 +441,7 @@ static void send_log_stream_headers(struct tcp_pcb *pcb, uint32_t start_cursor) 
 //                                      respond on first byte OR deadline.
 // GET /api/log?since=N&stream=1      → persistent stream: connection stays
 //                                      open and the firmware writes new
-//                                      bytes as poe_log() produces them,
+//                                      bytes as conduit_log() produces them,
 //                                      until the client closes. Client
 //                                      tracks cursor by counting received
 //                                      bytes (initial position is the
@@ -816,13 +816,13 @@ static void parse_request_line(http_conn_t *conn) {
         char token_val[128];
         copy_header_value(token, token_val, sizeof(token_val));
         // Constant-time comparison to prevent timing attacks
-        size_t expected_len = strlen(PICO_POE_AUTH_TOKEN);
+        size_t expected_len = strlen(CONDUIT_AUTH_TOKEN);
         size_t actual_len = strlen(token_val);
         volatile uint8_t result = 0;
         size_t cmp_len = (actual_len < expected_len) ? expected_len : actual_len;
         for (size_t i = 0; i < cmp_len; i++) {
             char a = (i < actual_len) ? token_val[i] : 0;
-            char b = (i < expected_len) ? PICO_POE_AUTH_TOKEN[i] : 0;
+            char b = (i < expected_len) ? CONDUIT_AUTH_TOKEN[i] : 0;
             result |= a ^ b;
         }
         result |= (actual_len != expected_len);
@@ -977,7 +977,7 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
         // been silent for STREAM_KEEPALIVE_MS so the browser stall
         // watchdog (1 s) sees bytes from a quiet-but-healthy device.
         // For data streams: a 16-byte zero-payload record with a
-        // reserved msg_id (POE_DATA_KEEPALIVE_MSG_ID) — the browser
+        // reserved msg_id (CONDUIT_DATA_KEEPALIVE_MSG_ID) — the browser
         // parser skips it before chart/store push.
         // For log streams: a single newline — browser drops empty
         // lines at the top of processLine().
@@ -986,13 +986,13 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
             return ERR_OK;
         }
         if (conn->data_stream) {
-            if (avail < POE_DATA_RECORD_HEADER) return ERR_OK;
-            uint8_t hdr[POE_DATA_RECORD_HEADER];
-            hdr[0] = POE_DATA_MAGIC;
-            hdr[1] = POE_DATA_VERSION;
-            hdr[2] = (uint8_t)(POE_DATA_KEEPALIVE_MSG_ID & 0xFF);
-            hdr[3] = (uint8_t)((POE_DATA_KEEPALIVE_MSG_ID >> 8) & 0xFF);
-            hdr[4] = (uint8_t)POE_DTYPE_U8;
+            if (avail < CONDUIT_DATA_RECORD_HEADER) return ERR_OK;
+            uint8_t hdr[CONDUIT_DATA_RECORD_HEADER];
+            hdr[0] = CONDUIT_DATA_MAGIC;
+            hdr[1] = CONDUIT_DATA_VERSION;
+            hdr[2] = (uint8_t)(CONDUIT_DATA_KEEPALIVE_MSG_ID & 0xFF);
+            hdr[3] = (uint8_t)((CONDUIT_DATA_KEEPALIVE_MSG_ID >> 8) & 0xFF);
+            hdr[4] = (uint8_t)CONDUIT_DTYPE_U8;
             hdr[5] = 0; hdr[6] = 0;       // n = 0 (LE u16)
             hdr[7] = 0;                   // reserved
             uint64_t now_us = (uint64_t)to_us_since_boot(get_absolute_time());
@@ -1163,7 +1163,7 @@ void http_server_init(void) {
         return;
     }
 
-    err_t err = tcp_bind(pcb, IP_ADDR_ANY, PICO_POE_HTTP_PORT);
+    err_t err = tcp_bind(pcb, IP_ADDR_ANY, CONDUIT_HTTP_PORT);
     if (err != ERR_OK) {
         printf("[http] Bind failed: %d\n", err);
         return;
@@ -1177,5 +1177,5 @@ void http_server_init(void) {
 
     tcp_accept(pcb, http_accept);
 
-    printf("[http] Server listening on port %d\n", PICO_POE_HTTP_PORT);
+    printf("[http] Server listening on port %d\n", CONDUIT_HTTP_PORT);
 }

@@ -16,7 +16,7 @@ const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 for (const f of ['upload.js']) {
   (0, eval)(await readFile(join(webRoot, f), 'utf8'));
 }
-const { updateFirmware, commitFirmware, getStatus } = globalThis.PicoPoE;
+const { updateFirmware, commitFirmware, getStatus } = globalThis.Conduit;
 
 const [uf2Path, ip = '192.168.178.200', token = 'changeme'] = process.argv.slice(2);
 if (!uf2Path) { console.error('usage: _upload_probe.mjs <uf2> [ip] [token]'); process.exit(2); }
