@@ -1,9 +1,11 @@
 [submodule "firmware/lib/pico-rmii-ethernet_nce"]
 	path = firmware/lib/pico-rmii-ethernet_nce
-	url = https://github.com/rscott2049/pico-rmii-ethernet_nce.git
+	url = https://github.com/rm-1n/pico-rmii-ethernet_nce.git
+	branch = pico-poe
 [submodule "firmware/lib/pico-examples"]
 	path = firmware/lib/pico-examples
 	url = https://github.com/raspberrypi/pico-examples.git
 [submodule "web/lib/emception"]
 	path = web/lib/emception
-	url = https://github.com/jprendes/emception.git
+	url = https://github.com/rm-1n/emception.git
+	branch = pico-poe

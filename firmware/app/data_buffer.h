@@ -36,6 +36,16 @@
 #define POE_DATA_MAGIC         0xFE
 #define POE_DATA_VERSION       0x01
 
+// Reserved msg_id used by http_server's stream keepalive: a 16-byte
+// header with n=0 emitted at most every 500 ms when the data ring is
+// otherwise idle, so the browser's stall watchdog has bytes to chew
+// on even when user code isn't transmitting. The browser parser
+// (web/telemetry.js drain()) skips records with this msg_id without
+// pushing to the chart or store. Treated as reserved — `transmit()`
+// will never assign it to a user channel because POE_DATA_MAX_NAMES
+// is 32, well below 0xFFFF.
+#define POE_DATA_KEEPALIVE_MSG_ID 0xFFFF
+
 // Keep this enum in sync with the duplicate in
 // web/assets/sdk/headers/include/pico_poe_user.h — both are part of the
 // wire format.

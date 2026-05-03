@@ -84,6 +84,13 @@ typedef struct {
     // /api/data stream flag. STREAMING covers both /api/log?stream=1 and
     // /api/data?stream=1; this bit tells http_poll which ring to drain.
     bool data_stream;
+    // Wall-clock of the last byte http_poll wrote to this PCB (real
+    // record bytes OR a keepalive). When STREAMING ring is empty for
+    // STREAM_KEEPALIVE_MS we emit a tiny in-band marker so the
+    // browser's 1 s stall watchdog has something to count against —
+    // without this, a quiet device looks identical to a wedged TX
+    // path and the indicator flaps "no data" forever.
+    absolute_time_t last_tx_at;
 } http_conn_t;
 
 // --------------------------------------------------------------------------
@@ -144,6 +151,55 @@ static size_t copy_header_value(const char *val, char *out, size_t max) {
 static err_t http_poll(void *arg, struct tcp_pcb *pcb);
 static void conn_close(struct tcp_pcb *pcb, http_conn_t *conn);
 static void enable_keepalive(struct tcp_pcb *pcb);
+
+// --------------------------------------------------------------------------
+// Streaming-connection registry
+// --------------------------------------------------------------------------
+// Tracks currently-open /api/log?stream=1 and /api/data?stream=1 PCBs
+// so http_server_on_link_down() can abort them all on cable unplug.
+// Without this, vanished-client streamers sit in the small
+// MEMP_NUM_TCP_PCB pool for ~50 s (keepalive probe duration) and the
+// browser's reconnect SYNs get refused because the pool is full.
+typedef struct {
+    struct tcp_pcb *pcb;
+    http_conn_t    *conn;
+} stream_reg_entry_t;
+
+#define STREAM_REG_SIZE  MEMP_NUM_TCP_PCB
+static stream_reg_entry_t stream_registry[STREAM_REG_SIZE];
+
+// HTTP-server-specific diagnostic counters surfaced via diag.c. See the
+// header for what each tracks and how to interpret deltas across a
+// cable cycle.
+static volatile uint32_t g_accepts_total         = 0;
+static volatile uint32_t g_streams_started_total = 0;
+
+uint32_t http_server_accepts(void)         { return g_accepts_total; }
+uint32_t http_server_streams_started(void) { return g_streams_started_total; }
+
+static void register_streaming(struct tcp_pcb *pcb, http_conn_t *conn) {
+    for (int i = 0; i < STREAM_REG_SIZE; i++) {
+        if (stream_registry[i].pcb == NULL) {
+            stream_registry[i].pcb  = pcb;
+            stream_registry[i].conn = conn;
+            return;
+        }
+    }
+}
+
+// Idempotent. Matches by pcb when available, otherwise by conn (http_err
+// only has the conn pointer because lwIP has already freed the pcb by
+// the time the err callback fires).
+static void unregister_streaming(struct tcp_pcb *pcb, http_conn_t *conn) {
+    for (int i = 0; i < STREAM_REG_SIZE; i++) {
+        if ((pcb && stream_registry[i].pcb == pcb) ||
+            (conn && stream_registry[i].conn == conn)) {
+            stream_registry[i].pcb  = NULL;
+            stream_registry[i].conn = NULL;
+            return;
+        }
+    }
+}
 
 // --------------------------------------------------------------------------
 // Response builders
@@ -447,6 +503,8 @@ static void handle_log(struct tcp_pcb *pcb, http_conn_t *conn) {
         conn->state = CONN_STATE_STREAMING;
         tcp_nagle_disable(pcb);
         enable_keepalive(pcb);
+        register_streaming(pcb, conn);
+        g_streams_started_total++;
         tcp_poll(pcb, http_poll, 1);
         return;
     }
@@ -531,6 +589,8 @@ static void handle_data(struct tcp_pcb *pcb, http_conn_t *conn) {
         conn->state = CONN_STATE_STREAMING;
         tcp_nagle_disable(pcb);
         enable_keepalive(pcb);
+        register_streaming(pcb, conn);
+        g_streams_started_total++;
         tcp_poll(pcb, http_poll, 1);
         return;
     }
@@ -792,7 +852,37 @@ static void enable_keepalive(struct tcp_pcb *pcb) {
     pcb->keep_cnt   = HTTP_KEEP_CNT;
 }
 
+void http_server_on_link_down(void) {
+    int aborted = 0;
+    for (int i = 0; i < STREAM_REG_SIZE; i++) {
+        struct tcp_pcb *pcb = stream_registry[i].pcb;
+        http_conn_t   *conn = stream_registry[i].conn;
+        if (!pcb) continue;
+        // Belt-and-braces: only abort entries that are still in the
+        // streaming state. Anything mid-OTA (CONN_STATE_BODY) or
+        // mid-header (CONN_STATE_HEADER) is intentionally left alone.
+        if (conn && conn->state != CONN_STATE_STREAMING) continue;
+        // Detach all callbacks BEFORE tcp_abort. lwIP fires the err
+        // callback synchronously from inside tcp_abort, and we want
+        // it to no-op since we're freeing the conn ourselves below.
+        tcp_arg (pcb, NULL);
+        tcp_recv(pcb, NULL);
+        tcp_err (pcb, NULL);
+        tcp_poll(pcb, NULL, 0);
+        tcp_abort(pcb);
+        if (conn) free(conn);
+        stream_registry[i].pcb  = NULL;
+        stream_registry[i].conn = NULL;
+        aborted++;
+    }
+    if (aborted > 0) {
+        printf("[http] link-down: aborted %d stream PCB%s\n",
+               aborted, aborted == 1 ? "" : "s");
+    }
+}
+
 static void conn_close(struct tcp_pcb *pcb, http_conn_t *conn) {
+    unregister_streaming(pcb, conn);
     if (conn) {
         // If OTA was started but connection dropped, abort it
         if (conn->state == CONN_STATE_BODY && ota_in_progress()) {
@@ -831,41 +921,102 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
     }
 
     if (conn->state == CONN_STATE_STREAMING) {
+        u16_t avail = tcp_sndbuf(pcb);
+        if (avail == 0) return ERR_OK;  // wait for ACK; retry next poll
         uint32_t total = conn->data_stream
             ? data_buffer_total_written()
             : log_buffer_total_written();
-        if (total == conn->log_since) return ERR_OK;
-        u16_t avail = tcp_sndbuf(pcb);
-        if (avail == 0) return ERR_OK;  // wait for ACK; retry next poll
-        // Sized to absorb a full slow-timer tick of telemetry at 40 KB/s
-        // (4 KB per 100 ms) with comfortable headroom for ACK/window
-        // dynamics. Smaller buffers force the data ring to backlog and
-        // eventually overflow → dropped samples → browser sees voids.
-        static uint8_t out[8192];
-        size_t cap = (avail < sizeof(out)) ? avail : sizeof(out);
-        uint32_t next = conn->log_since;
-        size_t n = conn->data_stream
-            ? data_buffer_read(conn->log_since, out, cap, &next)
-            : log_buffer_read(conn->log_since, out, cap, &next);
-        // Always advance log_since to whatever the ring reader resolved
-        // to — even on n==0. If conn->log_since was past total (stale
-        // browser cursor across a reboot), data_buffer_read clamped its
-        // local since to total and returned 0; without writing back, we'd
-        // spin here until total caught up to the stale value (~10 minutes
-        // at 250 Hz). Pair with the entry-side clamp in handle_data /
-        // handle_log so the very first poll already starts at a sane cursor.
-        conn->log_since = next;
-        if (n == 0) return ERR_OK;
-        err_t e = tcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
-        if (e == ERR_MEM) return ERR_OK;  // sndbuf race — retry next poll
-        if (e != ERR_OK) {
-            conn->state = CONN_STATE_DONE;
-            conn_close(pcb, conn);
+        bool have_real_data = (total != conn->log_since);
+        if (have_real_data) {
+            // Sized to absorb a full slow-timer tick of telemetry at 40 KB/s
+            // (4 KB per 100 ms) with comfortable headroom for ACK/window
+            // dynamics. Smaller buffers force the data ring to backlog and
+            // eventually overflow → dropped samples → browser sees voids.
+            static uint8_t out[8192];
+            size_t cap = (avail < sizeof(out)) ? avail : sizeof(out);
+            uint32_t next = conn->log_since;
+            size_t n = conn->data_stream
+                ? data_buffer_read(conn->log_since, out, cap, &next)
+                : log_buffer_read(conn->log_since, out, cap, &next);
+            // Always advance log_since to whatever the ring reader resolved
+            // to — even on n==0. If conn->log_since was past total (stale
+            // browser cursor across a reboot), data_buffer_read clamped its
+            // local since to total and returned 0; without writing back, we'd
+            // spin here until total caught up to the stale value (~10 minutes
+            // at 250 Hz). Pair with the entry-side clamp in handle_data /
+            // handle_log so the very first poll already starts at a sane cursor.
+            conn->log_since = next;
+            if (n == 0) return ERR_OK;
+            // Known cosmetic glitch on cable-cycle boundary: ~once per cable
+            // cycle the browser receives one log line whose first ~12 bytes
+            // are the *previous* line's prefix bytes prepended to the new
+            // line, e.g. "[702317801]\t02846190]\ttick=663000…" instead of
+            // "[702846190]\ttick=663000…". The duplicated chunk is exactly
+            // one prefix-length, suggesting an lwIP TCP segment-pool / pcb-
+            // reuse race around abort/reconnect that re-emits the tail of a
+            // prior tcp_write. log_since arithmetic on our side is correct
+            // (advance-before-write here only causes gaps on ERR_MEM, never
+            // duplicates). Proving the lwIP cause needs a wire capture across
+            // many cycles; for now we suppress the visible artifact in the
+            // browser via a renderer guard in web/console.js (strips a stray
+            // "<digits>]\t" tail from the parsed msg). Revisit if the
+            // duplication ever exceeds one prefix length.
+            err_t e = tcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
+            if (e == ERR_MEM) return ERR_OK;  // sndbuf race — retry next poll
+            if (e != ERR_OK) {
+                conn->state = CONN_STATE_DONE;
+                conn_close(pcb, conn);
+                return ERR_OK;
+            }
+            tcp_output(pcb);
+            conn->last_tx_at = get_absolute_time();
             return ERR_OK;
         }
+
+        // No real data. Emit a tiny keepalive when the connection has
+        // been silent for STREAM_KEEPALIVE_MS so the browser stall
+        // watchdog (1 s) sees bytes from a quiet-but-healthy device.
+        // For data streams: a 16-byte zero-payload record with a
+        // reserved msg_id (POE_DATA_KEEPALIVE_MSG_ID) — the browser
+        // parser skips it before chart/store push.
+        // For log streams: a single newline — browser drops empty
+        // lines at the top of processLine().
+        #define STREAM_KEEPALIVE_MS  500
+        if (!time_reached(delayed_by_ms(conn->last_tx_at, STREAM_KEEPALIVE_MS))) {
+            return ERR_OK;
+        }
+        if (conn->data_stream) {
+            if (avail < POE_DATA_RECORD_HEADER) return ERR_OK;
+            uint8_t hdr[POE_DATA_RECORD_HEADER];
+            hdr[0] = POE_DATA_MAGIC;
+            hdr[1] = POE_DATA_VERSION;
+            hdr[2] = (uint8_t)(POE_DATA_KEEPALIVE_MSG_ID & 0xFF);
+            hdr[3] = (uint8_t)((POE_DATA_KEEPALIVE_MSG_ID >> 8) & 0xFF);
+            hdr[4] = (uint8_t)POE_DTYPE_U8;
+            hdr[5] = 0; hdr[6] = 0;       // n = 0 (LE u16)
+            hdr[7] = 0;                   // reserved
+            uint64_t now_us = (uint64_t)to_us_since_boot(get_absolute_time());
+            for (int i = 0; i < 8; i++) hdr[8 + i] = (uint8_t)(now_us >> (8 * i));
+            err_t e = tcp_write(pcb, hdr, sizeof(hdr), TCP_WRITE_FLAG_COPY);
+            if (e == ERR_MEM) return ERR_OK;
+            if (e != ERR_OK) {
+                conn->state = CONN_STATE_DONE;
+                conn_close(pcb, conn);
+                return ERR_OK;
+            }
+        } else {
+            if (avail < 1) return ERR_OK;
+            const char nl = '\n';
+            err_t e = tcp_write(pcb, &nl, 1, TCP_WRITE_FLAG_COPY);
+            if (e == ERR_MEM) return ERR_OK;
+            if (e != ERR_OK) {
+                conn->state = CONN_STATE_DONE;
+                conn_close(pcb, conn);
+                return ERR_OK;
+            }
+        }
         tcp_output(pcb);
-        // log_since already advanced above (kept idempotent across the
-        // n==0 early-return).
+        conn->last_tx_at = get_absolute_time();
     }
     return ERR_OK;
 }
@@ -965,6 +1116,9 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 
 static void http_err(void *arg, err_t err) {
     http_conn_t *conn = (http_conn_t *)arg;
+    // lwIP has already freed the pcb by the time err fires, so we can
+    // only match the registry entry by conn pointer.
+    unregister_streaming(NULL, conn);
     if (conn) {
         if (ota_in_progress()) {
             ota_abort();
@@ -974,6 +1128,7 @@ static void http_err(void *arg, err_t err) {
 }
 
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err) {
+    g_accepts_total++;
     if (err != ERR_OK || pcb == NULL) {
         return ERR_VAL;
     }

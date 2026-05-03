@@ -27,18 +27,25 @@
   'use strict';
 
   const RECONNECT_OK_MS    = 100;
-  const RECONNECT_ERR_MS   = 2000;
+  // Sleep between failed reconnect attempts. Matched to telemetry.js.
+  // Tight enough that we land within ~150 ms of the upstream port
+  // re-opening; the failed fetch itself dominates the cycle anyway.
+  const RECONNECT_ERR_MS   = 150;
   const IP_CHECK_MS        = 1000;
   const MAX_BUFFER_CHARS   = 200_000;
   const PENDING_MAX_CHARS  = 100_000;
   const PERSIST_BATCH_MAX  = 50;     // flush to IndexedDB after N records or…
   const PERSIST_BATCH_MS   = 250;    // …after M ms idle, whichever hits first.
-  // Connect-phase timeout — same pattern as telemetry.js. A freshly
-  // rebooted device that accepts the TCP but doesn't reply would
-  // otherwise leave runStream stuck on `await fetch(...)` indefinitely
-  // (the log stream may legitimately be silent for minutes once
-  // connected, so we DON'T add a stall watchdog post-headers).
-  const CONNECT_TIMEOUT_MS = 5000;
+  // Connect-phase timeout — same pattern as telemetry.js. Firmware emits
+  // a `\n` keepalive every ~500 ms when the log ring is empty (see
+  // http_poll), so 750 ms covers one keepalive + jitter and a healthy
+  // connection produces a byte well within this window.
+  const CONNECT_TIMEOUT_MS = 750;
+  // Stall watchdog — now safe because firmware emits `\n` keepalives
+  // every ~500 ms even when the log is silent. 1 s covers one missed
+  // keepalive plus jitter.
+  const STALL_MS           = 1000;
+  const STALL_CHECK_MS     = 150;
   // Prefix regex: "[<digits>]\t<msg>". The greedy `(.*)$` captures the entire
   // rest of the line, including any literal "[...]\t" the user may have
   // written inside their format string.
@@ -63,6 +70,13 @@
   let lastStateCls = '';
   let activeAbort = null;
   let ipWatchHandle = null;
+  // Last time bytes (real or keepalive `\n`) arrived on the active
+  // stream. 0 while connecting / between streams. Drives the stall
+  // watchdog below; firmware emits a keepalive every ~500 ms so any
+  // value > STALL_MS means the underlying TCP is dead even though
+  // fetch() hasn't surfaced an error.
+  let lastByteMs = 0;
+  let stallHandle = null;
 
   let showTimestamps = false;
 
@@ -105,14 +119,47 @@
 
   // --- UI helpers ------------------------------------------------------
 
-  function setState(text, cls) {
+  // Discriminated state machine — same shape as telemetry.js.
+  //   'connected' | 'no data' | 'reconnecting' | 'paused' | 'no device'
+  //   | 'disconnected' | 'updating…'
+  let currentStage = 'disconnected';
+  let stageEnteredAt = 0;
+  function setStage(stage) {
+    currentStage = stage;
+    stageEnteredAt = performance.now();
+    renderStage();
+  }
+  function renderStage() {
+    let text, cls;
+    switch (currentStage) {
+      case 'connected':
+        text = 'connected'; cls = 'ok'; break;
+      case 'no data':
+        text = 'no data'; cls = 'err'; break;
+      case 'reconnecting':
+        text = 'reconnecting…'; cls = 'err'; break;
+      case 'paused':       text = 'paused';       cls = '';    break;
+      case 'no device':    text = 'no device';    cls = '';    break;
+      case 'updating…':    text = 'updating…';    cls = '';    break;
+      case 'disconnected': text = 'disconnected'; cls = '';    break;
+      default:             text = currentStage;   cls = '';    break;
+    }
     lastStateText = text;
-    lastStateCls = cls || '';
+    lastStateCls = cls;
     if (!stateEl) return;
     if (paused) return;
     stateEl.textContent = text;
     stateEl.setAttribute('data-state',
       cls === 'ok' ? 'ok' : cls === 'err' ? 'err' : 'off');
+  }
+  // Back-compat shim for legacy call sites in this file.
+  function setState(text, cls) {
+    if (text === 'connected')         setStage('connected');
+    else if (text === 'paused')       setStage('paused');
+    else if (text === 'no device')    setStage('no device');
+    else if (text === 'updating…')    setStage('updating…');
+    else if (text === 'reconnecting…' || text === 'reconnecting') setStage('reconnecting');
+    else setStage('disconnected');
   }
 
   // Low-level render: append text to the DOM console, respect pause,
@@ -189,11 +236,24 @@
   // the previous record (inherits lastUptimeUs); computes wall-clock;
   // commits to IndexedDB and the visible console.
   async function processLine(line) {
+    // Drop pure-empty lines: they're emitted as keepalives by
+    // firmware http_poll when the log ring is silent (see
+    // STREAM_KEEPALIVE_MS). The byte still feeds our stall watchdog
+    // via lastByteMs at the chunk level — we just don't render or
+    // persist a blank line.
+    if (line === '') return;
     const m = line.match(PREFIX_RE);
     let uptimeUs, msg;
     if (m) {
       uptimeUs = Number(m[1]);
       msg = m[2];
+      // Strip a stray "<digits>]\t" tail from the front of msg. After a
+      // cable cycle the byte stream occasionally repeats the prior
+      // prefix's bytes around the boundary, leaving the corrupted form
+      // "[<ts1>]\t<partial-ts2>]\t<real-msg>". The first ts is real;
+      // <partial-ts2>]\t is debris and would render as ugly noise.
+      const dup = msg.match(/^\d+\]\t(.*)$/);
+      if (dup) msg = dup[1];
       // Reboot detection: a strictly-smaller uptime means the device
       // rebooted. Flush any in-flight batch to the OLD run before we flip.
       if (currentRun && lastUptimeUs !== null && uptimeUs + 1_000_000 < lastUptimeUs) {
@@ -268,6 +328,7 @@
     const since = cursor === null ? 0 : cursor;
     const url = `http://${ip}/api/log?since=${since}&stream=1`;
     wallMsAnchor = Date.now();  // consumed by the first record of this run
+    console.log('[con] runStream.open', { url, cursor });
 
     // Track first-byte arrival so the connect-timeout below can decide
     // whether to abort. Logs may be silent for long periods after the
@@ -276,6 +337,7 @@
     let firstByteSeen = false;
     const connectTimer = setTimeout(() => {
       if (!firstByteSeen && activeAbort && !signal.aborted) {
+        console.log('[con] runStream.connectTimeout');
         try { activeAbort.abort(); } catch (_) {}
       }
     }, CONNECT_TIMEOUT_MS);
@@ -285,6 +347,7 @@
       res = await fetch(url, { mode: 'cors', cache: 'no-store', signal });
     } catch (e) {
       clearTimeout(connectTimer);
+      console.log('[con] runStream.fetchError', String(e && e.message || e));
       throw e;
     }
     if (!res.ok) { clearTimeout(connectTimer); throw new Error(`HTTP ${res.status}`); }
@@ -296,28 +359,50 @@
     // &since= request too low and the device would replay already-
     // received bytes.
     const startHdr = res.headers.get('X-Log-Cursor');
+    const cursorBefore = cursor;
     if (startHdr !== null) {
       const startCursor = Number(startHdr);
       if (Number.isFinite(startCursor)) cursor = startCursor;
     } else if (cursor == null) {
       cursor = 0;
     }
+    console.log('[con] runStream.headers', { sentSince: since, xLogCursor: startHdr, cursorBefore, cursorAfter: cursor });
 
     if (consoleEl.textContent.startsWith('── connecting')) {
       consoleEl.textContent = '';
     }
-    setState('connected', 'ok');
+    setStage('connected');
     firstByteSeen = true;
     clearTimeout(connectTimer);
+    lastByteMs = performance.now();
 
     const reader = res.body.getReader();
     const dec = new TextDecoder('utf-8', { fatal: false });
     try {
+      let chunkCount = 0;
+      let bytesThisStream = 0;
+      const streamStartedAt = performance.now();
       for (;;) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log('[con] runStream.eof', { chunkCount, bytesThisStream,
+                       cursorEnd: cursor, streamMs: Math.round(performance.now() - streamStartedAt) });
+          break;
+        }
         if (value && value.byteLength) {
+          lastByteMs = performance.now();
           cursor += value.byteLength;
+          bytesThisStream += value.byteLength;
+          // Log every chunk in the first 5 s after a fresh connect; after
+          // that, every 50 chunks (or any chunk > 200 bytes — which would
+          // be a backlog drain after a reconnect).
+          const ageMs = performance.now() - streamStartedAt;
+          if (ageMs < 5000 || chunkCount % 50 === 0 || value.byteLength > 200) {
+            console.log('[con] runStream.chunk#' + chunkCount,
+                        { bytes: value.byteLength, cursorAfter: cursor,
+                          firstFew: new TextDecoder().decode(value.slice(0, 60)) });
+          }
+          chunkCount++;
           await ingestChunk(dec.decode(value, { stream: true }));
         }
       }
@@ -325,6 +410,7 @@
       if (tail) await ingestChunk(tail);
     } finally {
       try { reader.cancel(); } catch (_) {}
+      lastByteMs = 0;
       persistFlush();
     }
   }
@@ -360,12 +446,18 @@
       }
 
       activeAbort = new AbortController();
+      // Fresh "reconnecting" stage on every attempt so the elapsed
+      // counter resets and the user can see we're actively retrying.
+      if (currentStage !== 'connected' && currentStage !== 'updating…' &&
+          currentStage !== 'no device') {
+        setStage('reconnecting');
+      }
       try {
         await runStream(ip, activeAbort.signal);
         await sleep(RECONNECT_OK_MS);
       } catch (e) {
         if (e && e.name === 'AbortError') continue;
-        setState('disconnected', 'err');
+        setStage('reconnecting');
         await sleep(RECONNECT_ERR_MS);
       } finally {
         activeAbort = null;
@@ -380,6 +472,23 @@
       const ip = getIp();
       if (ip !== knownIp && activeAbort) activeAbort.abort();
     }, IP_CHECK_MS);
+  }
+
+  // Stall watchdog. Now that the firmware emits a `\n` keepalive every
+  // ~500 ms when the log ring is silent (see http_poll
+  // STREAM_KEEPALIVE_MS), a quiet stream is no longer indistinguishable
+  // from a wedged TCP — STALL_MS of true silence means the connection
+  // is dead. Aborts the active fetch so streamLoop reconnects.
+  function watchStall() {
+    if (stallHandle) return;
+    stallHandle = setInterval(() => {
+      if (stopped || streamPaused || !activeAbort) return;
+      if (lastByteMs === 0) return;
+      if (performance.now() - lastByteMs > STALL_MS) {
+        setStage('no data');
+        try { activeAbort.abort(); } catch (_) {}
+      }
+    }, STALL_CHECK_MS);
   }
 
   // --- Init / public API -----------------------------------------------
@@ -426,6 +535,7 @@
     // before invoking the exporter.
 
     watchIp();
+    watchStall();
     streamLoop();
 
     window.PicoPoE = window.PicoPoE || {};
@@ -434,6 +544,19 @@
       resetCursor() {
         cursor = null;
         if (activeAbort) activeAbort.abort();
+      },
+      // Wake the stream loop when an external observer (telemetry's
+      // stall watchdog, the user's Refresh button) decides this stream
+      // is stale. Without this, a half-dead TCP that's silent post-
+      // headers would sit in `await reader.read()` forever — there's
+      // no stall watchdog here because logs may legitimately be silent
+      // for minutes. Aborting forces streamLoop to retry, which either
+      // succeeds (firmware reachable) or trips its own connect timeout.
+      kick() {
+        if (activeAbort) {
+          try { activeAbort.abort(); } catch (_) {}
+          setState('reconnecting…', 'err');
+        }
       },
       // Inject a browser-side note (connection events, refresh outcomes,
       // etc.) into the runtime console pane. Tagged so the user can tell
@@ -452,6 +575,7 @@
         if (activeAbort) activeAbort.abort();
         if (streamPauseWaiter) { streamPauseWaiter(); streamPauseWaiter = null; }
         if (ipWatchHandle) { clearInterval(ipWatchHandle); ipWatchHandle = null; }
+        if (stallHandle)   { clearInterval(stallHandle);   stallHandle   = null; }
       },
       // External "pause the whole stream" for OTA flows. ide.js calls
       // pauseStream() before kicking the upload so the LED flips to
