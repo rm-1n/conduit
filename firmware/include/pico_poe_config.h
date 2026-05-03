@@ -29,12 +29,9 @@
 #define PICO_POE_DHCP_TIMEOUT_MS  10000
 
 // Static fallback IP configuration
-// 2026-05-03: switched to an isolated /24 for direct USB-Ethernet
-// testing (no Fritz!Box / no L2 switch in the path). Restore to
-// 192.168.178.x when re-attaching to the LAN.
-#define PICO_POE_STATIC_IP      "192.168.99.200"
+#define PICO_POE_STATIC_IP      "192.168.178.200"
 #define PICO_POE_STATIC_MASK    "255.255.255.0"
-#define PICO_POE_STATIC_GW      "192.168.99.1"
+#define PICO_POE_STATIC_GW      "192.168.178.1"
 
 // HTTP server port
 #define PICO_POE_HTTP_PORT      80
