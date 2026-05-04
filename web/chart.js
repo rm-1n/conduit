@@ -82,9 +82,9 @@
     return v.toFixed(a < 1 ? 4 : a < 100 ? 3 : 2);
   }
   function fmtBytes(n) {
-    if (n < 1024) return n + ' B';
-    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
-    return (n / (1024 * 1024)).toFixed(2) + ' MB';
+    if (n < 1024) return n + 'B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + 'KB';
+    return (n / (1024 * 1024)).toFixed(2) + 'MB';
   }
   function fmtDuration(sec) {
     if (!Number.isFinite(sec) || sec < 0) sec = 0;
@@ -125,9 +125,24 @@
     }
     const span = (s.sessionStartWallMs != null && s.sessionEndWallMs != null)
       ? (s.sessionEndWallMs - s.sessionStartWallMs) / 1000 : 0;
-    centralStatsEl.textContent =
-      `${s.channels} ch · ${s.samples.toLocaleString()} pts · ` +
-      `${fmtBytes(s.approxBytes)} · ${fmtDuration(span)}`;
+    // Separators sit in their own spans so each segment can be hidden
+    // along with the sep that immediately follows it (`.stat-X +
+    // .stat-sep` rule in style.css). That way dropping the leftmost
+    // segment doesn't leave a dangling " · " at the start.
+    // Drop priority on narrow panes: points first, channels, bytes,
+    // time last (see container queries in style.css `.telemetry-pane`).
+    // Number and unit are joined with no space — the stats element
+    // overrides the pane-header's letter-spacing so the units don't
+    // float away from their numbers; the wider gap between segments
+    // is provided by the `.stat-sep` margin in style.css instead.
+    centralStatsEl.innerHTML =
+      `<span class="stat-points">${s.samples.toLocaleString()}PTS</span>` +
+      `<span class="stat-sep">·</span>` +
+      `<span class="stat-channels">${s.channels}CH</span>` +
+      `<span class="stat-sep">·</span>` +
+      `<span class="stat-bytes">${fmtBytes(s.approxBytes)}</span>` +
+      `<span class="stat-sep">·</span>` +
+      `<span class="stat-time">${fmtDuration(span)}</span>`;
   }
 
   // ---------------------------------------------------------------------
@@ -149,6 +164,14 @@
       // components). Anything missing defaults to visible.
       this.seriesShow = opts.seriesShow ? new Map(Object.entries(opts.seriesShow))
                                         : new Map();
+
+      // Channels the user has explicitly opted out of from the channel
+      // picker. Different from seriesShow: a channel in this set is
+      // dropped at push() time so its data never reaches the plot,
+      // while seriesShow only hides a series visually inside uPlot.
+      // Persisted so an exclusion survives reload.
+      this.excludedChannels = new Set(
+        Array.isArray(opts.excludedChannels) ? opts.excludedChannels : []);
 
       // Channel metadata (NOT samples). dataStore owns the bytes.
       // name → { color, n, dtype }.
@@ -198,6 +221,10 @@
     push(rec) {
       if (!rec || !rec.name) return;
       if (this.channelFilter && !this.channelFilter.has(rec.name)) return;
+      // User opted this channel out via the channel picker — drop the
+      // record entirely instead of just hiding the series. Re-enabling
+      // re-registers from dataStore meta in _setChannelEnabled.
+      if (this.excludedChannels.has(rec.name)) return;
       // Register the channel + (re)schedule a uPlot rebuild if its shape
       // is new. The rebuild adds the necessary series rows; the next
       // _syncToUplot draws them.
@@ -252,8 +279,15 @@
     gap() { /* no-op */ }
 
     destroy() {
-      if (this.uplot) { try { this.uplot.destroy(); } catch (_) {} this.uplot = null; }
-      if (this.ro)    { try { this.ro.disconnect(); }   catch (_) {} this.ro = null; }
+      if (this.uplot)    { try { this.uplot.destroy(); }    catch (_) {} this.uplot = null; }
+      if (this.ro)       { try { this.ro.disconnect(); }    catch (_) {} this.ro = null; }
+      if (this.legendRO) { try { this.legendRO.disconnect(); } catch (_) {} this.legendRO = null; }
+      // Picker listeners only attached while open, but remove
+      // unconditionally — removeEventListener with the wrong handler is
+      // a no-op, and we don't want to leak if the plot is destroyed
+      // mid-open.
+      if (this._docClickHandler)   document.removeEventListener('click',  this._docClickHandler);
+      if (this._docKeydownHandler) document.removeEventListener('keydown', this._docKeydownHandler);
       if (this.root && this.root.parentNode) this.root.parentNode.removeChild(this.root);
     }
 
@@ -266,6 +300,7 @@
         title: this.title,
         windowS: this.windowS,
         channels: this.channelFilter ? [...this.channelFilter] : null,
+        excludedChannels: [...this.excludedChannels],
         seriesShow,
       };
     }
@@ -379,6 +414,41 @@
       if (icons) icons.set(this.autoRangeBtn, 'crop_free', { size: 14 });
       this.autoRangeBtn.addEventListener('click', () => this._autoRange());
 
+      // Channel picker — toggleable popover with a checkbox per series.
+      // Useful when the channel set has grown big enough that uPlot's
+      // legend wraps onto multiple rows and starts squeezing the canvas
+      // (the dynamic-size code in _sizeUplot keeps the canvas from
+      // overflowing, but the user still wants explicit visibility
+      // control without click-fishing on tiny legend entries).
+      this.pickerBtn = document.createElement('button');
+      this.pickerBtn.type = 'button';
+      this.pickerBtn.className = 'btn-ghost btn-mini btn-icon plot-picker-btn';
+      this.pickerBtn.title = 'Show / hide channels';
+      this.pickerBtn.setAttribute('aria-label', 'Show / hide channels');
+      this.pickerBtn.setAttribute('aria-haspopup', 'true');
+      this.pickerBtn.setAttribute('aria-expanded', 'false');
+      if (icons) icons.set(this.pickerBtn, 'filter_list', { size: 14 });
+      this.pickerBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        this._togglePicker();
+      });
+
+      this.pickerMenu = document.createElement('div');
+      this.pickerMenu.className = 'plot-channel-menu';
+      this.pickerMenu.hidden = true;
+      this.pickerMenu.addEventListener('click', (ev) => ev.stopPropagation());
+
+      // Document-level click handler used to close the picker on
+      // outside-click. Bound here so destroy() can remove it cleanly.
+      this._docClickHandler = (ev) => {
+        if (this.pickerMenu.hidden) return;
+        if (this.pickerMenu.contains(ev.target) || this.pickerBtn.contains(ev.target)) return;
+        this._closePicker();
+      };
+      this._docKeydownHandler = (ev) => {
+        if (ev.key === 'Escape' && !this.pickerMenu.hidden) this._closePicker();
+      };
+
       this.deleteBtn = document.createElement('button');
       this.deleteBtn.type = 'button';
       this.deleteBtn.className = 'btn-ghost btn-mini btn-icon plot-delete';
@@ -393,7 +463,9 @@
       this.header.appendChild(this.pauseBtn);
       this.header.appendChild(this.clearBtn);
       this.header.appendChild(this.autoRangeBtn);
+      this.header.appendChild(this.pickerBtn);
       this.header.appendChild(this.deleteBtn);
+      this.header.appendChild(this.pickerMenu);
 
       this.mount = document.createElement('div');
       this.mount.className = 'chart-wrap';
@@ -406,12 +478,17 @@
       this.root.appendChild(this.mount);
       this.parent.appendChild(this.root);
 
-      this.ro = new ResizeObserver(() => {
-        if (!this.uplot || !this.mount) return;
-        const h = Math.max(60, this.mount.clientHeight - CHROME_H);
-        this.uplot.setSize({ width: this.mount.clientWidth, height: h });
-      });
+      // Both the chart-wrap and the legend can change height
+      // independently — chart-wrap when the user resizes the pane / adds
+      // or removes plots, the legend when channels (de)register or wrap
+      // onto another row. Either change has to feed the same setSize
+      // call so the canvas stays inside the chart-wrap. Two observers
+      // share `_sizeUplot` for that.
+      this.ro = new ResizeObserver(() => this._sizeUplot());
       this.ro.observe(this.mount);
+      // legendRO is (re)attached inside _rebuildUplot once the .u-legend
+      // element exists. Declared here so destroy() can disconnect it.
+      this.legendRO = null;
 
       // Double-click resets the visible window to the largest preset
       // (5 min) — the single discoverable affordance for "show me
@@ -728,6 +805,9 @@
       if (!this.mount || !window.uPlot) return;
       if (this.knownChannels.size === 0) return;
       if (this.uplot) { try { this.uplot.destroy(); } catch (_) {} this.uplot = null; }
+      // The legend is part of the previous uPlot subtree — disconnect
+      // the observer before destroying it so we don't leak a stale ref.
+      if (this.legendRO) { try { this.legendRO.disconnect(); } catch (_) {} }
       const placeholder = this.mount.querySelector('.chart-placeholder');
       if (placeholder) placeholder.parentNode.removeChild(placeholder);
       for (const stray of this.mount.querySelectorAll('.uplot')) {
@@ -736,6 +816,180 @@
       const data = this._buildRenderData();
       this.uplot = new uPlot(this._buildOpts(data), data, this.mount);
       this._applyXScale();
+      this._observeLegend();
+      // Series set may have changed — refresh the picker if it was open
+      // when the rebuild fired (e.g. a new channel registered).
+      if (this.pickerMenu && !this.pickerMenu.hidden) this._populatePicker();
+    }
+
+    // Re-(attach) the legend observer to the .u-legend element that
+    // uPlot created in this.mount. Sized once synchronously so the
+    // canvas drops to the legend's actual height immediately, then on
+    // every legend size change after that.
+    _observeLegend() {
+      const legend = this.mount && this.mount.querySelector('.u-legend');
+      if (!legend) return;
+      this._sizeUplot();
+      if (!this.legendRO) {
+        this.legendRO = new ResizeObserver(() => this._sizeUplot());
+      }
+      this.legendRO.observe(legend);
+    }
+
+    // Single source of truth for canvas height. Reads the legend's
+    // actual rendered height (uPlot's `height` arg only sizes the
+    // canvas + axes — it doesn't subtract the legend, so the legend's
+    // row count directly eats into chart-wrap if we don't compensate).
+    _sizeUplot() {
+      if (!this.uplot || !this.mount) return;
+      const legend = this.mount.querySelector('.u-legend');
+      const legendH = legend ? Math.ceil(legend.getBoundingClientRect().height) : CHROME_H;
+      const h = Math.max(60, this.mount.clientHeight - legendH);
+      this.uplot.setSize({ width: this.mount.clientWidth, height: h });
+    }
+
+    // ---- Channel picker --------------------------------------------------
+
+    _togglePicker() {
+      if (this.pickerMenu.hidden) this._openPicker();
+      else this._closePicker();
+    }
+
+    _openPicker() {
+      this._populatePicker();
+      this.pickerMenu.hidden = false;
+      this.pickerBtn.setAttribute('aria-expanded', 'true');
+      // Defer the listener-add by one tick so the click that opened the
+      // picker doesn't itself fire the outside-click handler.
+      setTimeout(() => {
+        document.addEventListener('click', this._docClickHandler);
+        document.addEventListener('keydown', this._docKeydownHandler);
+      }, 0);
+    }
+
+    _closePicker() {
+      this.pickerMenu.hidden = true;
+      this.pickerBtn.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', this._docClickHandler);
+      document.removeEventListener('keydown', this._docKeydownHandler);
+    }
+
+    // Channel names the picker should list — the union of currently
+    // registered channels and ones the user has excluded (so excluded
+    // entries stay visible in the menu, ready to be re-enabled).
+    _pickerChannels() {
+      const out = new Set();
+      for (const name of this.knownChannels.keys()) out.add(name);
+      for (const name of this.excludedChannels) out.add(name);
+      return [...out].sort();
+    }
+
+    // Flip a single channel's enabled state. Disabling drops it from
+    // knownChannels and rebuilds (the series + its data disappear).
+    // Enabling tries to re-register immediately from dataStore meta so
+    // the channel reappears without waiting for the next telemetry
+    // record; if dataStore has no record of it, push() will register
+    // on next arrival.
+    _setChannelEnabled(name, enabled) {
+      if (enabled) {
+        this.excludedChannels.delete(name);
+        if (!this.knownChannels.has(name)) {
+          const ds = window.Conduit && window.Conduit.dataStore;
+          const meta = ds && ds.listChannels
+            ? ds.listChannels().find((c) => c.name === name) : null;
+          if (meta) {
+            this.knownChannels.set(name, {
+              n: meta.n, dtype: meta.dtype,
+              color: colorFor(this.knownChannels.size),
+            });
+            this._scheduleRebuild();
+          }
+        }
+      } else {
+        this.excludedChannels.add(name);
+        if (this.knownChannels.has(name)) {
+          this.knownChannels.delete(name);
+          this._scheduleRebuild();
+        }
+      }
+    }
+
+    _setAllChannelsEnabled(enabled) {
+      for (const name of this._pickerChannels()) {
+        this._setChannelEnabled(name, enabled);
+      }
+    }
+
+    _populatePicker() {
+      const channels = this._pickerChannels();
+      this.pickerMenu.innerHTML = '';
+
+      if (channels.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'plot-channel-menu__empty';
+        empty.textContent = 'no channels yet';
+        this.pickerMenu.appendChild(empty);
+        return;
+      }
+
+      const enabled  = channels.map((n) => !this.excludedChannels.has(n));
+      const allShown  = enabled.every(Boolean);
+      const noneShown = enabled.every((v) => !v);
+
+      // "Select all" / "Deselect all" — indeterminate when mixed.
+      const allRow = document.createElement('label');
+      allRow.className = 'plot-channel-menu__row plot-channel-menu__all';
+      const allCb = document.createElement('input');
+      allCb.type = 'checkbox';
+      allCb.checked = allShown;
+      allCb.indeterminate = !allShown && !noneShown;
+      allCb.addEventListener('change', () => {
+        this._setAllChannelsEnabled(!allShown);
+        this._populatePicker();
+        emitLayoutChange();
+      });
+      const allText = document.createElement('span');
+      allText.className = 'plot-channel-menu__label';
+      allText.textContent = allShown ? 'Deselect all' : 'Select all';
+      allRow.appendChild(allCb);
+      allRow.appendChild(allText);
+      this.pickerMenu.appendChild(allRow);
+
+      const sep = document.createElement('div');
+      sep.className = 'plot-channel-menu__sep';
+      this.pickerMenu.appendChild(sep);
+
+      // Per-channel list. Color marker reads knownChannels.color when
+      // the channel is currently registered, else falls back to a
+      // muted swatch — excluded channels still need a visual marker.
+      const list = document.createElement('div');
+      list.className = 'plot-channel-menu__list';
+      for (let i = 0; i < channels.length; i++) {
+        const name = channels[i];
+        const row = document.createElement('label');
+        row.className = 'plot-channel-menu__row';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = enabled[i];
+        cb.addEventListener('change', () => {
+          this._setChannelEnabled(name, cb.checked);
+          this._populatePicker();
+          emitLayoutChange();
+        });
+        const marker = document.createElement('span');
+        marker.className = 'plot-channel-menu__marker';
+        const meta = this.knownChannels.get(name);
+        marker.style.background = meta ? meta.color : 'var(--text3, #6e7681)';
+        if (!enabled[i]) marker.style.opacity = '0.4';
+        const text = document.createElement('span');
+        text.className = 'plot-channel-menu__label';
+        text.textContent = name;
+        row.appendChild(cb);
+        row.appendChild(marker);
+        row.appendChild(text);
+        list.appendChild(row);
+      }
+      this.pickerMenu.appendChild(list);
     }
 
     _applyXScale() {

@@ -322,6 +322,57 @@ button[aria-pressed="true"], button.is-active {
      more room for code they can hide the pane outright via the
      toolbar toggle. */
   min-width: 420px;
+  /* Inline-size container so #ide-telemetry-stats can drop low-priority
+     segments based on the pane's actual width (not the viewport). */
+  container-type: inline-size;
+  container-name: telpane;
+}
+
+/* Telemetry pane header: don't wrap. The stats element fills the
+   available middle space (flex-grow: 1) but right-aligns its text
+   so the action buttons (#ide-add-plot / download) sit immediately
+   next to the stats, not pinned to the far right with a gap. The
+   default `.pane-actions { margin-left: auto }` in the global rule
+   would re-introduce that gap, so we zero it out here. */
+.telemetry-pane > .pane-header { flex-wrap: nowrap; min-width: 0; }
+.telemetry-pane > .pane-header > .pane-actions { margin-left: 0; }
+.telemetry-pane > .pane-header #ide-telemetry-stats {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  /* The pane-header inherits `text-transform: uppercase` and
+     `letter-spacing: 0.20em` from conduit-chrome.css for the title
+     row treatment. We don't want either inside the stats readout —
+     uppercase turns "12s" into "12S" and the wide letter-spacing
+     pulls units away from their numbers. */
+  text-transform: none;
+  letter-spacing: 0;
+}
+.telemetry-pane > .pane-header #ide-telemetry-stats > span { white-space: nowrap; }
+.telemetry-pane > .pane-header #ide-telemetry-stats .stat-sep {
+  margin: 0 8px;
+  color: var(--text3);
+}
+
+/* Drop priority as the telemetry pane narrows: points first, then
+   channels, then bytes. Time stays. Each segment is hidden together
+   with the .stat-sep that immediately follows it, so dropping the
+   leftmost segment removes the dangling " · " too. */
+@container telpane (max-width: 540px) {
+  #ide-telemetry-stats .stat-points,
+  #ide-telemetry-stats .stat-points + .stat-sep { display: none; }
+}
+@container telpane (max-width: 460px) {
+  #ide-telemetry-stats .stat-channels,
+  #ide-telemetry-stats .stat-channels + .stat-sep { display: none; }
+}
+@container telpane (max-width: 380px) {
+  #ide-telemetry-stats .stat-bytes,
+  #ide-telemetry-stats .stat-bytes + .stat-sep { display: none; }
 }
 
 /* ---- Resizers (drag handles between panes) ---- */
@@ -520,6 +571,66 @@ code {
   padding: 0.3rem 0.5rem;
   background: var(--card);
   border-bottom: 1px solid var(--border);
+  /* Anchor for the absolutely-positioned .plot-channel-menu popover. */
+  position: relative;
+}
+
+/* Channel picker popover — opened from the .plot-picker-btn icon in
+   the plot header. Lets the user toggle individual series visibility
+   (or all-on / all-off) without having to fish through the wrapped
+   uPlot legend when the channel set is large. Hidden by default;
+   chart.js flips the [hidden] attribute. */
+.plot-channel-menu {
+  position: absolute;
+  right: 0.5rem;
+  top: calc(100% + 4px);
+  z-index: 50;
+  min-width: 180px;
+  max-width: 280px;
+  padding: 4px 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  font-size: 0.78rem;
+  color: var(--text);
+}
+.plot-channel-menu__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.plot-channel-menu__row:hover { background: var(--bg-soft); }
+.plot-channel-menu__all { font-weight: 500; }
+.plot-channel-menu__sep {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 2px 0;
+}
+.plot-channel-menu__list {
+  /* Sized to show exactly 3 rows; the 4th onwards scrolls. Each row
+     is `4px + 0.78rem * 1.25 + 4px` ≈ 24-26 px depending on font
+     loading, so 78 px gives a comfortable 3-row window. Bump if you
+     change row padding/line-height. */
+  max-height: 78px;
+  overflow-y: auto;
+}
+.plot-channel-menu__marker {
+  width: 10px;
+  height: 2px;
+  flex: 0 0 auto;
+  border-radius: 1px;
+}
+.plot-channel-menu__label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.plot-channel-menu__empty {
+  padding: 8px 10px;
+  color: var(--text3);
+  font-style: italic;
 }
 /* Drag handle — only this part of the plot is grabbable; clicking
    buttons / typing in the title input still works as expected. */

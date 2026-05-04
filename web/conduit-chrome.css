@@ -25,89 +25,44 @@ body {
    (its parent is sized via flex). */
 .view #app.ide-only { height: 100%; }
 
-/* ---------- Topbar (Conduit) ---------- */
+/* ---------- Topbar (Conduit) ----------
+   Mirrors the live Shopify storefront nav: a single black band that
+   stays black in BOTH light and dark mode (per design spec it's
+   chrome, not surface). Brand left, theme toggle right. Hairline
+   #1C1C1E divider underneath. */
 .topbar {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
-  padding: 0 20px;
+  justify-content: space-between;
+  background: #000;
+  color: #FFF;
+  border-bottom: 1px solid #1C1C1E;
+  padding: 18px 28px;
   gap: 28px;
-  height: 52px;
-  flex: 0 0 52px;
+  flex: 0 0 auto;
 }
-.topbar .brand,
-.topbar .toolbar { background: none; }
 
-/* Plain mono "RM1N" + small uppercase brand tag.
-   `align-items: center` keeps the small brand tag vertically centered
-   on the logo's mid-line; baseline alignment was making "Conduit · v3.5"
-   sit visually below the logo glyphs. */
+/* Plain mono "CONDUIT" wordmark — white on the black band. */
 .topbar__brand {
   display: inline-flex; align-items: center; gap: 12px;
   background: none; border: 0; padding: 0;
   color: inherit;
   user-select: none;
 }
-/* Plain mono "RM1N" — no accent, no italic. */
-.logo {
+.topbar .logo {
   font-family: var(--font-mono);
   font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--ink);
-}
-.brand-tag {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.20em;
-  color: var(--ink-faint);
-  text-transform: uppercase;
-}
-
-/* Path-based crumb trail */
-.topbar__crumbs {
-  display: flex; align-items: center; gap: 10px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-.crumb {
-  background: none; border: 0; padding: 4px 0;
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-weight: 500;
   letter-spacing: 0.02em;
-  color: var(--ink-faint);
-  cursor: pointer;
-  transition: color var(--dur-hover) var(--ease);
-  display: inline-flex; align-items: center; gap: 6px;
-  white-space: nowrap;
-}
-.crumb:hover { color: var(--ink-dim); }
-.crumb--active { color: var(--ink); cursor: default; }
-.crumb__slash { color: var(--ink-faint); opacity: 0.5; user-select: none; }
-.crumb__sub { color: var(--ink-faint); margin-left: 2px; font-size: 11px; }
-.crumb__pill {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.20em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  border: 1px solid var(--line);
-  padding: 2px 6px;
-  margin-left: 4px;
+  color: #FFF;
 }
 
 .topbar__right {
   display: flex; align-items: center; gap: 12px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-faint);
+  color: #FFF;
 }
-.topbar__sep { width: 1px; height: 18px; background: var(--line); }
-.topbar__right .num { color: var(--ink); font-variant-numeric: tabular-nums; }
 
 .iconbtn {
   width: 28px; height: 28px;
@@ -130,31 +85,47 @@ body {
 .iconbtn--accent { border-color: var(--accent); color: var(--accent); }
 .iconbtn--accent:hover { background: color-mix(in oklab, var(--accent) 10%, transparent); }
 
-/* Theme toggle pill — quiet active state.
-   The pressed icon is full-ink with a subtle bg-2 fill; the unpressed
-   icon stays faint. No blue accent — the toggle is chrome, not a CTA,
-   and the loud accent treatment competed with the link indicator.
-   Buttons each carry a full border and overlap by -1px so the shared
-   edge collapses to a clean 1-px divider. z-index lifts the
-   hovered / pressed button so its border is fully visible (the prior
-   `border-left: 0` shortcut left the left edge missing on hover). */
+/* Theme toggle — two bordered iconbtns sharing an edge to read as
+   one connected pill on the always-black band. Colors are hardcoded
+   (not token-driven) because the topbar stays black regardless of
+   theme — token values would render dark-on-black in light mode.
+   The pressed icon goes full-white on a subtle #1C1C1E lift; the
+   unpressed icon stays #8E8E93. Buttons overlap by -1px so the
+   shared edge collapses to a clean 1px divider; z-index lifts the
+   pressed / hovered button so its border is fully visible. */
+.topbar .iconbtn {
+  width: 28px; height: 28px;
+  border: 1px solid #38383A;
+  background: transparent;
+  color: #8E8E93;
+  border-radius: 0;
+  padding: 0;
+  transition: background var(--dur-hover) var(--ease),
+              color var(--dur-hover) var(--ease),
+              border-color var(--dur-hover) var(--ease);
+}
+.topbar .iconbtn:hover {
+  background: #1C1C1E;
+  color: #FFF;
+  border-color: #38383A;
+}
+.topbar .iconbtn .material-symbols-outlined { font-size: 18px; }
+
 .topbar__themetoggle { display: inline-flex; gap: 0; }
-.topbar__themetoggle .iconbtn { border-radius: 0; color: var(--ink-faint); position: relative; }
+.topbar__themetoggle .iconbtn { position: relative; }
 .topbar__themetoggle .iconbtn + .iconbtn { margin-left: -1px; }
-/* Hover must win over pressed so the unpressed-but-hovered button's
-   full border is visible. Otherwise hovering the sun in dark-mode
-   leaves its right edge tucked behind the moon's left border, and
-   the hover frame looks open on that side. */
 .topbar__themetoggle .iconbtn[aria-pressed="true"] { z-index: 1; }
 .topbar__themetoggle .iconbtn:hover                { z-index: 2; }
 .topbar__themetoggle .iconbtn[aria-pressed="true"] {
-  color: var(--ink);
-  background: var(--bg-2);
-  border-color: var(--line);
+  color: #FFF;
+  background: #1C1C1E;
+  border-color: #38383A;
 }
 
-/* Right-anchored sidebar (telemetry pane) toggle: pushes itself + any
-   trailing chrome to the far right of the topbar's right cluster. */
+/* Telemetry pane toggle now lives in the IDE-internal toolbar with
+   the device picker / Add / Scan controls. `margin-left: auto`
+   pushes it to the far right of that toolbar so it stays visually
+   anchored to the pane it controls. */
 #ide-toggle-telemetry { margin-left: auto; }
 
 /* ---------- IDE pane re-skin ----------
@@ -173,7 +144,6 @@ body {
   border-bottom: 1px solid var(--line);
 }
 .pane-title { color: var(--ink-faint); }
-.pane-title::before { content: "/ "; color: var(--accent); }
 
 .pane-hint, .pane-hint-info {
   font-family: var(--font-mono);

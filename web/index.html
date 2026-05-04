@@ -10,27 +10,25 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&family=Fraunces:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.min.css">
-<link rel="stylesheet" href="style.css?v=121">
+<link rel="stylesheet" href="style.css?v=128">
 <!-- Conduit design system — loaded AFTER style.css so Conduit's
      :root token overrides win without touching the legacy IDE rules.
      conduit-tokens.css aliases the existing var names (--text→--ink etc)
      so everything keeps working. conduit-chrome.css adds the new
      site-level topbar + Control view layout. -->
 <link rel="stylesheet" href="conduit-tokens.css?v=121">
-<link rel="stylesheet" href="conduit-chrome.css?v=121">
+<link rel="stylesheet" href="conduit-chrome.css?v=124">
 </head>
 <body>
 <!-- ============================================================
-     Conduit site chrome — outer brand + breadcrumb nav
+     Conduit site chrome — outer brand + theme toggle
      ============================================================ -->
 <header class="topbar">
-  <!-- Brand: plain mono RM1N + version tag. Static (non-interactive)
-       since there's only one view to navigate to. -->
+  <!-- Brand: plain mono CONDUIT. Static (non-interactive) since
+       there's only one view to navigate to. -->
   <div class="topbar__brand">
-    <span class="logo">RM1N</span>
-    <span class="brand-tag">Conduit · v3.5</span>
+    <span class="logo">CONDUIT</span>
   </div>
-  <nav class="topbar__crumbs" id="topbar-crumbs" aria-label="Breadcrumb"></nav>
   <div class="topbar__right">
     <span class="topbar__themetoggle" role="group" aria-label="Theme">
       <button class="iconbtn" id="topbar-theme-light" aria-pressed="false" title="Light theme">
@@ -40,21 +38,6 @@
         <span class="material-symbols-outlined">dark_mode</span>
       </button>
     </span>
-    <span class="topbar__sep"></span>
-    <!-- Manual refresh: re-probes the bound device + force-restarts the
-         telemetry / runtime-console streams. Use when the device is on
-         the LAN but the panes are showing stale or no data. ide.js
-         binds the click handler. -->
-    <button class="iconbtn" id="ide-refresh" type="button"
-            title="Reconnect to device">
-      <span class="material-symbols-outlined">refresh</span>
-    </button>
-    <!-- Right-anchored: telemetry pane show/hide. ide.js owns the
-         state and the icon glyph (see #ide-toggle-telemetry handler).
-         Lives in the global topbar so the IDE's internal toolbar can
-         stay focused on build/upload actions. -->
-    <button class="iconbtn" id="ide-toggle-telemetry" type="button"
-            aria-pressed="false" title="Show/hide telemetry pane"></button>
   </div>
 </header>
 
@@ -68,11 +51,6 @@
        the Conduit site-level .topbar above can claim that name). All
        wiring (button IDs, classes) is unchanged. -->
   <header class="ide-topbar">
-    <div class="brand">
-      <h1>CONDUIT</h1>
-      <span class="brand-sub">Firmware IDE</span>
-    </div>
-
     <div class="toolbar">
       <select id="ide-device-select" title="Select a discovered device">
         <option value="">(no device)</option>
@@ -83,8 +61,6 @@
       <button class="btn-ghost" id="ide-quick-connect" type="button" title="Probe this IP">Add</button>
       <button class="btn-ghost" id="ide-rescan-btn" type="button" title="Scan /24 subnet for devices">Scan</button>
 
-      <span class="sep"></span>
-
       <!-- Auth token used by /api/upload, /api/commit, /api/cmd. The
            token is no longer surfaced in the topbar — it sits hidden
            with the firmware default and is loaded from localStorage
@@ -94,6 +70,11 @@
            field if a real settings UI lands later). -->
       <input id="ide-auth-token" type="hidden" value="changeme">
 
+      <!-- Right-aligned (margin-left: auto in conduit-chrome.css):
+           telemetry pane show/hide. ide.js owns state + icon glyph
+           via the #ide-toggle-telemetry handler. -->
+      <button class="iconbtn" id="ide-toggle-telemetry" type="button"
+              aria-pressed="false" title="Show/hide telemetry pane"></button>
     </div>
 
     <!-- hidden subnet field used by the scanner helper -->
@@ -266,15 +247,14 @@
 
 </main><!-- /.route -->
 
-<!-- Topbar wiring — theme toggle, breadcrumb device label, link
-     indicator. The IDE is the only view, so there's no router here. -->
+<!-- Topbar wiring — theme toggle only. The IDE is the only view,
+     so there's no router or breadcrumb here. -->
 <script>
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
   const root = document.documentElement;
 
-  // --- Theme toggle ---
   function setTheme(t) {
     root.setAttribute('data-theme', t);
     try { localStorage.setItem('conduit.theme', t); } catch (_) {}
@@ -284,40 +264,6 @@
   try { setTheme(localStorage.getItem('conduit.theme') || 'dark'); } catch (_) { setTheme('dark'); }
   $('topbar-theme-light').addEventListener('click', () => setTheme('light'));
   $('topbar-theme-dark').addEventListener('click',  () => setTheme('dark'));
-
-  // --- Breadcrumb (device label · v3.5 / ide) ---
-  function currentDeviceLabel() {
-    try {
-      const sel = document.getElementById('ide-device-select');
-      if (sel && sel.value) return sel.value;
-      const f = document.getElementById('ide-quick-ip');
-      const v = f && f.value.trim();
-      return v || 'conduit';
-    } catch (_) { return 'conduit'; }
-  }
-  function renderCrumbs() {
-    // Device crumb shows just the bound device name. The link dot lives
-    // in the topbar — repeating it here was just visual noise.
-    const items = [
-      { label: currentDeviceLabel() },
-      { label: 'ide', active: true },
-    ];
-    $('topbar-crumbs').innerHTML = items.map((it, i) => {
-      const slash = i > 0 ? '<span class="crumb__slash">/</span>' : '';
-      const lead  = it.lead || '';
-      const meta  = it.meta || '';
-      const cls   = 'crumb' + (it.active ? ' crumb--active' : '');
-      return slash + `<span class="${cls}">${lead}${it.label}${meta}</span>`;
-    }).join(' ');
-    if (typeof updateLinkIndicators === 'function') updateLinkIndicators();
-  }
-  renderCrumbs();
-  // Re-render the device crumb whenever the user picks a device in the IDE.
-  window.addEventListener('conduit:devices-updated', renderCrumbs);
-  document.addEventListener('change', (e) => {
-    if (e.target && e.target.id === 'ide-device-select') renderCrumbs();
-  });
-
 })();
 </script>
 
@@ -331,7 +277,7 @@
 <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.iife.min.js"></script>
 <!-- Inline SVG icon helper. Loaded early so other scripts can call
      Conduit.icons.set(buttonEl, 'pause') without races. -->
-<script src="icons.js?v=121"></script>
+<script src="icons.js?v=127"></script>
 <script src="upload.js?v=121"></script>
 <script src="elf.js?v=121"></script>
 <script src="uf2.js?v=121"></script>
@@ -343,7 +289,7 @@
 <script src="log_store.js?v=121"></script>
 <script src="log_export.js?v=121"></script>
 <script src="console.js?v=121"></script>
-<script src="chart.js?v=121"></script>
+<script src="chart.js?v=128"></script>
 <!-- data_store.js: in-memory time-series store. Loaded before
      telemetry.js so the append target exists by the time the first
      record arrives. -->

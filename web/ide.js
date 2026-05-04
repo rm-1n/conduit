@@ -717,20 +717,16 @@ void conduit_loop(void) {
     document.getElementById('ide-btn-build-upload').addEventListener('click', onBuildUpload);
 
     // Reconnect — re-probes the bound IP and force-restarts the
-    // telemetry / runtime-console streams. We do this:
-    //   • once on UI start, to recover from a stale dropdown selection
-    //     pointing at a device that's been power-cycled / reflashed
-    //     since last visit, which otherwise leaves the panes silent
-    //     even though the device is on the LAN.
-    //   • whenever the user clicks the topbar refresh icon, as a
-    //     manual "kick everything" that doesn't require a full reload.
+    // telemetry / runtime-console streams. Auto-fires once on UI start
+    // to recover from a stale dropdown selection pointing at a device
+    // that's been power-cycled / reflashed since last visit, which
+    // otherwise leaves the panes silent even though the device is on
+    // the LAN.
     async function reconnect() {
-      const refreshBtn = document.getElementById('ide-refresh');
       const ip = (deviceSelect.value || '').trim()
               || (document.getElementById('ide-quick-ip').value || '').trim();
       if (!ip) { connStatus('no device — Add or Scan first', 'err'); return; }
       try {
-        if (refreshBtn) refreshBtn.disabled = true;
         connStatus(`Reconnecting ${ip}…`);
         const result = await window.Conduit.probeAndRemember(ip);
         if (!result) { connStatus(`no response from ${ip}`, 'err'); return; }
@@ -747,12 +743,9 @@ void conduit_loop(void) {
       } catch (e) {
         connStatus(`reconnect error: ${e.message || e}`, 'err');
       } finally {
-        if (refreshBtn) refreshBtn.disabled = false;
         refreshDeviceList();
       }
     }
-    const refreshBtn = document.getElementById('ide-refresh');
-    if (refreshBtn) refreshBtn.addEventListener('click', reconnect);
     // Auto-kick reconnect once on boot. Deferred slightly so the rest
     // of init (telemetry's streamLoop, console's poll loop) has wired
     // up — pause/resume needs the loops to exist to do their thing.
