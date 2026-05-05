@@ -221,9 +221,12 @@
     push(rec) {
       if (!rec || !rec.name) return;
       if (this.channelFilter && !this.channelFilter.has(rec.name)) return;
-      // User opted this channel out via the channel picker — drop the
-      // record entirely instead of just hiding the series. Re-enabling
-      // re-registers from dataStore meta in _setChannelEnabled.
+      // Picker exclusion only stops routing this record into THIS plot.
+      // Recording continues independently: telemetry.js calls
+      // dataStore.append() BEFORE chart.push(), so excluded channels
+      // are still captured in the in-memory store and end up in the
+      // HDF5 export. The same exclusion applied across every plot
+      // would still leave the channel fully recorded.
       if (this.excludedChannels.has(rec.name)) return;
       // Register the channel + (re)schedule a uPlot rebuild if its shape
       // is new. The rebuild adds the necessary series rows; the next
@@ -260,17 +263,28 @@
     // the new firmware.
     reset() {
       this.knownChannels.clear();
+      // Clear picker exclusions too — they reference channel names from
+      // the previous firmware and may no longer exist. Carrying them
+      // over leaves stale entries in the picker menu (e.g. CONST_1
+      // sticks around after the user removes its transmit() call and
+      // re-flashes). User can re-exclude in the new firmware if needed.
+      this.excludedChannels.clear();
       this.clearedSinceMs = null;
       this.userZoomed = false;
       this.frozenMin  = null; this.frozenMax  = null;
       this.frozenYMin = null; this.frozenYMax = null;
       this.pauseAtMs  = null;
       if (this.uplot) { try { this.uplot.destroy(); } catch (_) {} this.uplot = null; }
+      if (this.legendRO) { try { this.legendRO.disconnect(); } catch (_) {} }
       const placeholder = document.createElement('div');
       placeholder.className = 'chart-placeholder';
       placeholder.textContent = 'waiting for telemetry…';
       this.mount.innerHTML = '';
       this.mount.appendChild(placeholder);
+      // Picker may have been open mid-reset — refresh its rows so it
+      // doesn't render rows for now-cleared channels.
+      if (this.pickerMenu && !this.pickerMenu.hidden) this._populatePicker();
+      emitLayoutChange();
     }
 
     // No-op: gaps are derived on the read path from wallMs deltas
@@ -784,8 +798,10 @@
               if (!values || values.length === 0) return 50;
               const ctx = u.ctx;
               ctx.save();
-              ctx.font = '12px ' +
-                'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+              // Must match the .uplot CSS font (style.css) — uPlot
+              // renders tick labels with that font, so measuring with
+              // a different one mis-sizes the y-axis gutter.
+              ctx.font = '12px "Roboto Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
               let max = 0;
               for (const v of values) {
                 const w = ctx.measureText(String(v)).width;
@@ -803,16 +819,30 @@
 
     _rebuildUplot() {
       if (!this.mount || !window.uPlot) return;
-      if (this.knownChannels.size === 0) return;
-      if (this.uplot) { try { this.uplot.destroy(); } catch (_) {} this.uplot = null; }
-      // The legend is part of the previous uPlot subtree — disconnect
-      // the observer before destroying it so we don't leak a stale ref.
+      // Tear down whatever was here, unconditionally. We used to early-
+      // return when knownChannels was empty, but that left a stale
+      // uPlot still rendering the previous trace — visible when the
+      // user deselected the only-remaining channel via the picker (the
+      // canvas kept showing the now-removed series until the next
+      // channel registered). Destroying first means any zero-channel
+      // state immediately lands on the "waiting for telemetry…"
+      // placeholder.
+      if (this.uplot)    { try { this.uplot.destroy(); }    catch (_) {} this.uplot = null; }
       if (this.legendRO) { try { this.legendRO.disconnect(); } catch (_) {} }
-      const placeholder = this.mount.querySelector('.chart-placeholder');
-      if (placeholder) placeholder.parentNode.removeChild(placeholder);
-      for (const stray of this.mount.querySelectorAll('.uplot')) {
-        stray.parentNode.removeChild(stray);
+      this.mount.innerHTML = '';
+
+      if (this.knownChannels.size === 0) {
+        // No series to draw — show the placeholder. Picker may still
+        // list excluded channels for re-enabling; the placeholder is
+        // the right empty-state for the canvas itself.
+        const placeholder = document.createElement('div');
+        placeholder.className = 'chart-placeholder';
+        placeholder.textContent = 'waiting for telemetry…';
+        this.mount.appendChild(placeholder);
+        if (this.pickerMenu && !this.pickerMenu.hidden) this._populatePicker();
+        return;
       }
+
       const data = this._buildRenderData();
       this.uplot = new uPlot(this._buildOpts(data), data, this.mount);
       this._applyXScale();
@@ -842,10 +872,16 @@
     // row count directly eats into chart-wrap if we don't compensate).
     _sizeUplot() {
       if (!this.uplot || !this.mount) return;
+      // When the parent view is display:none (e.g. user popped over to
+      // Hardware Manager), clientWidth collapses to 0. Skip the resize
+      // — uPlot keeps its last good size, and ResizeObserver will fire
+      // again automatically when the view becomes visible again.
+      const w = this.mount.clientWidth;
+      if (w === 0) return;
       const legend = this.mount.querySelector('.u-legend');
       const legendH = legend ? Math.ceil(legend.getBoundingClientRect().height) : CHROME_H;
       const h = Math.max(60, this.mount.clientHeight - legendH);
-      this.uplot.setSize({ width: this.mount.clientWidth, height: h });
+      this.uplot.setSize({ width: w, height: h });
     }
 
     // ---- Channel picker --------------------------------------------------
@@ -1475,7 +1511,17 @@
   // Public API.
   window.Conduit = window.Conduit || {};
   window.Conduit.chart = {
-    push:  (rec) => { for (const c of charts) c.push(rec); },
+    push:  (rec) => {
+      // Refresh the central recording-volume readout BEFORE per-chart
+      // routing. Recording lives in dataStore (telemetry.js calls
+      // dataStore.append() before chart.push()), so the PTS/CH/BYTES/
+      // TIME header has to keep ticking even when every chart's picker
+      // has excluded the incoming channel — otherwise the user reads
+      // a frozen header as "recording stopped" when in fact the
+      // dataStore is still growing in the background.
+      scheduleCentralStats();
+      for (const c of charts) c.push(rec);
+    },
     clear: ()    => { for (const c of charts) c.clear(); },
     reset: ()    => { for (const c of charts) c.reset(); },
     gap:   ()    => { /* no-op — see Chart.gap() */ },

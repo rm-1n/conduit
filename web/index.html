@@ -8,27 +8,34 @@
      self-hosted Roboto Mono / Fraunces / Material Symbols Outlined). -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&family=Fraunces:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&family=Fraunces:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,100..400,0,0&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.min.css">
-<link rel="stylesheet" href="style.css?v=128">
+<link rel="stylesheet" href="style.css?v=141">
 <!-- Conduit design system — loaded AFTER style.css so Conduit's
      :root token overrides win without touching the legacy IDE rules.
      conduit-tokens.css aliases the existing var names (--text→--ink etc)
      so everything keeps working. conduit-chrome.css adds the new
      site-level topbar + Control view layout. -->
 <link rel="stylesheet" href="conduit-tokens.css?v=121">
-<link rel="stylesheet" href="conduit-chrome.css?v=124">
+<link rel="stylesheet" href="conduit-chrome.css?v=140">
 </head>
 <body>
 <!-- ============================================================
      Conduit site chrome — outer brand + theme toggle
      ============================================================ -->
 <header class="topbar">
-  <!-- Brand: plain mono CONDUIT. Static (non-interactive) since
-       there's only one view to navigate to. -->
+  <!-- Brand: plain mono CONDUIT. -->
   <div class="topbar__brand">
-    <span class="logo">CONDUIT</span>
+    <span class="logo">C0NDU1T</span>
   </div>
+  <!-- Storefront-style centered nav. View switching is purely DOM
+       visibility — see the inline script below — so the IDE keeps its
+       streams, build artifacts, editor state, and device connection
+       intact when the user pops over to Hardware Manager and back. -->
+  <nav class="topbar__nav" aria-label="Primary">
+    <a class="topbar__navlink" data-view="ide" href="#" role="button" tabindex="0">IDE</a>
+    <a class="topbar__navlink" data-view="hardware" href="#" role="button" tabindex="0">Hardware Manager</a>
+  </nav>
   <div class="topbar__right">
     <span class="topbar__themetoggle" role="group" aria-label="Theme">
       <button class="iconbtn" id="topbar-theme-light" aria-pressed="false" title="Light theme">
@@ -38,6 +45,21 @@
         <span class="material-symbols-outlined">dark_mode</span>
       </button>
     </span>
+    <!-- Search + Account icons — bare-glyph nav actions lifted from
+         the rm1n.com storefront so the IDE chrome matches it 1:1.
+         Both use inline SVGs with currentColor fills (instead of the
+         Material Symbols font) because the storefront marks have
+         slightly off-square proportions (viewBox 18×19) that the
+         icon font can't reproduce. Destination views aren't built
+         yet; click handlers are placeholders. -->
+    <button class="iconbtn topbar__search" id="topbar-search" type="button"
+            title="Search" aria-label="Search">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" class="icon icon-search" viewBox="0 0 18 19" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M11.03 11.68A5.784 5.784 0 1 1 2.85 3.5a5.784 5.784 0 0 1 8.18 8.18m.26 1.12a6.78 6.78 0 1 1 .72-.7l5.4 5.4a.5.5 0 1 1-.71.7z" clip-rule="evenodd"></path></svg>
+    </button>
+    <button class="iconbtn topbar__account" id="topbar-account" type="button"
+            title="Account" aria-label="Account">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" class="icon icon-account" viewBox="0 0 18 19" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6 4.5a3 3 0 1 1 6 0 3 3 0 0 1-6 0m3-4a4 4 0 1 0 0 8 4 4 0 0 0 0-8m5.58 12.15c1.12.82 1.83 2.24 1.91 4.85H1.51c.08-2.6.79-4.03 1.9-4.85C4.66 11.75 6.5 11.5 9 11.5s4.35.26 5.58 1.15M9 10.5c-2.5 0-4.65.24-6.17 1.35C1.27 12.98.5 14.93.5 18v.5h17V18c0-3.07-.77-5.02-2.33-6.15-1.52-1.1-3.67-1.35-6.17-1.35" clip-rule="evenodd"></path></svg>
+    </button>
   </div>
 </header>
 
@@ -52,9 +74,26 @@
        wiring (button IDs, classes) is unchanged. -->
   <header class="ide-topbar">
     <div class="toolbar">
-      <select id="ide-device-select" title="Select a discovered device">
-        <option value="">(no device)</option>
-      </select>
+      <!-- Custom device picker. The visible UI is the trigger button +
+           popover menu; a hidden <select> underneath is the source of
+           truth for .value / 'change' events so the rest of ide.js
+           (onBuild, persist, getIp callers, etc.) keeps treating
+           deviceSelect like a normal select. The LED mirrors the
+           telemetry stream's data-state via a MutationObserver in
+           the picker wiring below. -->
+      <div class="device-picker" id="ide-device-picker">
+        <button class="device-picker__trigger" id="ide-device-trigger" type="button"
+                aria-haspopup="listbox" aria-expanded="false"
+                title="Select a discovered device">
+          <span class="device-picker__led" id="ide-device-led" data-state="off" aria-hidden="true"></span>
+          <span class="device-picker__label" id="ide-device-label">(no device — Add or Scan)</span>
+          <span class="device-picker__caret material-symbols-outlined" aria-hidden="true">expand_more</span>
+        </button>
+        <ul class="device-picker__menu" id="ide-device-menu" role="listbox" hidden></ul>
+        <select id="ide-device-select" hidden tabindex="-1" aria-hidden="true">
+          <option value="">(no device)</option>
+        </select>
+      </div>
       <input id="ide-quick-ip" type="text" placeholder="192.168.178.200"
              title="Add a device by IP"
              onkeydown="if(event.key==='Enter')document.getElementById('ide-quick-connect').click()">
@@ -245,10 +284,30 @@
 </div>
 </section><!-- /#view-ide -->
 
+<!-- Hardware Manager view — placeholder until the fleet UI lands.
+     Lives in the same .route/.view chain as the IDE so the same
+     `.is-active` toggle pattern handles both. The IDE's DOM stays
+     mounted (just display:none) while we're here, so its telemetry
+     stream, runtime console, build artefacts, editor state, and
+     device connection survive the round-trip. -->
+<section class="view view--hardware" id="view-hardware">
+  <div class="view-placeholder">
+    <h2>Hardware Manager</h2>
+    <p>Fleet management coming soon. Looking to expand it?</p>
+    <!-- CTA → rm1n.com (the Shopify storefront). External, opens in a
+         new tab; rel=noopener strips the back-reference for safety. -->
+    <a class="btn-cta" href="https://rm1n.com" target="_blank" rel="noopener noreferrer">Visit our store</a>
+  </div>
+</section>
+
 </main><!-- /.route -->
 
-<!-- Topbar wiring — theme toggle only. The IDE is the only view,
-     so there's no router or breadcrumb here. -->
+<!-- Topbar wiring — theme toggle + view switcher. Switching views is
+     a pure DOM-visibility flip on the .view containers; nothing in
+     the IDE is destroyed or re-initialized. The IDE's chart streams,
+     runtime-console fetch, and Monaco state all keep ticking while
+     hidden, and the user's build artefacts / device selection are
+     still in memory when they come back. -->
 <script>
 (function () {
   'use strict';
@@ -264,6 +323,44 @@
   try { setTheme(localStorage.getItem('conduit.theme') || 'dark'); } catch (_) { setTheme('dark'); }
   $('topbar-theme-light').addEventListener('click', () => setTheme('light'));
   $('topbar-theme-dark').addEventListener('click',  () => setTheme('dark'));
+
+  // ---- View switcher --------------------------------------------------
+  const VALID_VIEWS = ['ide', 'hardware'];
+  function setView(name) {
+    if (!VALID_VIEWS.includes(name)) name = 'ide';
+    for (const view of document.querySelectorAll('.view')) {
+      view.classList.toggle('is-active', view.id === `view-${name}`);
+    }
+    for (const link of document.querySelectorAll('.topbar__navlink')) {
+      link.classList.toggle('topbar__navlink--active', link.dataset.view === name);
+      link.setAttribute('aria-current', link.dataset.view === name ? 'page' : 'false');
+    }
+    try { localStorage.setItem('conduit.view', name); } catch (_) {}
+    // Coming back to the IDE: Monaco caches its layout while its
+    // container is display:none and won't reflow without a nudge. The
+    // chart-pane ResizeObservers handle their own restoration; a
+    // window resize event also wakes Monaco's internal listener.
+    if (name === 'ide') {
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    }
+  }
+  let initialView = 'ide';
+  try { initialView = localStorage.getItem('conduit.view') || 'ide'; } catch (_) {}
+  setView(initialView);
+  for (const link of document.querySelectorAll('.topbar__navlink')) {
+    link.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      setView(link.dataset.view);
+    });
+  }
+
+  // Account + Search icons — destinations not implemented yet. Keep
+  // click handlers so the buttons stay interactive (focus ring etc.)
+  // but no-op until the corresponding views land.
+  const accountBtn = $('topbar-account');
+  if (accountBtn) accountBtn.addEventListener('click', () => { /* TODO: account view */ });
+  const searchBtn = $('topbar-search');
+  if (searchBtn)  searchBtn.addEventListener('click',  () => { /* TODO: search overlay */ });
 })();
 </script>
 
@@ -285,16 +382,16 @@
 <script src="editor.js?v=121"></script>
 <script src="compiler.js?v=121"></script>
 <script src="app.js?v=121"></script>
-<script src="ide.js?v=121"></script>
+<script src="ide.js?v=141"></script>
 <script src="log_store.js?v=121"></script>
 <script src="log_export.js?v=121"></script>
 <script src="console.js?v=121"></script>
-<script src="chart.js?v=128"></script>
+<script src="chart.js?v=133"></script>
 <!-- data_store.js: in-memory time-series store. Loaded before
      telemetry.js so the append target exists by the time the first
      record arrives. -->
 <script src="data_store.js?v=121"></script>
-<script src="telemetry.js?v=121"></script>
+<script src="telemetry.js?v=131"></script>
 <script src="netcon.js?v=121"></script>
 <script src="commands.js?v=121"></script>
 </body>

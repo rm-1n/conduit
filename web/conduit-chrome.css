@@ -25,15 +25,72 @@ body {
    (its parent is sized via flex). */
 .view #app.ide-only { height: 100%; }
 
+/* Centered placeholder for views that aren't built yet (Hardware
+   Manager today; Account view eventually). Kept generic so other
+   pre-launch views can reuse the same shell. */
+.view-placeholder {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  text-align: center;
+}
+.view-placeholder h2 {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.view-placeholder p { font-size: 13px; }
+
+/* Primary CTA button — matches the design system's "accent fill,
+   white uppercase label, square corners" spec (12 px label, 0.08em
+   tracking, ≥44 px tap target). Used for the storefront link in the
+   Hardware Manager placeholder; reusable wherever the design calls
+   for a primary CTA. */
+.btn-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 20px;
+  margin-top: 8px;
+  background: var(--accent);
+  color: #FFF;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--dur-hover) var(--ease),
+              border-color var(--dur-hover) var(--ease);
+}
+.btn-cta:hover  { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-cta:active { transform: translateY(1px); }
+.btn-cta:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ---------- Topbar (Conduit) ----------
    Mirrors the live Shopify storefront nav: a single black band that
    stays black in BOTH light and dark mode (per design spec it's
-   chrome, not surface). Brand left, theme toggle right. Hairline
-   #1C1C1E divider underneath. */
+   chrome, not surface). Brand left, primary nav centered, theme
+   toggle + account icon right. Hairline #1C1C1E divider underneath. */
 .topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
   background: #000;
   color: #FFF;
   border-bottom: 1px solid #1C1C1E;
@@ -55,6 +112,36 @@ body {
   font-weight: 500;
   letter-spacing: 0.02em;
   color: #FFF;
+}
+
+/* Primary nav cluster — storefront-style mono links with a 4px
+   underline-offset on the active item. Left-aligned with a generous
+   gap from the brand wordmark so the nav reads as "anchored to" the
+   logo, not floating in the middle of the bar. Hover dims to 65%
+   opacity to match the rest of the nav-action vocabulary. */
+.topbar__nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 28px;
+  margin-left: 24px;
+  font-family: var(--font-mono);
+}
+.topbar__navlink {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: #FFF;
+  cursor: pointer;
+  text-decoration: none;
+  padding: 4px 2px;
+  white-space: nowrap;
+  transition: opacity var(--dur-hover) var(--ease);
+}
+.topbar__navlink:hover { opacity: 0.65; }
+.topbar__navlink--active {
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .topbar__right {
@@ -120,6 +207,58 @@ body {
   color: #FFF;
   background: #1C1C1E;
   border-color: #38383A;
+}
+
+/* Bare-glyph nav actions (search, account) — match the storefront
+   treatment: no border, no fill, a 20 px white SVG that nudges
+   slightly larger on hover. Overrides the bordered .topbar .iconbtn
+   pill we inherit, scoped to these two buttons so the theme toggle
+   next to them keeps its bordered double-pill (its pressed state
+   needs the chrome to read clearly). The first bare icon picks up
+   extra margin-left to space the cluster away from the theme
+   toggle. */
+.topbar .topbar__search,
+.topbar .topbar__account {
+  width: auto; height: auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #FFF;
+  /* No color/opacity hover — we scale the inner SVG instead. The
+     transition lives on the SVG below. */
+}
+.topbar .topbar__search:hover,
+.topbar .topbar__account:hover {
+  background: transparent;
+  border-color: transparent;
+  color: #FFF;
+}
+/* Cancel the global `button:active { transform: translateY(1px) }` —
+   the storefront marks shouldn't bounce on click. Only the hover
+   scale-up below is the affordance these icons get. */
+.topbar .topbar__search:active,
+.topbar .topbar__account:active {
+  transform: none;
+}
+.topbar .topbar__search { margin-left: 16px; }
+
+/* Inline-SVG storefront marks — currentColor fill picks up the
+   button's white text. Pinned to 20×20 explicitly so they stay the
+   same footprint regardless of how the global .iconbtn > svg width
+   rule evolves. transform-origin sits at the bottom edge so the
+   hover scale grows upward (icon's baseline stays anchored to its
+   sibling chrome) instead of pushing outward in all directions. */
+.topbar .topbar__search .icon-search,
+.topbar .topbar__account .icon-account {
+  width: 20px;
+  height: 20px;
+  display: block;
+  transform-origin: center bottom;
+  /* No transition — hover scale is instant, matching the storefront. */
+}
+.topbar .topbar__search:hover  .icon-search,
+.topbar .topbar__account:hover .icon-account {
+  transform: scale(1.07);
 }
 
 /* Telemetry pane toggle now lives in the IDE-internal toolbar with

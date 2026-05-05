@@ -54,7 +54,10 @@
 html, body { height: 100%; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  /* Roboto Mono everywhere — the design system has a single typeface
+     across nav, body, code, data, labels, and buttons. Form controls
+     and pre/code blocks below `font-family: inherit` from this root. */
+  font-family: var(--font-mono);
   background: var(--bg);
   color: var(--text);
   line-height: 1.4;
@@ -160,6 +163,111 @@ input::placeholder { color: var(--text3); }
 /* Long enough to show "127.0.0.1:8766 — vsim-1.0.0 — A" and the
    typical "192.168.178.200 — v1.2.0-b — A" without truncation. */
 #ide-device-select { min-width: 18ch; max-width: 40ch; }
+
+/* ---- Device picker ----
+   Custom dropdown replacing the native <select>. Trigger button is
+   styled to match adjacent text inputs (same border, padding, font);
+   menu is an absolutely-positioned <ul> below it. A hidden <select>
+   sits in the same .device-picker container as the source of truth
+   for .value / 'change' events — see the trigger wiring in ide.js. */
+.device-picker {
+  position: relative;
+  display: inline-block;
+  font-family: var(--font-mono);
+}
+.device-picker__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.32rem 0.55rem;
+  min-width: 22ch;
+  max-width: 40ch;
+  font-size: 0.83rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.device-picker__trigger:hover  { border-color: var(--border-strong, var(--border)); }
+.device-picker__trigger:focus,
+.device-picker__trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+.device-picker__led {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text3);
+  transition: background 0.12s, box-shadow 0.12s;
+}
+.device-picker__led[data-state="ok"]  {
+  background: var(--status-live);
+  box-shadow: 0 0 6px var(--status-live);
+  animation: pulse-live 2.4s ease-in-out infinite;
+}
+.device-picker__led[data-state="err"] {
+  background: var(--status-fault);
+  box-shadow: 0 0 6px var(--status-fault);
+}
+.device-picker__label {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+.device-picker__caret {
+  flex: 0 0 auto;
+  font-size: 18px !important;
+  color: var(--text2);
+  transition: transform 0.12s;
+}
+.device-picker__trigger[aria-expanded="true"] .device-picker__caret {
+  transform: rotate(180deg);
+}
+
+.device-picker__menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 60;
+}
+.device-picker__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 0.83rem;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.device-picker__menu-item:hover,
+.device-picker__menu-item[aria-selected="true"] {
+  background: var(--bg-soft);
+}
+.device-picker__menu-empty {
+  padding: 8px 10px;
+  font-size: 0.83rem;
+  color: var(--text3);
+  font-style: italic;
+}
 
 /* ---- Buttons ---- */
 button {
@@ -433,7 +541,7 @@ body.resizing-h { cursor: row-resize; }
 .pane-hint-info {
   color: var(--text3);
   font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 .pane-actions {
   margin-left: auto;
@@ -474,7 +582,7 @@ body.resizing-h { cursor: row-resize; }
   flex: 1 1 auto;
   min-height: 0;
   background: var(--bg);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   color: var(--text2);
   overflow: hidden;
 }
@@ -486,7 +594,7 @@ body.resizing-h { cursor: row-resize; }
   background: var(--bg);
   color: var(--text);
   padding: 0.55rem 0.75rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.77rem;
   line-height: 1.45;
   overflow: auto;
@@ -508,7 +616,7 @@ code {
   background: var(--card);
   padding: 0.05rem 0.3rem;
   border-radius: 3px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 
@@ -625,7 +733,7 @@ code {
   border-radius: 1px;
 }
 .plot-channel-menu__label {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 .plot-channel-menu__empty {
   padding: 8px 10px;
@@ -687,7 +795,7 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
 
 /* uPlot dark-theme overrides — its default CSS is light-themed. */
 .uplot {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: var(--font-mono);
   color: var(--text);
 }
 .u-title { color: var(--text); }
@@ -701,7 +809,7 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   border-top: 1px solid var(--border-soft);
   color: var(--text);
   font-size: 0.7rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   padding: 1px 8px;
   text-align: left;
 }
@@ -759,7 +867,7 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 2px 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 .cmd-strip .cmd-text {
@@ -769,7 +877,7 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 2px 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 .cmd-strip .cmd-text-wide { width: 11em; }
 
@@ -836,7 +944,7 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.74rem;
   padding: 0.4rem 0.6rem;
   background: var(--bg-soft);
