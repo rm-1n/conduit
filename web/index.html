@@ -17,17 +17,19 @@
      so everything keeps working. conduit-chrome.css adds the new
      site-level topbar + Control view layout. -->
 <link rel="stylesheet" href="conduit-tokens.css?v=121">
-<link rel="stylesheet" href="conduit-chrome.css?v=145">
+<link rel="stylesheet" href="conduit-chrome.css?v=147">
 </head>
 <body>
 <!-- ============================================================
      Conduit site chrome — outer brand + theme toggle
      ============================================================ -->
 <header class="topbar">
-  <!-- Brand: plain mono CONDUIT. -->
-  <div class="topbar__brand">
+  <!-- Brand: plain mono CONDUIT. Clicking it switches to the IDE
+       view (works as a "home" affordance from any other view). -->
+  <button class="topbar__brand" id="topbar-brand" type="button"
+          title="Open IDE" aria-label="Open IDE">
     <span class="logo">C0NDU1T</span>
-  </div>
+  </button>
   <!-- Storefront-style centered nav. View switching is purely DOM
        visibility — see the inline script below — so the IDE keeps its
        streams, build artifacts, editor state, and device connection
@@ -309,10 +311,39 @@
      view. Settings opens by default. -->
 <section class="view view--account" id="view-account">
   <aside class="account-sidebar" aria-label="Account sections">
-    <button class="account-sidebar__item account-sidebar__item--active"
-            data-section="settings" type="button">Settings</button>
-    <button class="account-sidebar__item"
-            data-section="account" type="button">Account</button>
+    <div class="account-sidebar__menu">
+      <button class="account-sidebar__item account-sidebar__item--active"
+              data-section="settings" type="button">Settings</button>
+      <button class="account-sidebar__item"
+              data-section="account" type="button">Account</button>
+    </div>
+    <!-- Footer pinned to the bottom of the rail: source link
+         (Github) + the build identity the runtime console also
+         prints + the storefront link. CONDUIT_COMMIT is filled in
+         by the deploy workflow; until then the placeholder reads
+         "dev". -->
+    <div class="account-sidebar__footer">
+      <!-- Borderless GitHub button: mark + star count side-by-side,
+           the whole anchor is the click target. Star count is
+           fetched at view load via GitHub's public repos endpoint
+           and cached for 1 hour in localStorage to stay well under
+           the 60-req/hour unauthenticated rate limit. -->
+      <a class="account-sidebar__github"
+         href="https://github.com/rm-1n/conduit"
+         target="_blank" rel="noopener noreferrer"
+         title="View source on GitHub — github.com/rm-1n/conduit"
+         aria-label="View source on GitHub">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6 0-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8 0 3.2.9.8 1.3 1.9 1.3 3.1 0 4.6-2.8 5.7-5.5 6 .5.4.9 1.1.9 2.3v3.3c0 .3.1.7.8.6A12 12 0 0 0 12 .3"/></svg>
+        <span class="account-sidebar__stars" id="account-sidebar-stars" aria-label="Star count">—</span>
+      </a>
+      <span class="account-sidebar__build" id="account-sidebar-build">
+        <!-- populated by the wiring script below -->
+      </span>
+      <a class="account-sidebar__store"
+         href="https://rm1n.com" target="_blank" rel="noopener noreferrer">
+        rm1n.com
+      </a>
+    </div>
   </aside>
   <main class="account-content">
     <!-- Settings: searchable list. Each .setting-row carries a
@@ -421,6 +452,12 @@
       setView(link.dataset.view);
     });
   }
+
+  // CONDUIT brand wordmark — clicking it returns to the IDE view
+  // from anywhere. Same setView() path as the IDE topbar nav link;
+  // works because the brand button has a bare role="button".
+  const brandBtn = $('topbar-brand');
+  if (brandBtn) brandBtn.addEventListener('click', () => setView('ide'));
 
   // Account icon — opens the Account view (Settings selected by
   // default). View itself stays mounted across switches like the
@@ -533,13 +570,79 @@
       writeScanRange(ev.target.value.trim().replace(/\.$/, ''));
     });
   }
+
+  // ---- Account sidebar build-line --------------------------------------
+  // "<asset version> · <8-char commit>". Both globals are set in the
+  // CONDUIT_BUILD script block at the bottom of this file; the deploy
+  // workflow sed-replaces the placeholder commit with the real SHA.
+  const buildEl = $('account-sidebar-build');
+  if (buildEl) {
+    const ver = (window.CONDUIT_ASSET_VERSION || 'unknown').toString();
+    const sha = (window.CONDUIT_COMMIT || 'dev').toString().slice(0, 8);
+    buildEl.textContent = `v ${ver} · ${sha}`;
+  }
+
+  // ---- GitHub star count ----------------------------------------------
+  // Cached in localStorage for 1 h to stay well under GitHub's 60-req/h
+  // unauthenticated rate limit (one fetch per browser per hour). The
+  // span shows "★ —" until a value lands; on failure it stays that
+  // way silently.
+  const starsEl = $('account-sidebar-stars');
+  const STARS_KEY = 'conduit.githubStars';
+  const STARS_TTL_MS = 60 * 60 * 1000;
+  // GitHub-style abbreviation: <1k literal, <10k one decimal (1.1K),
+  // <1M no decimal (10K..999K), <10M one decimal (1.1M), then no
+  // decimal. Trailing ".0" is trimmed so 1000 reads as "1K" not
+  // "1.0K".
+  function fmtStars(n) {
+    if (n < 1000)        return String(n);
+    if (n < 10_000)      return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    if (n < 1_000_000)   return Math.round(n / 1000) + 'K';
+    if (n < 10_000_000)  return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+    return Math.round(n / 1_000_000) + 'M';
+  }
+  function paintStars(count) {
+    if (starsEl && Number.isFinite(count)) {
+      starsEl.textContent = fmtStars(count);
+    }
+  }
+  (function loadStars() {
+    if (!starsEl) return;
+    try {
+      const cached = JSON.parse(localStorage.getItem(STARS_KEY) || 'null');
+      if (cached && Number.isFinite(cached.count) &&
+          (Date.now() - cached.fetchedAt) < STARS_TTL_MS) {
+        paintStars(cached.count);
+        return;
+      }
+    } catch (_) {}
+    fetch('https://api.github.com/repos/rm-1n/conduit', { cache: 'no-cache' })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!data || !Number.isFinite(data.stargazers_count)) return;
+        paintStars(data.stargazers_count);
+        try {
+          localStorage.setItem(STARS_KEY, JSON.stringify({
+            count: data.stargazers_count, fetchedAt: Date.now(),
+          }));
+        } catch (_) {}
+      })
+      .catch(() => { /* silent — keep the "—" placeholder */ });
+  })();
 })();
 </script>
 
 <!-- Bump ?v=N whenever IDE flow semantics or the SDK object bundle change,
      otherwise returning browsers silently run stale JS / link stale .o files.
      The runtime console prints CONDUIT_ASSET_VERSION on boot. -->
-<script>window.CONDUIT_ASSET_VERSION = '2026-05-03-strip-dup-prefix';</script>
+<script>
+  // Build identity surfaced in the runtime console on boot AND in the
+  // Account view's sidebar footer. CONDUIT_COMMIT is an 8-char prefix
+  // of the git SHA the assets were built from; the deploy workflow
+  // sed-replaces 'dev' with the real value at publish time.
+  window.CONDUIT_ASSET_VERSION = '2026-05-03-strip-dup-prefix';
+  window.CONDUIT_COMMIT        = 'dev';
+</script>
 <!-- uPlot — high-performance time-series plotting via CDN. Pinned for
      reproducibility; bump VERSION carefully (uPlot's API has been stable
      since 1.6 but theme/options sometimes drift). -->

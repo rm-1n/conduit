@@ -125,11 +125,19 @@ jobs:
 
       - name: Install arm-none-eabi toolchain
         if: steps.ver.outputs.should_build == 'true'
+        # `libstdc++-arm-none-eabi-newlib` is required because the
+        # Pico SDK pulls `pico_cxx_options/new_delete.cpp` into every
+        # app + bootloader build — without the C++ standard headers
+        # for newlib, the build fails at "fatal error: cstdlib: No
+        # such file or directory". `gcc-arm-none-eabi` only carries
+        # the C side; --no-install-recommends drops the C++ stdlib
+        # by default, so we add it explicitly.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build \
-            gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi \
+            gcc-arm-none-eabi binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
             build-essential pkg-config libusb-1.0-0-dev
 
       # ---- Cached: Pico SDK clone ----------------------------------------

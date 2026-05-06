@@ -30,21 +30,33 @@ body {
    and a scrollable content pane on the right. Each .account-section
    is one panel; only the .is-active one is visible. */
 .view--account { flex-direction: row; }
+/* Two-column shell: top menu group + bottom footer pinned to the
+   end of the rail (justify-content: space-between separates them).
+   The footer carries the source link, build identity, and storefront
+   link. */
 .account-sidebar {
   flex: 0 0 240px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  justify-content: space-between;
   padding: 16px 0;
   background: var(--bg);
   border-right: 1px solid var(--line);
   overflow-y: auto;
 }
+.account-sidebar__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/* Sidebar items are bare — active state is purely a color change
+   (faint → ink). Earlier we used a 3 px accent left-bar plus a
+   bg-2 fill; that read as a heavy nav-rail treatment that didn't
+   match the rest of the IDE chrome. */
 .account-sidebar__item {
   text-align: left;
   background: transparent;
   border: 0;
-  border-left: 3px solid transparent;
   padding: 10px 24px;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -52,14 +64,57 @@ body {
   color: var(--ink-faint);
   cursor: pointer;
   border-radius: 0;
-  transition: color 0.12s, background 0.12s, border-left-color 0.12s;
+  transition: color 0.12s;
 }
-.account-sidebar__item:hover { color: var(--ink); background: var(--bg-2); }
-.account-sidebar__item--active {
-  color: var(--ink);
-  background: var(--bg-2);
-  border-left-color: var(--accent);
+.account-sidebar__item:hover         { color: var(--ink); }
+.account-sidebar__item--active       { color: var(--ink); }
+
+.account-sidebar__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px 24px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
 }
+/* Borderless GitHub button: mark + star count side-by-side, the
+   whole anchor is the click target. No box, no background, just an
+   inline-flex layout with the icon at icon-size. */
+.account-sidebar__github {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--ink-faint);
+  text-decoration: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  transition: color 0.12s;
+}
+.account-sidebar__github:hover { color: var(--ink); }
+.account-sidebar__github svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+.account-sidebar__stars {
+  font-variant-numeric: tabular-nums;
+}
+.account-sidebar__build {
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+.account-sidebar__store {
+  color: var(--ink-faint);
+  text-decoration: none;
+  transition: color 0.12s;
+}
+.account-sidebar__store:hover { color: var(--ink); }
 .account-content {
   flex: 1 1 auto;
   min-width: 0;
@@ -273,13 +328,22 @@ body {
   flex: 0 0 auto;
 }
 
-/* Plain mono "CONDUIT" wordmark — white on the black band. */
+/* Plain mono "CONDUIT" wordmark — white on the black band. Acts as
+   a "home" affordance (clicking returns to the IDE) but is styled
+   as flat text: no cursor change, no hover state, no click bounce.
+   The `:active` override cancels the global `button:active
+   transform: translateY(1px)` from style.css so it doesn't twitch
+   on click. */
 .topbar__brand {
   display: inline-flex; align-items: center; gap: 12px;
   background: none; border: 0; padding: 0;
   color: inherit;
   user-select: none;
+  cursor: default;
+  font-family: inherit;
 }
+.topbar__brand:hover  { background: none; }
+.topbar__brand:active { transform: none; }
 .topbar .logo {
   font-family: var(--font-mono);
   font-size: 18px;
