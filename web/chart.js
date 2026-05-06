@@ -51,6 +51,26 @@
   ];
   const colorFor = (i) => PALETTE[i % PALETTE.length];
 
+  // ---------------------------------------------------------------------
+  // Global plot line style — 'continuous' (linear interpolation across
+  // union-merge null cells) or 'discrete' (zero-order-hold rendered as
+  // explicit step-after paths). Surfaced via Conduit.chart.setStyle()
+  // for the Settings UI; persisted to localStorage so the choice
+  // survives reloads. Charts pick this up at series-build time inside
+  // _buildOpts.
+  // ---------------------------------------------------------------------
+  const PLOT_STYLE_KEY = 'conduit.plotStyle';
+  let plotStyle = 'continuous';
+  try {
+    const saved = localStorage.getItem(PLOT_STYLE_KEY);
+    if (saved === 'continuous' || saved === 'discrete') plotStyle = saved;
+  } catch (_) {}
+  function seriesPathsForStyle() {
+    if (plotStyle !== 'discrete') return undefined;             // default linear
+    if (!window.uPlot || !window.uPlot.paths || !window.uPlot.paths.stepped) return undefined;
+    return window.uPlot.paths.stepped({ align: 1 });            // step-after
+  }
+
   function bisectFirst(arr, target, len) {
     let lo = 0, hi = (len != null) ? len : arr.length;
     while (lo < hi) {
@@ -665,13 +685,25 @@
       const tick   = getCssVar('--border', '#2a3038');
 
       // Series array — built off knownChannels in registration order.
+      // `paths` is undefined for the default linear renderer
+      // (continuous mode) and a step-after path generator for
+      // discrete mode. The Settings UI flips this via
+      // Conduit.chart.setStyle(); existing charts schedule a rebuild
+      // and pick up the new value here on next _buildOpts call.
       const seriesArr = [{ label: 'time', value: (u, t) => fmtClockMs(t) }];
+      const seriesPaths = seriesPathsForStyle();
       let colorIdx = 0;
       for (const [name, meta] of this.knownChannels) {
         if (meta.n === 1) {
           seriesArr.push({
             label: name, stroke: meta.color, width: 1.25,
-            spanGaps: false, points: { show: false },
+            // spanGaps:true bridges union-merge null cells (timestamps
+            // owned by sibling streams) with linear interpolation, so
+            // every series renders as a continuous line through its
+            // own real samples — not stepped horizontals. See
+            // mergeTimelines() comment.
+            spanGaps: true, points: { show: false },
+            paths: seriesPaths,
             show:  this._isSeriesVisible(name),
             value: (u, v) => fmtVal(v),
           });
@@ -682,7 +714,8 @@
             // index — slightly varied so the legend can tell them apart.
             seriesArr.push({
               label: lbl, stroke: colorFor(colorIdx + k), width: 1.25,
-              spanGaps: false, points: { show: false },
+              spanGaps: true, points: { show: false },
+              paths: seriesPaths,
               show:  this._isSeriesVisible(lbl),
               value: (u, v) => fmtVal(v),
             });
@@ -1260,19 +1293,24 @@
 
   // K-way merge for multiple channels with different sample timelines
   // sharing one plot. Output: unified xMs Float64Array + per-stream y
-  // arrays where every cell holds the most recently observed value for
-  // that stream (zero-order hold). Cells before that stream's first
-  // sample stay null, so uPlot's spanGaps:false leaves the series
-  // invisible until it has data — but once it produces a sample, the
-  // line stays continuous across union timestamps owned by OTHER streams
-  // instead of going null/value/null/value (which would render as nothing
-  // visible at typical canvas resolutions).
+  // arrays where each cell holds the stream's REAL sample value if it
+  // contributed at that timestamp, otherwise null.
+  //
+  // The series config sets spanGaps: true, so uPlot bridges across
+  // those nulls with a linear interpolation — visually each series
+  // looks like a continuous line through its own real samples,
+  // independent of timestamps owned by other streams. The earlier
+  // implementation used zero-order hold (carry-forward) to keep the
+  // line continuous, but that produced visible step "platforms" for
+  // any series whose samples landed mid-cycle when several channels
+  // emit back-to-back: SIN0's timestamp landed first in each cycle so
+  // its held span was µs-thin, while SIN1/2/3 had ms-long held spans
+  // that rendered as horizontal segments.
   function mergeTimelines(sliced) {
     const k = sliced.length;
     const idx = new Array(k).fill(0);
     const xs = sliced.map((s) => s.wallMs || new Float64Array(0));
     const ys = sliced.map((s) => s.values || []);
-    const lastSeen = new Array(k).fill(null);
 
     let total = 0;
     for (const arr of xs) total += arr.length;
@@ -1282,23 +1320,25 @@
 
     for (;;) {
       // Find the smallest current head across active streams.
-      let bestT = Infinity, bestStreams = null;
+      let bestT = Infinity;
       for (let i = 0; i < k; i++) {
         if (idx[i] >= xs[i].length) continue;
         const t = xs[i][idx[i]];
-        if (t < bestT) { bestT = t; bestStreams = [i]; }
-        else if (t === bestT) bestStreams.push(i);
+        if (t < bestT) bestT = t;
       }
-      if (bestStreams == null) break;
+      if (bestT === Infinity) break;
       xMs[w] = bestT;
-      for (const i of bestStreams) {
-        lastSeen[i] = ys[i][idx[i]];
-        idx[i]++;
+      // For each stream: real value if it contributed at this slot,
+      // null otherwise. Series spanGaps:true bridges the nulls with
+      // linear interpolation at draw time.
+      for (let i = 0; i < k; i++) {
+        if (idx[i] < xs[i].length && xs[i][idx[i]] === bestT) {
+          yArrays[i][w] = ys[i][idx[i]];
+          idx[i]++;
+        } else {
+          yArrays[i][w] = null;
+        }
       }
-      // Carry-forward (or null if not yet seen) for every series at this
-      // union slot, including the contributors — they get the value we
-      // just stored in lastSeen.
-      for (let i = 0; i < k; i++) yArrays[i][w] = lastSeen[i];
       w++;
     }
 
@@ -1525,6 +1565,16 @@
     clear: ()    => { for (const c of charts) c.clear(); },
     reset: ()    => { for (const c of charts) c.reset(); },
     gap:   ()    => { /* no-op — see Chart.gap() */ },
+    // Global plot line style. Persisted to localStorage; charts pick
+    // up the new value on the next _rebuildUplot via _buildOpts.
+    getStyle: () => plotStyle,
+    setStyle: (style) => {
+      if (style !== 'continuous' && style !== 'discrete') return;
+      if (plotStyle === style) return;
+      plotStyle = style;
+      try { localStorage.setItem(PLOT_STYLE_KEY, style); } catch (_) {}
+      for (const c of charts) c._scheduleRebuild();
+    },
   };
   window.Conduit.charts = {
     list:    () => charts.slice(),

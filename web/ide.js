@@ -768,9 +768,21 @@ void conduit_loop(void) {
     refreshDeviceList();
     window.addEventListener('conduit:devices-updated', refreshDeviceList);
 
-    // Rescan button: scan the /24 of the currently-known or quick IP.
+    // Rescan button. Subnet resolution priority:
+    //   1. `conduit.scanRange` from Settings → Account → IP scan range
+    //      (user explicitly configured this)
+    //   2. The first three octets of whatever IP is in the Add field
+    //   3. The first three octets of the most recently known device
+    // No popup fallback — if all three are empty, the connection
+    // status line tells the user what to fill in instead. The hidden
+    // #subnet input is still updated so any other code reading it
+    // (legacy paths, dev-tools probes) sees the chosen subnet.
     rescanBtn.addEventListener('click', async () => {
-      let subnet = document.getElementById('subnet').value.trim();
+      let subnet = '';
+      try {
+        const s = JSON.parse(localStorage.getItem('conduit') || '{}');
+        if (s.scanRange) subnet = String(s.scanRange).trim().replace(/\.$/, '');
+      } catch (_) {}
       if (!subnet) {
         const quick = document.getElementById('ide-quick-ip').value.trim();
         const known = window.Conduit.getKnownDevices();
@@ -778,12 +790,13 @@ void conduit_loop(void) {
           subnet = quick.split('.').slice(0, 3).join('.');
         } else if (known.length && known[0].ip) {
           subnet = known[0].ip.split('.').slice(0, 3).join('.');
-        } else {
-          subnet = window.prompt('Subnet to scan (e.g. 192.168.178):', '192.168.1') || '';
-          if (!subnet) return;
         }
-        document.getElementById('subnet').value = subnet;
       }
+      if (!subnet) {
+        connStatus('Set IP scan range in Settings, or type an IP into Add first', 'err');
+        return;
+      }
+      document.getElementById('subnet').value = subnet;
       rescanBtn.disabled = true;
       connStatus(`Scanning ${subnet}.0/24…`);
       try {
@@ -962,13 +975,11 @@ void conduit_loop(void) {
     setProgressBar({ pct: 0, label: 'Building…', title: null });
     try {
       const uf2 = await buildUf2({ version: nextStampedVersion() });
-      const blob = new Blob([uf2], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'conduit_app.uf2';
-      a.click();
-      URL.revokeObjectURL(url);
+      // Build is a compile + link check now — used to validate the
+      // user's main.c without committing to an OTA. The factory
+      // commissioning image (bootloader + non-TBYB app) is produced
+      // by .github/workflows/commissioning-image.yml; the in-IDE
+      // path is OTA-only via Build & Upload.
       logLine(`built ${uf2.byteLength} bytes, ${uf2.byteLength / 512} UF2 blocks`);
       recordBuildDuration();
       setProgressBar({ pct: 100, label: `Built ${uf2.byteLength} B`, kind: 'ok' });

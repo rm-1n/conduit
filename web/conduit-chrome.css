@@ -25,6 +25,180 @@ body {
    (its parent is sized via flex). */
 .view #app.ide-only { height: 100%; }
 
+/* ----- Account view ------------------------------------------------- */
+/* Two-column layout: section nav on the left (Settings, Account, …)
+   and a scrollable content pane on the right. Each .account-section
+   is one panel; only the .is-active one is visible. */
+.view--account { flex-direction: row; }
+.account-sidebar {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 0;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+.account-sidebar__item {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+  padding: 10px 24px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  cursor: pointer;
+  border-radius: 0;
+  transition: color 0.12s, background 0.12s, border-left-color 0.12s;
+}
+.account-sidebar__item:hover { color: var(--ink); background: var(--bg-2); }
+.account-sidebar__item--active {
+  color: var(--ink);
+  background: var(--bg-2);
+  border-left-color: var(--accent);
+}
+.account-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.account-section {
+  display: none;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 32px 48px;
+  max-width: 880px;
+}
+.account-section.is-active { display: flex; }
+.account-section__header { margin-bottom: 24px; }
+.account-section__header h2 {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+  margin: 0 0 16px 0;
+}
+.account-search {
+  width: 100%;
+  max-width: 480px;
+  font-family: var(--font-mono);
+  /* style.css's input[type=...] selector doesn't cover type="search",
+     so the input falls through to browser defaults without our
+     standard padding. Set it explicitly so placeholder + typed text
+     have breathing room from the field's edges. */
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  outline: none;
+  -webkit-appearance: none;
+}
+.account-search::placeholder { color: var(--ink-faint); }
+.account-search:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* Settings list — one row per setting. data-search on the row drives
+   the search filter in index.html. Add new rows by appending another
+   .setting-row with appropriate keywords. */
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settings-empty {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-style: italic;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 20px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+}
+.setting-row[hidden] { display: none; }
+.setting-row__label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.setting-row__title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.setting-row__desc {
+  font-size: 12px;
+  color: var(--ink-faint);
+  line-height: 1.5;
+}
+.setting-row__control {
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+/* Setting-row text input (e.g. IP scan range). Same chrome as the
+   search field but narrower — the row's flex layout already pushes
+   it to the right edge, so a fixed-width feels intentional. */
+.setting-input {
+  width: 16ch;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  outline: none;
+  -webkit-appearance: none;
+}
+.setting-input::placeholder { color: var(--ink-faint); }
+.setting-input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* Segmented two-button control. Buttons share an edge via -1 px
+   margin so the active state shows as a single bordered cell. */
+.seg-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.seg-btn + .seg-btn { margin-left: -1px; }
+.seg-btn:hover { color: var(--ink); }
+.seg-btn[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--bg);
+  border-color: var(--ink);
+  z-index: 1;
+}
+
 /* Centered placeholder for views that aren't built yet (Hardware
    Manager today; Account view eventually). Kept generic so other
    pre-launch views can reuse the same shell. */
