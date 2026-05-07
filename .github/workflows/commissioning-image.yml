@@ -229,3 +229,37 @@ jobs:
           files: |
             ${{ steps.ver.outputs.filename }}
           fail_on_unmatched_files: true
+
+      # Update the README's commissioning-image link to point at the
+      # tag we just published. The README has matching
+      # `<!-- factory-uf2-version:start --> ... :end -->` sentinels
+      # around the version label; sed swaps everything between them
+      # for the new tag. Skipped when nothing changed (no-op runs
+      # don't generate empty commits) and when the run is on a
+      # detached HEAD (workflow_dispatch from a tag, etc.) where
+      # `git push` wouldn't have a branch to push to.
+      - name: Update README commissioning-image link
+        if: steps.ver.outputs.should_build == 'true'
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          sed -i "s|<!-- factory-uf2-version:start -->[^<]*<!-- factory-uf2-version:end -->|<!-- factory-uf2-version:start -->\`${TAG}\`<!-- factory-uf2-version:end -->|" README.md
+          if git diff --quiet README.md; then
+            echo "README already up-to-date with $TAG — nothing to commit."
+            exit 0
+          fi
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          if [ "$BRANCH" = "$GITHUB_REF" ]; then
+            echo "Not on a branch ref ($GITHUB_REF) — skipping README push."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: point commissioning-image link to ${TAG} [skip ci]"
+          # Pull-rebase first in case main moved while we were
+          # building — then push. The README path isn't in this
+          # workflow's `paths:` filter, so this push won't
+          # re-trigger us.
+          git pull --rebase origin "$BRANCH" || true
+          git push origin "HEAD:$BRANCH"

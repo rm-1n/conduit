@@ -1,0 +1,20 @@
+# Heavy binary artefacts go through Git LFS. Currently this covers the
+# WASM clang+lld toolchain bundle under web/assets/emception/ — built
+# locally via web/lib/build-toolchain.sh.
+#
+# Background: the CI workflow that used to produce this bundle
+# (.github/workflows/build-llvm-box-arm.yml) was deleted. The cold-
+# cache LLVM + Emscripten build runs roughly 3 hours, and the multi-
+# gigabyte intermediate state doesn't cache cleanly between runs.
+# Maintaining a runner image for it is more friction than just
+# rebuilding locally on the rare occasion the toolchain needs a bump,
+# then committing the output via Git LFS.
+#
+# To rebuild from scratch: read the header of web/lib/build-toolchain.sh
+# (covers emsdk 3.1.24 pin, the ARM-target patch, the cmake 3.24 pin
+# for Emception's patch-ninja regex, and the macOS-vs-Linux PATH
+# tweaks). Run it, then `git add web/assets/emception/` — LFS picks
+# up the *.wasm and *.pack.br files automatically per the rules below.
+*.wasm    filter=lfs diff=lfs merge=lfs -text
+*.pack.br filter=lfs diff=lfs merge=lfs -text
+*.pack    filter=lfs diff=lfs merge=lfs -text

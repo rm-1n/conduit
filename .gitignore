@@ -77,11 +77,23 @@ env/
 htmlcov/
 
 # ---- Web IDE: heavy / generated assets -----------------------------------
-# The WASM clang+lld toolchain (~580 MB unpacked) is built by
-# .github/workflows/build-llvm-box-arm.yml and downloaded from a Release.
-# The pico-sdk web bundle (~10 MB) is built by build-web-sdk.yml.
-# Local builds populate web/assets/ — never commit it.
-web/assets/
+# The Pico SDK web bundle (~15 MB) is built by build-web-sdk.yml on every
+# firmware-touching push; pulled at deploy time, never committed.
+web/assets/sdk/
+
+# h5wasm is fetched from jsdelivr at runtime — the local copy is a stale
+# dev artefact, not used by the deployed bundle.
+web/assets/h5wasm/
+web/assets/sdk.pre-on_command-bak/
+
+# The WASM clang+lld toolchain bundle under web/assets/emception/ IS
+# tracked, via Git LFS — see .gitattributes. Two carve-outs:
+#   * Uncompressed *.pack files are build artefacts not used at runtime
+#     (packs.mjs only imports the .pack.br variants), so excluding them
+#     saves ~440 MB of LFS storage per build.
+#   * Source maps and similar dev-only artefacts can pile up; if any
+#     show up in your build output, add them here.
+web/assets/emception/packages/*.pack
 
 # Emception's own build state lives inside the submodule. Belt-and-suspenders
 # rule from this side too, since the submodule's gitignore is independent.
