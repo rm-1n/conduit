@@ -364,6 +364,16 @@ button[aria-pressed="true"], button.is-active {
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 6px var(--telemetry-w, 35%);
+  /* Single explicit row pinned to the container's height. Without
+     this, the implicit row defaults to grid-auto-rows: auto and
+     resolves to its tallest child's intrinsic size — when the
+     panes' content has a large min-height stack (pane-header +
+     plots-min + cmd-strip + telemetry-console-min, etc.), the row
+     would grow past the flex-1 allocation and push the panes'
+     bottoms under the viewport. With overflow: hidden on the body,
+     those clipped bottoms are why the runtime / telemetry log
+     scroll handles + last lines disappeared on shorter screens. */
+  grid-template-rows: minmax(0, 1fr);
   grid-gap: 0;
   background: var(--border);
   min-height: 0;

@@ -2,7 +2,6 @@
 
 Open-hardware RP2350 / Pico2 board with Power-over-Ethernet, an RMII PHY, and a browser-based development workflow.
 The repo holds the KiCad project (`hardware/`), the firmware with A/B-partitioned OTA + a tiny HTTP API (`firmware/`), the `conduit` Python CLI for build / flash / OTA / commanding (`tools/conduit/`), and a static web IDE that compiles user C in the browser via WASM clang+lld and pushes it over the network (`web/`).
-Heavy build artefacts (the WASM toolchain bundle, the SDK web bundle) are produced by GitHub Actions and not committed — see `.github/workflows/`.
 
 ## First-time setup
 
