@@ -13,14 +13,31 @@
 //   getKnownDevices()              — read the cached list
 //   dispatch event 'conduit:devices-updated' whenever the cache changes
 
-// Per-probe timeout. Has to comfortably exceed the time it takes for
-// a probe to (a) get a socket out of the browser's global pool when
-// 254 are in flight at once, and (b) for the device to round-trip
-// the GET. 4 s aligns with `probeAndRemember`'s default and is the
-// observed ceiling for queued probes during a /24 scan; the prior
-// 1500 ms was tight enough that a fetch queued behind 250 timing-
-// out fetches to unreachable hosts would abort BEFORE it got a turn.
-const SCAN_TIMEOUT_MS = 4000;
+// Per-probe timeout default. Has to comfortably exceed the time it
+// takes for a probe to (a) get a socket out of the browser's global
+// pool when 254 are in flight at once, and (b) for the device to
+// round-trip the GET. 10 s gives queued probes plenty of headroom;
+// the prior 1500 ms was tight enough that a fetch queued behind 250
+// timing-out fetches to unreachable hosts would abort BEFORE it got
+// a turn at the socket pool. Worst-case /24 scan against a fully-
+// empty subnet now takes ~10 s end-to-end (reachable LAN devices
+// still respond in tens of ms).
+//
+// User-overridable via Settings → "Scan timeout" — value persists
+// in localStorage `conduit.scanTimeoutMs`. configuredScanTimeoutMs()
+// reads the override every call so the new value applies on the
+// next scan without a reload.
+const SCAN_TIMEOUT_MS = 10000;
+function configuredScanTimeoutMs() {
+  try {
+    const s = JSON.parse(localStorage.getItem('conduit') || '{}');
+    const v = Number(s.scanTimeoutMs);
+    // Clamp to a sane range to keep a corrupt localStorage entry
+    // from making the IDE feel unresponsive (or unbounded).
+    if (Number.isFinite(v) && v >= 500 && v <= 60000) return v;
+  } catch (_) {}
+  return SCAN_TIMEOUT_MS;
+}
 
 // Probe one host. `cache: 'no-store'` keeps a stale cached response
 // (or a queued revalidation that races the abort) from masking a
@@ -29,7 +46,7 @@ const SCAN_TIMEOUT_MS = 4000;
 // subsequent reachability dip would look like a hard failure.
 async function scanHost(ip, timeoutMs) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs || SCAN_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs || configuredScanTimeoutMs());
   try {
     const res = await fetch(`http://${ip}/api/status`, {
       signal: controller.signal,
@@ -81,10 +98,13 @@ async function startScan(opts) {
   // was mitigating only applies to repeated requests to the SAME host
   // (see scanHost's comment about timer-vs-fetch ordering). Across 254
   // different origins we can blast all of them at once and rely on the
-  // SCAN_TIMEOUT_MS abort timer per probe to bound the total wait.
+  // per-probe abort timer (configuredScanTimeoutMs) to bound the
+  // total wait. Resolved once here so all probes in this scan share
+  // the same value even if the user toggles the setting mid-scan.
+  const timeoutMs = configuredScanTimeoutMs();
   const hits = [];
   await Promise.all(ips.map(async (ip) => {
-    const result = await scanHost(ip, SCAN_TIMEOUT_MS);
+    const result = await scanHost(ip, timeoutMs);
     if (result) hits.push(result);
     if (opts && opts.onProgress) opts.onProgress({ ip, ok: !!result });
   }));
@@ -110,7 +130,7 @@ function getKnownDevices() {
 }
 
 async function probeAndRemember(ip, opts) {
-  const timeoutMs = (opts && opts.timeoutMs) || 4000;
+  const timeoutMs = (opts && opts.timeoutMs) || configuredScanTimeoutMs();
   const result = await scanHost(ip, timeoutMs);
   if (!result) return null;
   try {

@@ -385,6 +385,20 @@
                    aria-label="IP scan range — first three octets">
           </div>
         </article>
+        <article class="setting-row" data-setting="scan-timeout"
+                 data-search="scan timeout probe latency response time wait device discover seconds">
+          <div class="setting-row__label">
+            <span class="setting-row__title">Scan timeout</span>
+            <span class="setting-row__desc">Per-probe abort timeout (seconds) for the /24 scan and the Add button. Higher values give slow devices more headroom; lower values fail an empty subnet faster. Default 10. Range 1–60.</span>
+          </div>
+          <div class="setting-row__control">
+            <input class="setting-input" id="setting-scan-timeout" type="number"
+                   min="1" max="60" step="1" placeholder="10"
+                   autocomplete="off"
+                   inputmode="numeric"
+                   aria-label="Scan timeout in seconds">
+          </div>
+        </article>
       </div>
       <p class="settings-empty" id="settings-empty" hidden>No settings match your search.</p>
     </section>
@@ -571,6 +585,41 @@
     });
   }
 
+  // ---- Settings: Scan timeout (in seconds) ----------------------------
+  // Persisted as ms under the same `conduit` localStorage object that
+  // app.js's configuredScanTimeoutMs() reads. Default is 10 s; the
+  // input's min/max attributes (1–60) match the clamp on the read
+  // side so a manual localStorage edit can't make the IDE feel
+  // unresponsive or stuck on an unbounded probe.
+  const scanTimeoutInput = $('setting-scan-timeout');
+  function readScanTimeoutSec() {
+    try {
+      const s = JSON.parse(localStorage.getItem('conduit') || '{}');
+      const ms = Number(s.scanTimeoutMs);
+      if (Number.isFinite(ms) && ms >= 500) return Math.round(ms / 1000);
+    } catch (_) {}
+    return 10;
+  }
+  function writeScanTimeoutSec(sec) {
+    try {
+      const s = JSON.parse(localStorage.getItem('conduit') || '{}');
+      if (Number.isFinite(sec) && sec >= 1 && sec <= 60) {
+        s.scanTimeoutMs = sec * 1000;
+      } else {
+        // Empty / invalid input → drop the override so the next
+        // scan picks the in-code default (10 s).
+        delete s.scanTimeoutMs;
+      }
+      localStorage.setItem('conduit', JSON.stringify(s));
+    } catch (_) {}
+  }
+  if (scanTimeoutInput) {
+    scanTimeoutInput.value = readScanTimeoutSec();
+    scanTimeoutInput.addEventListener('input', (ev) => {
+      writeScanTimeoutSec(Number(ev.target.value));
+    });
+  }
+
   // ---- Account sidebar build-line --------------------------------------
   // "<asset version> · <8-char commit>". Both globals are set in the
   // CONDUIT_BUILD script block at the bottom of this file; the deploy
@@ -656,7 +705,7 @@
 <script src="finalize.js?v=121"></script>
 <script src="editor.js?v=121"></script>
 <script src="compiler.js?v=121"></script>
-<script src="app.js?v=142"></script>
+<script src="app.js?v=145"></script>
 <script src="ide.js?v=146"></script>
 <script src="log_store.js?v=121"></script>
 <script src="log_export.js?v=121"></script>
