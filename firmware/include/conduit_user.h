@@ -117,6 +117,23 @@ typedef float     F32x4[4];
 void _conduit_transmit_cached(int8_t *id_slot, const char *name,
                           conduit_dtype_t dtype, uint16_t n, const void *src);
 
+// Hard cap on transmit() call sites in one translation unit. The web
+// IDE pre-allocates 8 channel slots; calling transmit() from a 9th
+// site would overflow the registry and silently drop the extra
+// channel at runtime. The _Static_assert inside transmit() turns that
+// overflow into a compile error instead.
+#define CONDUIT_TRANSMIT_MAX 8
+
+// Anchor used by the transmit() compile-time counter. Captures the
+// value of __COUNTER__ at include time so each transmit() invocation
+// can compute its 0-based index as (__COUNTER__ - base - 1). Caveat:
+// __COUNTER__ is shared across the whole TU — third-party macros that
+// use it advance the count here too. In practice the web IDE compiles
+// a single user-authored main.c against a curated SDK subset, so
+// unrelated __COUNTER__ uses are rare; if the assert fires with fewer
+// than 8 visible transmit() calls, audit your includes.
+enum { _conduit_transmit_base = __COUNTER__ };
+
 // transmit(name, T, ptr) — stream one record.
 //   name : UPPER_SNAKE_CASE string literal
 //   T    : a type token from the table above (or your own array typedef)
@@ -127,6 +144,11 @@ void _conduit_transmit_cached(int8_t *id_slot, const char *name,
 // array of unsupported elements) is a compile-time error rather than a
 // silent runtime drop.
 #define transmit(name, T, ptr) do {                                      \
+    _Static_assert((__COUNTER__ - _conduit_transmit_base - 1)            \
+                    < CONDUIT_TRANSMIT_MAX,                              \
+        "transmit(): exceeded CONDUIT_TRANSMIT_MAX (8) channels in "     \
+        "this translation unit. Each transmit(\"NAME\", ...) call "      \
+        "site counts as one channel — consolidate or split TUs.");       \
     static int8_t _conduit_id = -1;                                          \
     _conduit_transmit_cached(&_conduit_id, (name),                               \
         _Generic( ((T*)0)[0][0],                                         \

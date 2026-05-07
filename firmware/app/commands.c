@@ -241,7 +241,15 @@ static int invoke_typed(const cmd_entry_t *e, const char *args,
                 v = (int64_t)strtoll(buf, NULL, 0);
             }
             err = ((conduit_cmd_cb_i64_t)e->typed_cb)(v);
-            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%" PRId64 "}", v);
+            // %lld + cast instead of PRId64 — Ubuntu's arm-none-eabi
+            // newlib (used by the CI runners) doesn't always define
+            // the PRI* macros in <inttypes.h> for the cortex-m33
+            // multilib, even when the header itself is on the include
+            // path. On this target int64_t is always `long long`, so
+            // the cast is a no-op at runtime and keeps the format
+            // string valid across both Ubuntu's and the standalone
+            // toolchain's newlib variants.
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%lld}", (long long)v);
             break;
         }
         case CONDUIT_DTYPE_U64: {
@@ -253,7 +261,7 @@ static int invoke_typed(const cmd_entry_t *e, const char *args,
                 v = (uint64_t)strtoull(buf, NULL, 0);
             }
             err = ((conduit_cmd_cb_u64_t)e->typed_cb)(v);
-            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%" PRIu64 "}", v);
+            if (!err) written = snprintf(out, out_max, "{\"ok\":true,\"value\":%llu}", (unsigned long long)v);
             break;
         }
         case CONDUIT_DTYPE_F32: {

@@ -1,0 +1,120 @@
+# Publishes the static web IDE under web/ to GitHub Pages.
+#
+# What ships:
+#   - web/*.html, *.css, *.js      tracked in git, runtime
+#   - web/assets/emception/        WASM clang+lld toolchain, tracked
+#                                  via Git LFS (~125 MB compressed)
+#   - web/assets/sdk/              Pico SDK web bundle, downloaded at
+#                                  deploy time from the latest
+#                                  `web-sdk-<version>` Release that
+#                                  build-web-sdk.yml publishes
+#   - h5wasm                       fetched from jsdelivr at runtime;
+#                                  no local copy needed
+#
+# Pre-requisite: enable Pages once in the repository settings (Settings
+# → Pages → Source: GitHub Actions). The deploy job below targets the
+# `github-pages` environment that GitHub provisions automatically.
+#
+# Triggers:
+#   - push to main  → automatic deploy on every merge
+#   - workflow_dispatch → manual deploy (e.g. after a fresh web-sdk
+#                       release without a separate web/ commit)
+
+name: deploy-pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Pages allows only one in-flight deploy. Cancelling outdated runs
+# avoids a stale build queueing behind a fresh merge.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # web/assets/emception/ is committed via Git LFS — without
+          # this the runtime would download text pointer files
+          # instead of the actual *.wasm / *.pack.br bytes.
+          lfs: true
+
+      - name: Inject build identity into web/index.html
+        # Replaces the `'dev'` placeholder for window.CONDUIT_COMMIT
+        # with the first 8 chars of the deployed commit SHA. The
+        # Account view's sidebar footer reads this to display the
+        # running build alongside CONDUIT_ASSET_VERSION.
+        run: |
+          SHA=$(echo "${GITHUB_SHA}" | cut -c1-8)
+          sed -i "s/window\.CONDUIT_COMMIT[[:space:]]*=[[:space:]]*'dev';/window.CONDUIT_COMMIT        = '${SHA}';/" web/index.html
+          echo '--- post-injection identity block ---'
+          grep -n CONDUIT_COMMIT web/index.html
+
+      - name: Download latest web-sdk bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # The build-web-sdk.yml workflow tags releases as
+        # `web-sdk-<MAJOR.MINOR>` from the firmware version. We pick
+        # whichever has the highest version (lexicographic on the
+        # tag is fine — MAJOR.MINOR sorts naturally as long as we
+        # don't go past one digit per part; if that's ever wrong the
+        # release publish chronology is the tiebreaker).
+        run: |
+          TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
+                  --json tagName \
+                  --jq '[.[].tagName | select(startswith("web-sdk-"))] | first')
+          if [ -z "$TAG" ]; then
+            echo "::warning::No web-sdk-* Release found — deploying without the SDK bundle. The IDE will load but the in-browser compiler will fail at the first Build click."
+          else
+            echo "Pulling SDK from Release: $TAG"
+            mkdir -p /tmp/web-sdk web/assets/sdk
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern 'web-sdk.tar.gz' --dir /tmp/web-sdk
+            tar -xzf /tmp/web-sdk/web-sdk.tar.gz -C web/assets/sdk
+            echo '--- staged SDK contents ---'
+            ls web/assets/sdk
+          fi
+
+      - name: Sanity-check assets
+        # The toolchain bundle (LFS) and the SDK bundle (just-downloaded)
+        # are the two heavyweights the IDE needs at runtime. Failing
+        # loudly here turns a broken deploy into a CI failure instead
+        # of a silently-shipped 404 farm.
+        run: |
+          test -f web/assets/emception/llvm/llvm-box.wasm \
+            || (echo "::error::emception WASM missing — LFS pull failed?"; exit 1)
+          test -f web/assets/emception/packages/emscripten.pack.br \
+            || (echo "::error::emception pack.br missing — LFS pull failed?"; exit 1)
+          if [ ! -d web/assets/sdk/headers ]; then
+            echo "::warning::SDK headers directory absent — IDE compile will fail on first Build."
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

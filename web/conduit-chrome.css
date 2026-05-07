@@ -25,89 +25,369 @@ body {
    (its parent is sized via flex). */
 .view #app.ide-only { height: 100%; }
 
-/* ---------- Topbar (Conduit) ---------- */
-.topbar {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  border-bottom: 1px solid var(--line);
+/* ----- Account view ------------------------------------------------- */
+/* Two-column layout: section nav on the left (Settings, Account, …)
+   and a scrollable content pane on the right. Each .account-section
+   is one panel; only the .is-active one is visible. */
+.view--account { flex-direction: row; }
+/* Two-column shell: top menu group + bottom footer pinned to the
+   end of the rail (justify-content: space-between separates them).
+   The footer carries the source link, build identity, and storefront
+   link. */
+.account-sidebar {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px 0;
   background: var(--bg);
-  padding: 0 20px;
-  gap: 28px;
-  height: 52px;
-  flex: 0 0 52px;
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
 }
-.topbar .brand,
-.topbar .toolbar { background: none; }
-
-/* Plain mono "RM1N" + small uppercase brand tag.
-   `align-items: center` keeps the small brand tag vertically centered
-   on the logo's mid-line; baseline alignment was making "Conduit · v3.5"
-   sit visually below the logo glyphs. */
-.topbar__brand {
-  display: inline-flex; align-items: center; gap: 12px;
-  background: none; border: 0; padding: 0;
-  color: inherit;
-  user-select: none;
+.account-sidebar__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-/* Plain mono "RM1N" — no accent, no italic. */
-.logo {
-  font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--ink);
-}
-.brand-tag {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.20em;
-  color: var(--ink-faint);
-  text-transform: uppercase;
-}
-
-/* Path-based crumb trail */
-.topbar__crumbs {
-  display: flex; align-items: center; gap: 10px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-.crumb {
-  background: none; border: 0; padding: 4px 0;
+/* Sidebar items are bare — active state is purely a color change
+   (faint → ink). Earlier we used a 3 px accent left-bar plus a
+   bg-2 fill; that read as a heavy nav-rail treatment that didn't
+   match the rest of the IDE chrome. */
+.account-sidebar__item {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 10px 24px;
   font-family: var(--font-mono);
   font-size: 13px;
   letter-spacing: 0.02em;
   color: var(--ink-faint);
   cursor: pointer;
-  transition: color var(--dur-hover) var(--ease);
-  display: inline-flex; align-items: center; gap: 6px;
-  white-space: nowrap;
+  border-radius: 0;
+  transition: color 0.12s;
 }
-.crumb:hover { color: var(--ink-dim); }
-.crumb--active { color: var(--ink); cursor: default; }
-.crumb__slash { color: var(--ink-faint); opacity: 0.5; user-select: none; }
-.crumb__sub { color: var(--ink-faint); margin-left: 2px; font-size: 11px; }
-.crumb__pill {
+.account-sidebar__item:hover         { color: var(--ink); }
+.account-sidebar__item--active       { color: var(--ink); }
+
+.account-sidebar__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px 24px;
   font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.20em;
-  text-transform: uppercase;
+  font-size: 11px;
   color: var(--ink-faint);
+}
+/* Borderless GitHub button: mark + star count side-by-side, the
+   whole anchor is the click target. No box, no background, just an
+   inline-flex layout with the icon at icon-size. */
+.account-sidebar__github {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--ink-faint);
+  text-decoration: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  transition: color 0.12s;
+}
+.account-sidebar__github:hover { color: var(--ink); }
+.account-sidebar__github svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+.account-sidebar__stars {
+  font-variant-numeric: tabular-nums;
+}
+.account-sidebar__build {
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+.account-sidebar__store {
+  color: var(--ink-faint);
+  text-decoration: none;
+  transition: color 0.12s;
+}
+.account-sidebar__store:hover { color: var(--ink); }
+.account-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.account-section {
+  display: none;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 32px 48px;
+  max-width: 880px;
+}
+.account-section.is-active { display: flex; }
+.account-section__header { margin-bottom: 24px; }
+.account-section__header h2 {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+  margin: 0 0 16px 0;
+}
+.account-search {
+  width: 100%;
+  max-width: 480px;
+  font-family: var(--font-mono);
+  /* style.css's input[type=...] selector doesn't cover type="search",
+     so the input falls through to browser defaults without our
+     standard padding. Set it explicitly so placeholder + typed text
+     have breathing room from the field's edges. */
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--bg);
   border: 1px solid var(--line);
-  padding: 2px 6px;
-  margin-left: 4px;
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  outline: none;
+  -webkit-appearance: none;
+}
+.account-search::placeholder { color: var(--ink-faint); }
+.account-search:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* Settings list — one row per setting. data-search on the row drives
+   the search filter in index.html. Add new rows by appending another
+   .setting-row with appropriate keywords. */
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settings-empty {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-style: italic;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 20px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+}
+.setting-row[hidden] { display: none; }
+.setting-row__label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.setting-row__title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.setting-row__desc {
+  font-size: 12px;
+  color: var(--ink-faint);
+  line-height: 1.5;
+}
+.setting-row__control {
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+/* Setting-row text input (e.g. IP scan range). Same chrome as the
+   search field but narrower — the row's flex layout already pushes
+   it to the right edge, so a fixed-width feels intentional. */
+.setting-input {
+  width: 16ch;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  outline: none;
+  -webkit-appearance: none;
+}
+.setting-input::placeholder { color: var(--ink-faint); }
+.setting-input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* Segmented two-button control. Buttons share an edge via -1 px
+   margin so the active state shows as a single bordered cell. */
+.seg-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.seg-btn + .seg-btn { margin-left: -1px; }
+.seg-btn:hover { color: var(--ink); }
+.seg-btn[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--bg);
+  border-color: var(--ink);
+  z-index: 1;
+}
+
+/* Centered placeholder for views that aren't built yet (Hardware
+   Manager today; Account view eventually). Kept generic so other
+   pre-launch views can reuse the same shell. */
+.view-placeholder {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  text-align: center;
+}
+.view-placeholder h2 {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.view-placeholder p { font-size: 13px; }
+
+/* Primary CTA button — matches the design system's "accent fill,
+   white uppercase label, square corners" spec (12 px label, 0.08em
+   tracking, ≥44 px tap target). Used for the storefront link in the
+   Hardware Manager placeholder; reusable wherever the design calls
+   for a primary CTA. */
+.btn-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 20px;
+  margin-top: 8px;
+  background: var(--accent);
+  color: #FFF;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--dur-hover) var(--ease),
+              border-color var(--dur-hover) var(--ease);
+}
+.btn-cta:hover  { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-cta:active { transform: translateY(1px); }
+.btn-cta:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Topbar (Conduit) ----------
+   Mirrors the live Shopify storefront nav: a single black band that
+   stays black in BOTH light and dark mode (per design spec it's
+   chrome, not surface). Brand left, primary nav centered, theme
+   toggle + account icon right. Hairline #1C1C1E divider underneath. */
+.topbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  background: #000;
+  color: #FFF;
+  border-bottom: 1px solid #1C1C1E;
+  padding: 18px 28px;
+  gap: 28px;
+  flex: 0 0 auto;
+}
+
+/* Plain mono "CONDUIT" wordmark — white on the black band. Acts as
+   a "home" affordance (clicking returns to the IDE) but is styled
+   as flat text: no cursor change, no hover state, no click bounce.
+   The `:active` override cancels the global `button:active
+   transform: translateY(1px)` from style.css so it doesn't twitch
+   on click. */
+.topbar__brand {
+  display: inline-flex; align-items: center; gap: 12px;
+  background: none; border: 0; padding: 0;
+  color: inherit;
+  user-select: none;
+  cursor: default;
+  font-family: inherit;
+}
+.topbar__brand:hover  { background: none; }
+.topbar__brand:active { transform: none; }
+.topbar .logo {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #FFF;
+}
+
+/* Primary nav cluster — storefront-style mono links with a 4px
+   underline-offset on the active item. Left-aligned with a generous
+   gap from the brand wordmark so the nav reads as "anchored to" the
+   logo, not floating in the middle of the bar. Hover dims to 65%
+   opacity to match the rest of the nav-action vocabulary. */
+.topbar__nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 28px;
+  margin-left: 24px;
+  font-family: var(--font-mono);
+}
+.topbar__navlink {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: #FFF;
+  cursor: pointer;
+  text-decoration: none;
+  padding: 4px 2px;
+  white-space: nowrap;
+  transition: opacity var(--dur-hover) var(--ease);
+}
+.topbar__navlink:hover { opacity: 0.65; }
+.topbar__navlink--active {
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .topbar__right {
   display: flex; align-items: center; gap: 12px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-faint);
+  color: #FFF;
 }
-.topbar__sep { width: 1px; height: 18px; background: var(--line); }
-.topbar__right .num { color: var(--ink); font-variant-numeric: tabular-nums; }
 
 .iconbtn {
   width: 28px; height: 28px;
@@ -130,31 +410,99 @@ body {
 .iconbtn--accent { border-color: var(--accent); color: var(--accent); }
 .iconbtn--accent:hover { background: color-mix(in oklab, var(--accent) 10%, transparent); }
 
-/* Theme toggle pill — quiet active state.
-   The pressed icon is full-ink with a subtle bg-2 fill; the unpressed
-   icon stays faint. No blue accent — the toggle is chrome, not a CTA,
-   and the loud accent treatment competed with the link indicator.
-   Buttons each carry a full border and overlap by -1px so the shared
-   edge collapses to a clean 1-px divider. z-index lifts the
-   hovered / pressed button so its border is fully visible (the prior
-   `border-left: 0` shortcut left the left edge missing on hover). */
+/* Theme toggle — two bordered iconbtns sharing an edge to read as
+   one connected pill on the always-black band. Colors are hardcoded
+   (not token-driven) because the topbar stays black regardless of
+   theme — token values would render dark-on-black in light mode.
+   The pressed icon goes full-white on a subtle #1C1C1E lift; the
+   unpressed icon stays #8E8E93. Buttons overlap by -1px so the
+   shared edge collapses to a clean 1px divider; z-index lifts the
+   pressed / hovered button so its border is fully visible. */
+.topbar .iconbtn {
+  width: 28px; height: 28px;
+  border: 1px solid #38383A;
+  background: transparent;
+  color: #8E8E93;
+  border-radius: 0;
+  padding: 0;
+  transition: background var(--dur-hover) var(--ease),
+              color var(--dur-hover) var(--ease),
+              border-color var(--dur-hover) var(--ease);
+}
+.topbar .iconbtn:hover {
+  background: #1C1C1E;
+  color: #FFF;
+  border-color: #38383A;
+}
+.topbar .iconbtn .material-symbols-outlined { font-size: 18px; }
+
 .topbar__themetoggle { display: inline-flex; gap: 0; }
-.topbar__themetoggle .iconbtn { border-radius: 0; color: var(--ink-faint); position: relative; }
+.topbar__themetoggle .iconbtn { position: relative; }
 .topbar__themetoggle .iconbtn + .iconbtn { margin-left: -1px; }
-/* Hover must win over pressed so the unpressed-but-hovered button's
-   full border is visible. Otherwise hovering the sun in dark-mode
-   leaves its right edge tucked behind the moon's left border, and
-   the hover frame looks open on that side. */
 .topbar__themetoggle .iconbtn[aria-pressed="true"] { z-index: 1; }
 .topbar__themetoggle .iconbtn:hover                { z-index: 2; }
 .topbar__themetoggle .iconbtn[aria-pressed="true"] {
-  color: var(--ink);
-  background: var(--bg-2);
-  border-color: var(--line);
+  color: #FFF;
+  background: #1C1C1E;
+  border-color: #38383A;
 }
 
-/* Right-anchored sidebar (telemetry pane) toggle: pushes itself + any
-   trailing chrome to the far right of the topbar's right cluster. */
+/* Bare-glyph nav actions (search, account) — match the storefront
+   treatment: no border, no fill, a 20 px white SVG that nudges
+   slightly larger on hover. Overrides the bordered .topbar .iconbtn
+   pill we inherit, scoped to these two buttons so the theme toggle
+   next to them keeps its bordered double-pill (its pressed state
+   needs the chrome to read clearly). The first bare icon picks up
+   extra margin-left to space the cluster away from the theme
+   toggle. */
+.topbar .topbar__search,
+.topbar .topbar__account {
+  width: auto; height: auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #FFF;
+  /* No color/opacity hover — we scale the inner SVG instead. The
+     transition lives on the SVG below. */
+}
+.topbar .topbar__search:hover,
+.topbar .topbar__account:hover {
+  background: transparent;
+  border-color: transparent;
+  color: #FFF;
+}
+/* Cancel the global `button:active { transform: translateY(1px) }` —
+   the storefront marks shouldn't bounce on click. Only the hover
+   scale-up below is the affordance these icons get. */
+.topbar .topbar__search:active,
+.topbar .topbar__account:active {
+  transform: none;
+}
+.topbar .topbar__search { margin-left: 16px; }
+
+/* Inline-SVG storefront marks — currentColor fill picks up the
+   button's white text. Pinned to 20×20 explicitly so they stay the
+   same footprint regardless of how the global .iconbtn > svg width
+   rule evolves. transform-origin sits at the bottom edge so the
+   hover scale grows upward (icon's baseline stays anchored to its
+   sibling chrome) instead of pushing outward in all directions. */
+.topbar .topbar__search .icon-search,
+.topbar .topbar__account .icon-account {
+  width: 20px;
+  height: 20px;
+  display: block;
+  transform-origin: center bottom;
+  /* No transition — hover scale is instant, matching the storefront. */
+}
+.topbar .topbar__search:hover  .icon-search,
+.topbar .topbar__account:hover .icon-account {
+  transform: scale(1.07);
+}
+
+/* Telemetry pane toggle now lives in the IDE-internal toolbar with
+   the device picker / Add / Scan controls. `margin-left: auto`
+   pushes it to the far right of that toolbar so it stays visually
+   anchored to the pane it controls. */
 #ide-toggle-telemetry { margin-left: auto; }
 
 /* ---------- IDE pane re-skin ----------
@@ -173,7 +521,6 @@ body {
   border-bottom: 1px solid var(--line);
 }
 .pane-title { color: var(--ink-faint); }
-.pane-title::before { content: "/ "; color: var(--accent); }
 
 .pane-hint, .pane-hint-info {
   font-family: var(--font-mono);

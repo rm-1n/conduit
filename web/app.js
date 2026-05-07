@@ -13,13 +13,20 @@
 //   getKnownDevices()              — read the cached list
 //   dispatch event 'conduit:devices-updated' whenever the cache changes
 
-const SCAN_TIMEOUT_MS = 1500;
+// Per-probe timeout. Has to comfortably exceed the time it takes for
+// a probe to (a) get a socket out of the browser's global pool when
+// 254 are in flight at once, and (b) for the device to round-trip
+// the GET. 4 s aligns with `probeAndRemember`'s default and is the
+// observed ceiling for queued probes during a /24 scan; the prior
+// 1500 ms was tight enough that a fetch queued behind 250 timing-
+// out fetches to unreachable hosts would abort BEFORE it got a turn.
+const SCAN_TIMEOUT_MS = 4000;
 
-// Probe one host. The abort timer starts right as we kick off fetch — per
-// a prior bug where the timer could fire before the fetch got a turn at
-// the browser's per-origin connection limit, we now ensure the caller uses
-// runWithConcurrency to keep the in-flight count low enough that no probe
-// queues behind its own deadline.
+// Probe one host. `cache: 'no-store'` keeps a stale cached response
+// (or a queued revalidation that races the abort) from masking a
+// healthy device — without it, /api/status responses with no
+// explicit Cache-Control could be served from disk cache and a
+// subsequent reachability dip would look like a hard failure.
 async function scanHost(ip, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs || SCAN_TIMEOUT_MS);
@@ -27,6 +34,7 @@ async function scanHost(ip, timeoutMs) {
     const res = await fetch(`http://${ip}/api/status`, {
       signal: controller.signal,
       mode: 'cors',
+      cache: 'no-store',
     });
     clearTimeout(timer);
     if (!res.ok) return null;
@@ -67,13 +75,19 @@ async function startScan(opts) {
   const ips = [];
   for (let i = 1; i <= 254; i++) ips.push(`${base}.${i}`);
 
+  // Fire every probe simultaneously. Each .x.x.x.N targets a distinct
+  // origin, so the browser's per-origin connection limit (~6) doesn't
+  // throttle across IPs — the bottleneck the older 24-concurrency cap
+  // was mitigating only applies to repeated requests to the SAME host
+  // (see scanHost's comment about timer-vs-fetch ordering). Across 254
+  // different origins we can blast all of them at once and rely on the
+  // SCAN_TIMEOUT_MS abort timer per probe to bound the total wait.
   const hits = [];
-  await runWithConcurrency(ips, 24, (ip) => scanHost(ip, SCAN_TIMEOUT_MS),
-    (ip, result) => {
-      if (result) hits.push(result);
-      if (opts && opts.onProgress) opts.onProgress({ ip, ok: !!result });
-    },
-  );
+  await Promise.all(ips.map(async (ip) => {
+    const result = await scanHost(ip, SCAN_TIMEOUT_MS);
+    if (result) hits.push(result);
+    if (opts && opts.onProgress) opts.onProgress({ ip, ok: !!result });
+  }));
 
   try {
     const s = JSON.parse(localStorage.getItem('conduit') || '{}');

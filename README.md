@@ -2,11 +2,9 @@
 
 Open-hardware RP2350 / Pico2 board with Power-over-Ethernet, an RMII PHY, and a browser-based development workflow.
 The repo holds the KiCad project (`hardware/`), the firmware with A/B-partitioned OTA + a tiny HTTP API (`firmware/`), the `conduit` Python CLI for build / flash / OTA / commanding (`tools/conduit/`), and a static web IDE that compiles user C in the browser via WASM clang+lld and pushes it over the network (`web/`).
-Heavy build artefacts (the WASM toolchain bundle, the SDK web bundle) are produced by GitHub Actions and not committed — see `.github/workflows/`.
 
 ## First-time setup
 
-1. **Tooling.** Install the Pico SDK 2.2.0, arm-none-eabi-gcc, and picotool under `~/.pico-sdk/` (the CLI defaults to those paths — see `tools/conduit/conduit_cli/dev.py` for the exact layout). Then `git clone --recurse-submodules` and `cd tools/conduit && python3 -m venv .venv && .venv/bin/pip install -e .`.
-2. **First flash (USB).** Connect the board over USB while holding the `BOOTSEL` button to enter mass-storage mode, then `conduit provision` — this builds the firmware, seeds the bootloader and partition A with the safe (non-TBYB) image, and confirms `/api/status` returns `partition: A`.
-3. **Power and network.** Connect the board to a PoE-capable switch (or keep it on USB power); it tries DHCP first and falls back to `192.168.178.200/24`. `conduit scan -s <your-/24>` finds it; `conduit status -d <ip>` should report `link: Up`.
-4. **Iterate.** From here on, `conduit build && conduit ota-upload -d <ip> -f firmware/build/app/conduit_app.uf2` ships a new image over the network — no more BOOTSEL required. The web IDE adds live telemetry charts and remote GPIO/ADC commanding on top.
+1. **First flash (USB).** Hold `BOOTSEL` while plugging the board into USB — it enumerates as the `RPI-RP2350` mass-storage drive. Download the [latest commissioning image](https://github.com/rm-1n/conduit/releases/latest) — currently <!-- factory-uf2-version:start -->`factory-9.99`<!-- factory-uf2-version:end --> — and copy the `.uf2` file onto the drive. The drive disappears, the board reboots running the new firmware. The image is built by `.github/workflows/commissioning-image.yml` and contains the bootloader plus a non-TBYB app concatenated into one UF2.
+2. **Power and network.** Connect the board to a PoE-capable switch (or keep it on USB power); it tries DHCP first and falls back to `192.168.178.200/24`.
+3. **Iterate.** Open the web IDE in your browser, point it at the device's IP, and from there you write user C, build + OTA over the network, watch live telemetry charts, and send commands to the running firmware — all without leaving the browser.

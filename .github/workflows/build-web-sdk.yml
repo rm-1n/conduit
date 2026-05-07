@@ -3,15 +3,36 @@
 # headers tree. Output is packaged as a tarball and attached to a GitHub
 # Release so web/compiler.js can fetch it on first Build click.
 #
-# Runs on-demand only (workflow_dispatch). The resulting artifact is stable
-# across most conduit code changes — only needs regeneration when the SDK
-# version or the list of linked libraries changes.
+# When this workflow actually rebuilds:
+#   - Version is the firmware's own MAJOR.MINOR stamped via
+#     pico_set_binary_version in firmware/app/CMakeLists.txt — same
+#     source of truth that the commissioning-image workflow uses.
+#     The web-sdk bundle's link surface (the firmware's .a + .c.o +
+#     public headers) is downstream of the firmware sources, so
+#     coupling the SDK release version to the firmware version keeps
+#     them in lockstep without introducing a second knob.
+#   - On push (any branch), a "Resolve version" step reads MAJOR.MINOR
+#     and asks GitHub whether a Release tagged `web-sdk-<version>`
+#     already exists. If it does, every subsequent step is skipped
+#     and the run finishes in seconds. Bumping MAJOR or MINOR is the
+#     trigger.
+#   - workflow_dispatch lets you force-rebuild an already-released
+#     version (useful for SDK / picotool version bumps that don't
+#     touch firmware code).
 
 name: build-web-sdk
 
 on:
+  push:
+    paths:
+      - 'firmware/**'
+      - '.github/workflows/build-web-sdk.yml'
   workflow_dispatch:
     inputs:
+      force:
+        description: 'Force rebuild even if a Release with the current MAJOR.MINOR version already exists.'
+        type: boolean
+        default: false
       pico_sdk_version:
         description: 'Pico SDK tag to pin (e.g. 2.2.0)'
         required: false
@@ -21,6 +42,11 @@ on:
         required: false
         default: '2.2.0-a4'
 
+# A newer push on the same branch cancels its older in-flight run.
+concurrency:
+  group: build-web-sdk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,31 +54,102 @@ jobs:
     permissions:
       contents: write # needed to create a release
     env:
-      PICO_SDK_PATH: ${{ github.workspace }}/pico-sdk
-      PICOTOOL_PATH: ${{ github.workspace }}/picotool-install
+      PICO_SDK_PATH:    ${{ github.workspace }}/pico-sdk
+      PICOTOOL_PATH:    ${{ github.workspace }}/picotool-install
+      # Inputs only exist on workflow_dispatch — the `||` fallback
+      # supplies the same defaults as the input descriptors above on
+      # push events, where github.event.inputs.* is null.
+      PICO_SDK_VERSION: ${{ github.event.inputs.pico_sdk_version || '2.2.0' }}
+      PICOTOOL_VERSION: ${{ github.event.inputs.picotool_version || '2.2.0-a4' }}
     steps:
       - name: Checkout this repo
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      # ---- Version + skip-if-already-released ----------------------------
+      # Reads MAJOR / MINOR from the pico_set_binary_version call in
+      # firmware/app/CMakeLists.txt — same source of truth as the
+      # commissioning-image workflow. Asks GitHub whether
+      # `web-sdk-<version>` already exists; if so, every subsequent
+      # step is skipped and the run finishes in seconds.
+      # workflow_dispatch with inputs.force=true overrides the skip.
+      - name: Resolve version + check existing release
+        id: ver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MAJOR=$(grep -oP 'pico_set_binary_version\([^)]*MAJOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
+          MINOR=$(grep -oP 'pico_set_binary_version\([^)]*MINOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
+          if [ -z "$MAJOR" ] || [ -z "$MINOR" ]; then
+            echo "::error::failed to parse MAJOR/MINOR from firmware/app/CMakeLists.txt"
+            exit 1
+          fi
+          VERSION="${MAJOR}.${MINOR}"
+          TAG="web-sdk-${VERSION}"
+          echo "Detected firmware version: $VERSION (tag: $TAG)"
+
+          SHOULD_BUILD=true
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if [ "${{ github.event.inputs.force }}" = "true" ]; then
+              echo "Release $TAG exists, but force=true — rebuilding anyway."
+            else
+              echo "Release $TAG already exists — skipping build."
+              echo "Bump MAJOR or MINOR in firmware/app/CMakeLists.txt to trigger a new build."
+              SHOULD_BUILD=false
+            fi
+          fi
+
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "should_build=$SHOULD_BUILD"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Install arm-none-eabi toolchain
+        if: steps.ver.outputs.should_build == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build \
-            gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi \
+            gcc-arm-none-eabi binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
             build-essential pkg-config libusb-1.0-0-dev
 
+      # ---- Cached: Pico SDK clone ----------------------------------------
+      # The clone (with submodules) is ~120 MB. Cache key is the SDK
+      # tag, so a version bump invalidates and re-clones cleanly.
+      - name: Cache Pico SDK
+        if: steps.ver.outputs.should_build == 'true'
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PICO_SDK_PATH }}
+          key: pico-sdk-${{ env.PICO_SDK_VERSION }}-${{ runner.os }}
+
       - name: Clone Pico SDK
+        if: steps.ver.outputs.should_build == 'true' && steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch "${{ github.event.inputs.pico_sdk_version }}" \
+          git clone --depth 1 --branch "$PICO_SDK_VERSION" \
             https://github.com/raspberrypi/pico-sdk.git "$PICO_SDK_PATH"
           git -C "$PICO_SDK_PATH" submodule update --init --recursive
 
+      # ---- Cached: picotool installed prefix -----------------------------
+      # Cache key includes the SDK version too because picotool's CMake
+      # build pulls headers from the SDK; if the SDK version changes
+      # we want a fresh picotool build even if its own version didn't.
+      - name: Cache picotool
+        if: steps.ver.outputs.should_build == 'true'
+        id: cache-picotool
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PICOTOOL_PATH }}
+          key: picotool-${{ env.PICOTOOL_VERSION }}-sdk-${{ env.PICO_SDK_VERSION }}-${{ runner.os }}
+
       - name: Build and install picotool
+        if: steps.ver.outputs.should_build == 'true' && steps.cache-picotool.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch "${{ github.event.inputs.picotool_version }}" \
+          git clone --depth 1 --branch "$PICOTOOL_VERSION" \
             https://github.com/raspberrypi/picotool.git picotool-src
           cmake -S picotool-src -B picotool-build -G Ninja \
             -DPICO_SDK_PATH="$PICO_SDK_PATH" \
@@ -61,18 +158,21 @@ jobs:
           cmake --install picotool-build
 
       - name: Configure firmware build
+        if: steps.ver.outputs.should_build == 'true'
         run: |
           cmake -S firmware -B firmware/build -G Ninja \
             -DPICO_BOARD=pico2 \
             -Dpicotool_DIR="$PICOTOOL_PATH"/picotool
 
       - name: Build firmware
+        if: steps.ver.outputs.should_build == 'true'
         # This builds the full conduit app, which forces the Pico SDK to
         # build all of its static libraries. We don't ship the conduit app
         # binary — we extract the SDK .a + .o files below.
         run: cmake --build firmware/build -j"$(nproc)"
 
       - name: Collect SDK artifacts
+        if: steps.ver.outputs.should_build == 'true'
         # Stage the pieces web/compiler.js needs at link time into a flat
         # directory, then tarball it. Paths here follow the Pico SDK 2.2.0
         # layout and must be revisited if the SDK layout changes.
@@ -106,12 +206,14 @@ jobs:
           ls "$OUT"/lib | head
 
       - name: Record SDK version manifest
+        if: steps.ver.outputs.should_build == 'true'
         run: |
           OUT="$GITHUB_WORKSPACE/web-sdk-stage"
           cat > "$OUT"/manifest.json <<EOF
           {
-            "pico_sdk_version": "${{ github.event.inputs.pico_sdk_version }}",
-            "picotool_version": "${{ github.event.inputs.picotool_version }}",
+            "version": "${{ steps.ver.outputs.version }}",
+            "pico_sdk_version": "$PICO_SDK_VERSION",
+            "picotool_version": "$PICOTOOL_VERSION",
             "pico_board": "pico2",
             "run": "${{ github.run_number }}",
             "git_sha": "${{ github.sha }}"
@@ -120,24 +222,30 @@ jobs:
           cat "$OUT"/manifest.json
 
       - name: Package SDK bundle
+        if: steps.ver.outputs.should_build == 'true'
         run: |
           tar -czf web-sdk.tar.gz -C web-sdk-stage .
           ls -lh web-sdk.tar.gz
 
       - name: Upload as Release asset
+        if: steps.ver.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: web-sdk-${{ github.run_number }}
-          name: Pico SDK bundle for web IDE — run ${{ github.run_number }}
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: Pico SDK bundle for web IDE ${{ steps.ver.outputs.version }}
           body: |
             Pico SDK static libs, startup objects, linker script, and public
             headers, prebuilt with arm-none-eabi-gcc. Consumed by the browser
             IDE's Clang+LLD WASM at link time.
 
-            - Pico SDK: `${{ github.event.inputs.pico_sdk_version }}`
-            - picotool: `${{ github.event.inputs.picotool_version }}`
+            - Firmware version: `${{ steps.ver.outputs.version }}`
+              (from `pico_set_binary_version` in
+              firmware/app/CMakeLists.txt — same source the
+              commissioning-image workflow tracks)
+            - Pico SDK: `${{ env.PICO_SDK_VERSION }}`
+            - picotool: `${{ env.PICOTOOL_VERSION }}`
             - PICO_BOARD: `pico2`
-            - CI run: #${{ github.run_number }}
+            - Commit: `${{ github.sha }}` (run #${{ github.run_number }})
           files: |
             web-sdk.tar.gz
           fail_on_unmatched_files: true

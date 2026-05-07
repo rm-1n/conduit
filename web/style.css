@@ -54,7 +54,10 @@
 html, body { height: 100%; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  /* Roboto Mono everywhere — the design system has a single typeface
+     across nav, body, code, data, labels, and buttons. Form controls
+     and pre/code blocks below `font-family: inherit` from this root. */
+  font-family: var(--font-mono);
   background: var(--bg);
   color: var(--text);
   line-height: 1.4;
@@ -161,6 +164,111 @@ input::placeholder { color: var(--text3); }
    typical "192.168.178.200 — v1.2.0-b — A" without truncation. */
 #ide-device-select { min-width: 18ch; max-width: 40ch; }
 
+/* ---- Device picker ----
+   Custom dropdown replacing the native <select>. Trigger button is
+   styled to match adjacent text inputs (same border, padding, font);
+   menu is an absolutely-positioned <ul> below it. A hidden <select>
+   sits in the same .device-picker container as the source of truth
+   for .value / 'change' events — see the trigger wiring in ide.js. */
+.device-picker {
+  position: relative;
+  display: inline-block;
+  font-family: var(--font-mono);
+}
+.device-picker__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.32rem 0.55rem;
+  min-width: 22ch;
+  max-width: 40ch;
+  font-size: 0.83rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.device-picker__trigger:hover  { border-color: var(--border-strong, var(--border)); }
+.device-picker__trigger:focus,
+.device-picker__trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+.device-picker__led {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text3);
+  transition: background 0.12s, box-shadow 0.12s;
+}
+.device-picker__led[data-state="ok"]  {
+  background: var(--status-live);
+  box-shadow: 0 0 6px var(--status-live);
+  animation: pulse-live 2.4s ease-in-out infinite;
+}
+.device-picker__led[data-state="err"] {
+  background: var(--status-fault);
+  box-shadow: 0 0 6px var(--status-fault);
+}
+.device-picker__label {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+.device-picker__caret {
+  flex: 0 0 auto;
+  font-size: 18px !important;
+  color: var(--text2);
+  transition: transform 0.12s;
+}
+.device-picker__trigger[aria-expanded="true"] .device-picker__caret {
+  transform: rotate(180deg);
+}
+
+.device-picker__menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 60;
+}
+.device-picker__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 0.83rem;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.device-picker__menu-item:hover,
+.device-picker__menu-item[aria-selected="true"] {
+  background: var(--bg-soft);
+}
+.device-picker__menu-empty {
+  padding: 8px 10px;
+  font-size: 0.83rem;
+  color: var(--text3);
+  font-style: italic;
+}
+
 /* ---- Buttons ---- */
 button {
   background: var(--card);
@@ -256,6 +364,16 @@ button[aria-pressed="true"], button.is-active {
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 6px var(--telemetry-w, 35%);
+  /* Single explicit row pinned to the container's height. Without
+     this, the implicit row defaults to grid-auto-rows: auto and
+     resolves to its tallest child's intrinsic size — when the
+     panes' content has a large min-height stack (pane-header +
+     plots-min + cmd-strip + telemetry-console-min, etc.), the row
+     would grow past the flex-1 allocation and push the panes'
+     bottoms under the viewport. With overflow: hidden on the body,
+     those clipped bottoms are why the runtime / telemetry log
+     scroll handles + last lines disappeared on shorter screens. */
+  grid-template-rows: minmax(0, 1fr);
   grid-gap: 0;
   background: var(--border);
   min-height: 0;
@@ -322,6 +440,57 @@ button[aria-pressed="true"], button.is-active {
      more room for code they can hide the pane outright via the
      toolbar toggle. */
   min-width: 420px;
+  /* Inline-size container so #ide-telemetry-stats can drop low-priority
+     segments based on the pane's actual width (not the viewport). */
+  container-type: inline-size;
+  container-name: telpane;
+}
+
+/* Telemetry pane header: don't wrap. The stats element fills the
+   available middle space (flex-grow: 1) but right-aligns its text
+   so the action buttons (#ide-add-plot / download) sit immediately
+   next to the stats, not pinned to the far right with a gap. The
+   default `.pane-actions { margin-left: auto }` in the global rule
+   would re-introduce that gap, so we zero it out here. */
+.telemetry-pane > .pane-header { flex-wrap: nowrap; min-width: 0; }
+.telemetry-pane > .pane-header > .pane-actions { margin-left: 0; }
+.telemetry-pane > .pane-header #ide-telemetry-stats {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  /* The pane-header inherits `text-transform: uppercase` and
+     `letter-spacing: 0.20em` from conduit-chrome.css for the title
+     row treatment. We don't want either inside the stats readout —
+     uppercase turns "12s" into "12S" and the wide letter-spacing
+     pulls units away from their numbers. */
+  text-transform: none;
+  letter-spacing: 0;
+}
+.telemetry-pane > .pane-header #ide-telemetry-stats > span { white-space: nowrap; }
+.telemetry-pane > .pane-header #ide-telemetry-stats .stat-sep {
+  margin: 0 8px;
+  color: var(--text3);
+}
+
+/* Drop priority as the telemetry pane narrows: points first, then
+   channels, then bytes. Time stays. Each segment is hidden together
+   with the .stat-sep that immediately follows it, so dropping the
+   leftmost segment removes the dangling " · " too. */
+@container telpane (max-width: 540px) {
+  #ide-telemetry-stats .stat-points,
+  #ide-telemetry-stats .stat-points + .stat-sep { display: none; }
+}
+@container telpane (max-width: 460px) {
+  #ide-telemetry-stats .stat-channels,
+  #ide-telemetry-stats .stat-channels + .stat-sep { display: none; }
+}
+@container telpane (max-width: 380px) {
+  #ide-telemetry-stats .stat-bytes,
+  #ide-telemetry-stats .stat-bytes + .stat-sep { display: none; }
 }
 
 /* ---- Resizers (drag handles between panes) ---- */
@@ -382,7 +551,7 @@ body.resizing-h { cursor: row-resize; }
 .pane-hint-info {
   color: var(--text3);
   font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 .pane-actions {
   margin-left: auto;
@@ -423,7 +592,7 @@ body.resizing-h { cursor: row-resize; }
   flex: 1 1 auto;
   min-height: 0;
   background: var(--bg);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   color: var(--text2);
   overflow: hidden;
 }
@@ -435,7 +604,7 @@ body.resizing-h { cursor: row-resize; }
   background: var(--bg);
   color: var(--text);
   padding: 0.55rem 0.75rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.77rem;
   line-height: 1.45;
   overflow: auto;
@@ -457,7 +626,7 @@ code {
   background: var(--card);
   padding: 0.05rem 0.3rem;
   border-radius: 3px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 
@@ -520,6 +689,66 @@ code {
   padding: 0.3rem 0.5rem;
   background: var(--card);
   border-bottom: 1px solid var(--border);
+  /* Anchor for the absolutely-positioned .plot-channel-menu popover. */
+  position: relative;
+}
+
+/* Channel picker popover — opened from the .plot-picker-btn icon in
+   the plot header. Lets the user toggle individual series visibility
+   (or all-on / all-off) without having to fish through the wrapped
+   uPlot legend when the channel set is large. Hidden by default;
+   chart.js flips the [hidden] attribute. */
+.plot-channel-menu {
+  position: absolute;
+  right: 0.5rem;
+  top: calc(100% + 4px);
+  z-index: 50;
+  min-width: 180px;
+  max-width: 280px;
+  padding: 4px 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  font-size: 0.78rem;
+  color: var(--text);
+}
+.plot-channel-menu__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.plot-channel-menu__row:hover { background: var(--bg-soft); }
+.plot-channel-menu__all { font-weight: 500; }
+.plot-channel-menu__sep {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 2px 0;
+}
+.plot-channel-menu__list {
+  /* Sized to show exactly 3 rows; the 4th onwards scrolls. Each row
+     is `4px + 0.78rem * 1.25 + 4px` ≈ 24-26 px depending on font
+     loading, so 78 px gives a comfortable 3-row window. Bump if you
+     change row padding/line-height. */
+  max-height: 78px;
+  overflow-y: auto;
+}
+.plot-channel-menu__marker {
+  width: 10px;
+  height: 2px;
+  flex: 0 0 auto;
+  border-radius: 1px;
+}
+.plot-channel-menu__label {
+  font-family: var(--font-mono);
+}
+.plot-channel-menu__empty {
+  padding: 8px 10px;
+  color: var(--text3);
+  font-style: italic;
 }
 /* Drag handle — only this part of the plot is grabbable; clicking
    buttons / typing in the title input still works as expected. */
@@ -576,7 +805,7 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
 
 /* uPlot dark-theme overrides — its default CSS is light-themed. */
 .uplot {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: var(--font-mono);
   color: var(--text);
 }
 .u-title { color: var(--text); }
@@ -590,7 +819,7 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   border-top: 1px solid var(--border-soft);
   color: var(--text);
   font-size: 0.7rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   padding: 1px 8px;
   text-align: left;
 }
@@ -648,7 +877,7 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 2px 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 .cmd-strip .cmd-text {
@@ -658,7 +887,7 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 2px 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 .cmd-strip .cmd-text-wide { width: 11em; }
 
@@ -725,7 +954,7 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.74rem;
   padding: 0.4rem 0.6rem;
   background: var(--bg-soft);

@@ -627,7 +627,9 @@ void conduit_loop(void) {
     });
     token.addEventListener('change', persist);
 
-    // Populate the dropdown from the last scan's results.
+    // Populate the dropdown from the last scan's results. Also
+    // rebuilds the custom picker's <ul> menu so the visible UI tracks
+    // the hidden <select>.
     function refreshDeviceList() {
       const prevValue = deviceSelect.value || (() => {
         try { return JSON.parse(localStorage.getItem('conduit') || '{}').ide_ip || ''; }
@@ -655,13 +657,132 @@ void conduit_loop(void) {
       const match = Array.from(deviceSelect.options).find((o) => o.value === prevValue);
       if (match) deviceSelect.value = prevValue;
       else if (known.length > 0) deviceSelect.value = known[0].ip;
+      rebuildDeviceMenu(known);
+      updateDevicePickerLabel();
     }
+
+    // ---- Custom device picker (visible UI over the hidden select) ----
+    const deviceTrigger = document.getElementById('ide-device-trigger');
+    const deviceMenu    = document.getElementById('ide-device-menu');
+    const deviceLabel   = document.getElementById('ide-device-label');
+    const deviceLed     = document.getElementById('ide-device-led');
+
+    function rebuildDeviceMenu(known) {
+      if (!deviceMenu) return;
+      deviceMenu.innerHTML = '';
+      if (!known || known.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'device-picker__menu-empty';
+        empty.textContent = 'No devices yet — Add an IP or Scan the subnet.';
+        deviceMenu.appendChild(empty);
+        return;
+      }
+      for (const d of known) {
+        const li = document.createElement('li');
+        li.className = 'device-picker__menu-item';
+        li.setAttribute('role', 'option');
+        li.dataset.value = d.ip;
+        const parts = [d.ip];
+        if (d.version)   parts.push(`v${d.version}`);
+        if (d.partition) parts.push(d.partition);
+        li.textContent = parts.join(' — ');
+        if (d.ip === deviceSelect.value) li.setAttribute('aria-selected', 'true');
+        deviceMenu.appendChild(li);
+      }
+    }
+    function updateDevicePickerLabel() {
+      if (!deviceLabel) return;
+      const opt = deviceSelect.options[deviceSelect.selectedIndex];
+      deviceLabel.textContent = (opt && opt.textContent) || '(no device — Add or Scan)';
+      // Highlight the active row in the menu (if it's open).
+      if (deviceMenu) {
+        for (const row of deviceMenu.querySelectorAll('.device-picker__menu-item')) {
+          if (row.dataset.value === deviceSelect.value) row.setAttribute('aria-selected', 'true');
+          else                                          row.removeAttribute('aria-selected');
+        }
+      }
+    }
+    function openDeviceMenu() {
+      if (!deviceMenu || !deviceTrigger) return;
+      deviceMenu.hidden = false;
+      deviceTrigger.setAttribute('aria-expanded', 'true');
+      // Defer outside-click attach so the click that opened the menu
+      // doesn't immediately close it.
+      setTimeout(() => {
+        document.addEventListener('click',   onDeviceMenuOutside);
+        document.addEventListener('keydown', onDeviceMenuKey);
+      }, 0);
+    }
+    function closeDeviceMenu() {
+      if (!deviceMenu || !deviceTrigger) return;
+      deviceMenu.hidden = true;
+      deviceTrigger.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click',   onDeviceMenuOutside);
+      document.removeEventListener('keydown', onDeviceMenuKey);
+    }
+    function onDeviceMenuOutside(ev) {
+      if (deviceMenu.contains(ev.target) || deviceTrigger.contains(ev.target)) return;
+      closeDeviceMenu();
+    }
+    function onDeviceMenuKey(ev) {
+      if (ev.key === 'Escape') { closeDeviceMenu(); deviceTrigger.focus(); }
+    }
+    if (deviceTrigger) {
+      deviceTrigger.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (deviceMenu.hidden) openDeviceMenu();
+        else                   closeDeviceMenu();
+      });
+    }
+    if (deviceMenu) {
+      // Event-delegated row click — picks an item, syncs the hidden
+      // <select>, and dispatches a 'change' event so the rest of
+      // ide.js (persist, console reset) reacts the same way it would
+      // for a native select.
+      deviceMenu.addEventListener('click', (ev) => {
+        const row = ev.target.closest('.device-picker__menu-item');
+        if (!row || !row.dataset.value) return;
+        deviceSelect.value = row.dataset.value;
+        deviceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        updateDevicePickerLabel();
+        closeDeviceMenu();
+      });
+    }
+    // Keep the picker label in sync whenever the hidden select changes
+    // (e.g. an Add probe sets `deviceSelect.value = ip` directly).
+    deviceSelect.addEventListener('change', updateDevicePickerLabel);
+
+    // Mirror the telemetry stream's status onto the picker's LED. The
+    // telemetry pane already maintains a `.status-dot[data-state]` span;
+    // rather than re-deriving the connection state here, we just copy
+    // its data-state attribute whenever it changes.
+    const telState = document.getElementById('ide-telemetry-state');
+    if (telState && deviceLed) {
+      const syncLed = () => deviceLed.setAttribute('data-state',
+        telState.getAttribute('data-state') || 'off');
+      syncLed();
+      new MutationObserver(syncLed).observe(telState,
+        { attributes: true, attributeFilter: ['data-state'] });
+    }
+
     refreshDeviceList();
     window.addEventListener('conduit:devices-updated', refreshDeviceList);
 
-    // Rescan button: scan the /24 of the currently-known or quick IP.
+    // Rescan button. Subnet resolution priority:
+    //   1. `conduit.scanRange` from Settings → Account → IP scan range
+    //      (user explicitly configured this)
+    //   2. The first three octets of whatever IP is in the Add field
+    //   3. The first three octets of the most recently known device
+    // No popup fallback — if all three are empty, the connection
+    // status line tells the user what to fill in instead. The hidden
+    // #subnet input is still updated so any other code reading it
+    // (legacy paths, dev-tools probes) sees the chosen subnet.
     rescanBtn.addEventListener('click', async () => {
-      let subnet = document.getElementById('subnet').value.trim();
+      let subnet = '';
+      try {
+        const s = JSON.parse(localStorage.getItem('conduit') || '{}');
+        if (s.scanRange) subnet = String(s.scanRange).trim().replace(/\.$/, '');
+      } catch (_) {}
       if (!subnet) {
         const quick = document.getElementById('ide-quick-ip').value.trim();
         const known = window.Conduit.getKnownDevices();
@@ -669,12 +790,13 @@ void conduit_loop(void) {
           subnet = quick.split('.').slice(0, 3).join('.');
         } else if (known.length && known[0].ip) {
           subnet = known[0].ip.split('.').slice(0, 3).join('.');
-        } else {
-          subnet = window.prompt('Subnet to scan (e.g. 192.168.178):', '192.168.1') || '';
-          if (!subnet) return;
         }
-        document.getElementById('subnet').value = subnet;
       }
+      if (!subnet) {
+        connStatus('Set IP scan range in Settings, or type an IP into Add first', 'err');
+        return;
+      }
+      document.getElementById('subnet').value = subnet;
       rescanBtn.disabled = true;
       connStatus(`Scanning ${subnet}.0/24…`);
       try {
@@ -717,20 +839,16 @@ void conduit_loop(void) {
     document.getElementById('ide-btn-build-upload').addEventListener('click', onBuildUpload);
 
     // Reconnect — re-probes the bound IP and force-restarts the
-    // telemetry / runtime-console streams. We do this:
-    //   • once on UI start, to recover from a stale dropdown selection
-    //     pointing at a device that's been power-cycled / reflashed
-    //     since last visit, which otherwise leaves the panes silent
-    //     even though the device is on the LAN.
-    //   • whenever the user clicks the topbar refresh icon, as a
-    //     manual "kick everything" that doesn't require a full reload.
+    // telemetry / runtime-console streams. Auto-fires once on UI start
+    // to recover from a stale dropdown selection pointing at a device
+    // that's been power-cycled / reflashed since last visit, which
+    // otherwise leaves the panes silent even though the device is on
+    // the LAN.
     async function reconnect() {
-      const refreshBtn = document.getElementById('ide-refresh');
       const ip = (deviceSelect.value || '').trim()
               || (document.getElementById('ide-quick-ip').value || '').trim();
       if (!ip) { connStatus('no device — Add or Scan first', 'err'); return; }
       try {
-        if (refreshBtn) refreshBtn.disabled = true;
         connStatus(`Reconnecting ${ip}…`);
         const result = await window.Conduit.probeAndRemember(ip);
         if (!result) { connStatus(`no response from ${ip}`, 'err'); return; }
@@ -747,12 +865,9 @@ void conduit_loop(void) {
       } catch (e) {
         connStatus(`reconnect error: ${e.message || e}`, 'err');
       } finally {
-        if (refreshBtn) refreshBtn.disabled = false;
         refreshDeviceList();
       }
     }
-    const refreshBtn = document.getElementById('ide-refresh');
-    if (refreshBtn) refreshBtn.addEventListener('click', reconnect);
     // Auto-kick reconnect once on boot. Deferred slightly so the rest
     // of init (telemetry's streamLoop, console's poll loop) has wired
     // up — pause/resume needs the loops to exist to do their thing.
@@ -857,23 +972,27 @@ void conduit_loop(void) {
   async function onBuild() {
     clearLog();
     resetBuildBar();
-    setProgressBar({ pct: 0, label: 'Building…' });
+    setProgressBar({ pct: 0, label: 'Building…', title: null });
     try {
       const uf2 = await buildUf2({ version: nextStampedVersion() });
-      const blob = new Blob([uf2], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'conduit_app.uf2';
-      a.click();
-      URL.revokeObjectURL(url);
+      // Build is a compile + link check now — used to validate the
+      // user's main.c without committing to an OTA. The factory
+      // commissioning image (bootloader + non-TBYB app) is produced
+      // by .github/workflows/commissioning-image.yml; the in-IDE
+      // path is OTA-only via Build & Upload.
       logLine(`built ${uf2.byteLength} bytes, ${uf2.byteLength / 512} UF2 blocks`);
       recordBuildDuration();
       setProgressBar({ pct: 100, label: `Built ${uf2.byteLength} B`, kind: 'ok' });
     } catch (e) {
       if (e.stderr) logLine(e.stderr.trim());
       logLine(`error: ${e.message}`);
-      setProgressBar({ label: 'Build failed', kind: 'err' });
+      const summary = extractCompileError(e.stderr) || e.message;
+      const short = compactError(summary);
+      setProgressBar({
+        label: short ? `Build failed — ${short}` : 'Build failed',
+        title: summary,
+        kind: 'err',
+      });
     }
   }
 
@@ -891,7 +1010,7 @@ void conduit_loop(void) {
 
     clearLog();
     resetBuildBar();
-    setProgressBar({ pct: 0, label: 'Building…' });
+    setProgressBar({ pct: 0, label: 'Building…', title: null });
 
     const stampVer = nextStampedVersion();
     try {
@@ -907,7 +1026,13 @@ void conduit_loop(void) {
     } catch (e) {
       if (e.stderr) logLine(e.stderr.trim());
       logLine(`error: ${e.message}`);
-      setProgressBar({ label: 'Build failed', kind: 'err' });
+      const summary = extractCompileError(e.stderr) || e.message;
+      const short = compactError(summary);
+      setProgressBar({
+        label: short ? `Build failed — ${short}` : 'Build failed',
+        title: summary,
+        kind: 'err',
+      });
       return;
     }
     recordBuildDuration();
@@ -1024,11 +1149,15 @@ void conduit_loop(void) {
   // Build / upload progress bar — drives the #ide-upload-status footer
   // in the build-log pane. Used for the entire Build → Upload → Commit
   // flow so the user sees one continuous progress indicator instead of
-  // a tiny status word in the topbar. Three knobs:
+  // a tiny status word in the topbar. Knobs:
   //   pct    — 0..100, the bar fill width (omit to keep current width)
   //   label  — short text under the bar (omit to keep)
+  //   title  — hover-tooltip with the full text (the label may
+  //            ellipsis-truncate at narrow widths; pass the full
+  //            message here so the user can read it on hover). Pass
+  //            null to clear, omit to keep.
   //   kind   — 'ok' | 'warn' | 'err' | undefined, sets the bar/text colour
-  function setProgressBar({ pct, label, kind } = {}) {
+  function setProgressBar({ pct, label, title, kind } = {}) {
     const status = document.getElementById('ide-upload-status');
     const bar = document.getElementById('ide-upload-bar');
     const msg = document.getElementById('ide-upload-msg');
@@ -1036,12 +1165,55 @@ void conduit_loop(void) {
     status.classList.remove('hidden');
     if (pct != null)   bar.style.width = `${pct}%`;
     if (label != null) msg.textContent = label;
+    if (title !== undefined) {
+      if (title) msg.setAttribute('title', title);
+      else       msg.removeAttribute('title');
+    }
     const color = kind === 'err'  ? 'var(--red)'
                 : kind === 'warn' ? 'var(--orange)'
                 : kind === 'ok'   ? 'var(--green)'
                 : '';
     bar.style.background = color;
     msg.style.color      = color;
+  }
+
+  // Pull a meaningful one-liner out of clang stderr so we can surface
+  // it next to "Build failed" on the progress bar. Prefers static-
+  // assertion messages — those carry our hand-written guidance like
+  // "exceeded CONDUIT_TRANSMIT_MAX" — and falls back to the first
+  // generic `error:` / `fatal error:` line. Returns null if stderr
+  // has nothing useful (in which case the caller falls back to
+  // e.message).
+  function extractCompileError(stderr) {
+    if (!stderr) return null;
+    // Static-assertion: clang formats as
+    //   error: static_assert failed: "MESSAGE"
+    // or
+    //   error: static assertion failed: "MESSAGE"
+    // Inner quotes inside MESSAGE may be backslash-escaped — handle
+    // both bare and \"escaped\" forms.
+    const sa = stderr.match(
+      /static[_\s]assert(?:ion)?\s*failed[:\s]*"((?:\\.|[^"\\])*)"/i);
+    if (sa) return sa[1].replace(/\\(.)/g, '$1').trim();
+    const fatal = stderr.match(/^[^\n]*?fatal error:\s*(.+)$/im);
+    if (fatal) return fatal[1].trim();
+    const err = stderr.match(/^[^\n]*?error:\s*(.+)$/im);
+    if (err) return err[1].trim();
+    return null;
+  }
+
+  // Squash a long error message down to its first sentence so it fits
+  // alongside "Build failed —" on the one-line progress bar. Stops at
+  // the first sentence-ending period (followed by whitespace) or em-
+  // dash separator. The full text is still passed via the tooltip.
+  function compactError(s) {
+    if (!s) return s;
+    let cut = s.length;
+    const dot = s.search(/\.(?=\s)/);
+    if (dot >= 0) cut = Math.min(cut, dot + 1);
+    const dash = s.indexOf(' — ');
+    if (dash >= 0) cut = Math.min(cut, dash);
+    return s.slice(0, cut).trim();
   }
 
   // Map "where are we in the build phase" to bar pct via TIME, not via

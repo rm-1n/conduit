@@ -19,10 +19,11 @@
 name: tests
 
 on:
+  # Tests run on every commit, on every branch — there's no
+  # "validation only on PRs to main" gate. Cheap-to-run unit suite,
+  # cheaper to catch regressions early than to merge a broken branch.
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 # A new commit on a branch cancels its older in-flight run.

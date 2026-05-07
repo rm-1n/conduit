@@ -1,0 +1,265 @@
+# Builds the factory-commissioning UF2 — a concatenated bootloader +
+# non-TBYB app image that takes a fresh CONDUIT board to a working
+# state in one drag-and-drop onto the RPI-RP2350 BOOTSEL drive.
+#
+# Why this exists separately from the in-IDE Build button: the IDE
+# only validates that user code compiles + links and OTAs the result.
+# It can't produce the bootloader half of the commissioning image,
+# and we don't want every Build click to trigger a download. Fresh
+# hardware needs the bootloader-plus-app combined image once; this
+# workflow is the single source of truth for that file.
+#
+# When this workflow actually rebuilds:
+#   - Version source is the firmware's own MAJOR.MINOR stamped via
+#     pico_set_binary_version in firmware/app/CMakeLists.txt — the
+#     same value the RP2350 bootrom uses for A/B partition selection.
+#   - On push (any branch), a "Resolve version" step reads
+#     MAJOR.MINOR and asks GitHub whether a Release tagged
+#     `factory-<version>` already exists. If it does, every
+#     subsequent step is skipped and the run finishes in seconds.
+#     Bumping MAJOR or MINOR in CMakeLists.txt is the trigger; the
+#     first branch to push a new version publishes the Release,
+#     subsequent branches with the same version skip.
+#   - workflow_dispatch lets you force-rebuild an already-released
+#     version (useful if you need to re-cut for a CI reason without
+#     bumping the firmware version).
+#
+# Toolchain caching keeps even the build path cheap: the Pico SDK
+# clone and the picotool install prefix are cached on version-keyed
+# entries, so steady-state runs only re-download / re-build them
+# when the pinned SDK or picotool version actually changes.
+
+name: commissioning-image
+
+on:
+  push:
+    # No branch filter — runs on push to any branch. The version
+    # check (Resolve version step) makes this cheap on branches that
+    # haven't bumped MAJOR.MINOR: the run finishes in seconds without
+    # touching the toolchain. The first branch to push a new version
+    # publishes the Release; subsequent branches with the same
+    # version see the existing tag and skip.
+    paths:
+      - 'firmware/**'
+      - '.github/workflows/commissioning-image.yml'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force rebuild even if a release with the current MAJOR.MINOR version already exists.'
+        type: boolean
+        default: false
+      pico_sdk_version:
+        description: 'Pico SDK tag (e.g. 2.2.0)'
+        required: false
+        default: '2.2.0'
+      picotool_version:
+        description: 'picotool tag (e.g. 2.2.0-a4)'
+        required: false
+        default: '2.2.0-a4'
+
+# A newer push on the same branch cancels its older in-flight run.
+# Branches are isolated from each other via github.ref in the group
+# key, so a feature-branch run won't cancel a main-branch run.
+concurrency:
+  group: commissioning-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write   # needed to publish a Release
+    env:
+      PICO_SDK_PATH:    ${{ github.workspace }}/pico-sdk
+      PICOTOOL_PATH:    ${{ github.workspace }}/picotool-install
+      PICO_SDK_VERSION: ${{ github.event.inputs.pico_sdk_version || '2.2.0' }}
+      PICOTOOL_VERSION: ${{ github.event.inputs.picotool_version || '2.2.0-a4' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ---- Version + skip-if-already-released ----------------------------
+      # Reads MAJOR / MINOR straight out of the pico_set_binary_version
+      # call in firmware/app/CMakeLists.txt — the firmware's own
+      # version stamp is the source of truth, so the only way to
+      # trigger a new build is to bump that value. Then asks GitHub
+      # whether `factory-<version>` is already a Release; if so, set
+      # should_build=false and every subsequent step is skipped.
+      # workflow_dispatch with inputs.force=true overrides the skip.
+      - name: Resolve version + check existing release
+        id: ver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MAJOR=$(grep -oP 'pico_set_binary_version\([^)]*MAJOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
+          MINOR=$(grep -oP 'pico_set_binary_version\([^)]*MINOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
+          if [ -z "$MAJOR" ] || [ -z "$MINOR" ]; then
+            echo "::error::failed to parse MAJOR/MINOR from firmware/app/CMakeLists.txt"
+            exit 1
+          fi
+          VERSION="${MAJOR}.${MINOR}"
+          TAG="factory-${VERSION}"
+          FILENAME="conduit_factory_${VERSION}.uf2"
+          echo "Detected firmware version: $VERSION (tag: $TAG)"
+
+          SHOULD_BUILD=true
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if [ "${{ github.event.inputs.force }}" = "true" ]; then
+              echo "Release $TAG exists, but force=true — rebuilding anyway."
+            else
+              echo "Release $TAG already exists — skipping build."
+              echo "Bump MAJOR or MINOR in firmware/app/CMakeLists.txt to trigger a new build."
+              SHOULD_BUILD=false
+            fi
+          fi
+
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "filename=$FILENAME"
+            echo "should_build=$SHOULD_BUILD"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install arm-none-eabi toolchain
+        if: steps.ver.outputs.should_build == 'true'
+        # `libstdc++-arm-none-eabi-newlib` is required because the
+        # Pico SDK pulls `pico_cxx_options/new_delete.cpp` into every
+        # app + bootloader build — without the C++ standard headers
+        # for newlib, the build fails at "fatal error: cstdlib: No
+        # such file or directory". `gcc-arm-none-eabi` only carries
+        # the C side; --no-install-recommends drops the C++ stdlib
+        # by default, so we add it explicitly.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build \
+            gcc-arm-none-eabi binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
+            build-essential pkg-config libusb-1.0-0-dev
+
+      # ---- Cached: Pico SDK clone ----------------------------------------
+      - name: Cache Pico SDK
+        if: steps.ver.outputs.should_build == 'true'
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PICO_SDK_PATH }}
+          key: pico-sdk-${{ env.PICO_SDK_VERSION }}-${{ runner.os }}
+
+      - name: Clone Pico SDK
+        if: steps.ver.outputs.should_build == 'true' && steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$PICO_SDK_VERSION" \
+            https://github.com/raspberrypi/pico-sdk.git "$PICO_SDK_PATH"
+          git -C "$PICO_SDK_PATH" submodule update --init --recursive
+
+      # ---- Cached: picotool installed prefix -----------------------------
+      - name: Cache picotool
+        if: steps.ver.outputs.should_build == 'true'
+        id: cache-picotool
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PICOTOOL_PATH }}
+          key: picotool-${{ env.PICOTOOL_VERSION }}-sdk-${{ env.PICO_SDK_VERSION }}-${{ runner.os }}
+
+      - name: Build and install picotool
+        if: steps.ver.outputs.should_build == 'true' && steps.cache-picotool.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$PICOTOOL_VERSION" \
+            https://github.com/raspberrypi/picotool.git picotool-src
+          cmake -S picotool-src -B picotool-build -G Ninja \
+            -DPICO_SDK_PATH="$PICO_SDK_PATH" \
+            -DCMAKE_INSTALL_PREFIX="$PICOTOOL_PATH"
+          cmake --build picotool-build -j"$(nproc)"
+          cmake --install picotool-build
+
+      - name: Configure firmware
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          cmake -S firmware -B firmware/build -G Ninja \
+            -DPICO_BOARD=pico2 \
+            -Dpicotool_DIR="$PICOTOOL_PATH"/picotool
+
+      - name: Build firmware
+        if: steps.ver.outputs.should_build == 'true'
+        run: cmake --build firmware/build -j"$(nproc)"
+
+      - name: Combine bootloader + app into the factory UF2
+        if: steps.ver.outputs.should_build == 'true'
+        # UF2 is a concatenable container: each 512-byte block carries
+        # its own targetAddr + family ID, so the RP2350 bootrom
+        # processes blocks sequentially regardless of file boundaries.
+        # Bootloader blocks (`absolute` family) land at fixed flash
+        # addresses; app_initial blocks (`rp2350-arm-s` family) get
+        # routed into partition A. End state matches the picotool
+        # bootloader → -p 0 app_initial → reboot sequence.
+        run: |
+          cat firmware/build/bootloader/conduit_bootloader.uf2 \
+              firmware/build/app/conduit_app_initial.uf2 \
+              > "${{ steps.ver.outputs.filename }}"
+          ls -lh "${{ steps.ver.outputs.filename }}"
+
+      - name: Publish Release
+        if: steps.ver.outputs.should_build == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: Commissioning image ${{ steps.ver.outputs.version }}
+          body: |
+            Drag-and-drop factory image for fresh CONDUIT hardware.
+
+            **Provisioning** (one step):
+            1. Hold BOOTSEL while plugging the board into USB.
+            2. Drop `${{ steps.ver.outputs.filename }}` onto the
+               `RPI-RP2350` drive that appears.
+            3. The drive disappears and the board reboots running
+               the new firmware.
+
+            **Build info**
+            - Firmware version: `${{ steps.ver.outputs.version }}`
+              (from `pico_set_binary_version` in
+              firmware/app/CMakeLists.txt)
+            - Pico SDK: `${{ env.PICO_SDK_VERSION }}`
+            - picotool: `${{ env.PICOTOOL_VERSION }}`
+            - PICO_BOARD: `pico2`
+            - Commit: `${{ github.sha }}` (run #${{ github.run_number }})
+          files: |
+            ${{ steps.ver.outputs.filename }}
+          fail_on_unmatched_files: true
+
+      # Update the README's commissioning-image link to point at the
+      # tag we just published. The README has matching
+      # `<!-- factory-uf2-version:start --> ... :end -->` sentinels
+      # around the version label; sed swaps everything between them
+      # for the new tag. Skipped when nothing changed (no-op runs
+      # don't generate empty commits) and when the run is on a
+      # detached HEAD (workflow_dispatch from a tag, etc.) where
+      # `git push` wouldn't have a branch to push to.
+      - name: Update README commissioning-image link
+        if: steps.ver.outputs.should_build == 'true'
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          sed -i "s|<!-- factory-uf2-version:start -->[^<]*<!-- factory-uf2-version:end -->|<!-- factory-uf2-version:start -->\`${TAG}\`<!-- factory-uf2-version:end -->|" README.md
+          if git diff --quiet README.md; then
+            echo "README already up-to-date with $TAG — nothing to commit."
+            exit 0
+          fi
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          if [ "$BRANCH" = "$GITHUB_REF" ]; then
+            echo "Not on a branch ref ($GITHUB_REF) — skipping README push."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: point commissioning-image link to ${TAG} [skip ci]"
+          # Pull-rebase first in case main moved while we were
+          # building — then push. The README path isn't in this
+          # workflow's `paths:` filter, so this push won't
+          # re-trigger us.
+          git pull --rebase origin "$BRANCH" || true
+          git push origin "HEAD:$BRANCH"

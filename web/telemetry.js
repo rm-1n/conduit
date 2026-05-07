@@ -373,12 +373,20 @@
       }
 
       const wallMs = currentRun.wallMsOffset + (uptimeUs / 1000);
-      let name = schema.get(msgId);
+      const name = schema.get(msgId);
       if (!name) {
-        // Unknown id — kick off a refresh (rate-limited). Until it lands
-        // we display as msg_<id>.
+        // Unknown msg_id — schema isn't loaded yet (we just (re)connected,
+        // or this id was registered post-schema-fetch). Kick a refresh
+        // and DROP this record. Earlier we used to push a placeholder
+        // "msg_<id>" channel into the chart and rename it later; that
+        // left ghost legend rows after a device reboot remapped the
+        // msg_id (old id 0 = CONST_1 → new id 0 = SIN, but the cached
+        // schema still said CONST_1, so the first post-OTA records got
+        // attributed to the wrong name and registered a phantom
+        // channel). Dropping a few records during the brief schema-
+        // fetch window is cleaner than carrying that mis-attribution.
         refreshSchema(ip, false).catch(() => {});
-        name = `msg_${msgId}`;
+        continue;
       }
 
       // Decode for the chart. We pass values as a small Float64Array; for
@@ -688,6 +696,16 @@
         currentRun = null;
         lastUptimeUs = null;
         parseBuf = new Uint8Array(0);
+        // Drop the cached msg_id → name map. New firmware registers
+        // names in `transmit()` order, which can re-assign msg_ids
+        // (e.g. old 0 = CONST_1 disappears, new 0 = SIN). Holding the
+        // pre-OTA schema would mis-attribute the first post-reboot
+        // records to whatever name the old map listed for that id.
+        // The drain loop's "drop unknown msgId" guard then safely
+        // discards records until the next /api/data_schema fetch
+        // lands the new mapping.
+        schema = new Map();
+        lastSchemaFetchMs = 0;
         const ds = window.Conduit && window.Conduit.dataStore;
         if (ds && ds.resetSession) ds.resetSession();
         // Drop the chart entirely — series Map AND uPlot instance — and
