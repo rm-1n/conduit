@@ -104,21 +104,20 @@ jobs:
             exit 1
           fi
 
-      - name: Sanity-check assets
-        # The toolchain bundle (LFS) and the SDK bundle (just-downloaded)
-        # are the two heavyweights the IDE needs at runtime. Failing
-        # loudly here turns a broken deploy into a CI failure instead
-        # of a silently-shipped 404 farm.
-        run: |
-          test -f web/assets/emception/llvm/llvm-box.wasm \
-            || (echo "::error::emception WASM missing — LFS pull failed?"; exit 1)
-          test -f web/assets/emception/packages/emscripten.pack.br \
-            || (echo "::error::emception pack.br missing — LFS pull failed?"; exit 1)
-          test -f web/assets/emception/clang-headers.tar \
-            || (echo "::error::clang-headers.tar missing — pack step failed?"; exit 1)
-          if [ ! -f web/assets/sdk/headers/include.tar ]; then
-            echo "::warning::SDK headers tarball absent — IDE compile will fail on first Build."
-          fi
+      - name: Verify bundle (host web/ over HTTP, probe every URL compiler.js fetches)
+        # This used to be a list of `test -f` checks. Replaced with the
+        # deploy_bundle.mjs test, which is a strict superset: it spins
+        # up a localhost server with web/ as docroot, issues HEAD for
+        # every URL compiler.js fetches at first-Build time, AND walks
+        # each tarball to confirm critical entries exist (so a 0-byte
+        # or truncated tar that would pass `test -f` still fails here).
+        # The test's WEB_ROOT env var skips the build-sdk-bundle.sh
+        # staging step — the bundle is already assembled in web/ by the
+        # earlier "Download latest web-sdk bundle" + "Pack clang-headers
+        # tarball" steps.
+        env:
+          WEB_ROOT: ${{ github.workspace }}/web
+        run: node web/tests/deploy_bundle.mjs
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

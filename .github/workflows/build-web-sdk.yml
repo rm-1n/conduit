@@ -173,43 +173,109 @@ jobs:
 
       - name: Collect SDK artifacts
         if: steps.ver.outputs.should_build == 'true'
-        # Stage the pieces web/compiler.js needs at link time into a flat
-        # directory, then tarball it. Paths here follow the Pico SDK 2.2.0
-        # layout and must be revisited if the SDK layout changes.
+        # Mirror web/lib/build-sdk-bundle.sh — same artifact shape so the
+        # browser IDE links against the released bundle the same way it
+        # links against a locally-staged one. Specifically, compiler.js
+        # fetches:
+        #   lib/pico-sdk-objects.tar    – the conduit_app .o set
+        #   lib/newlib/{libc,libm,libnosys,libgcc}.a + crt*.o
+        #   startup/bs2_default_padded_checksummed.S.o
+        #   linker/{memmap_default.ld, pico_flash_region.ld}
+        #   headers/include.tar         – packed SDK + app + libc-stub headers
+        # If anything here drifts from build-sdk-bundle.sh, deployed Pages
+        # will 404 at link time even though local dev works. Keep them in
+        # sync.
         run: |
           OUT="$GITHUB_WORKSPACE/web-sdk-stage"
-          mkdir -p "$OUT"/{lib,startup,linker,headers}
+          mkdir -p "$OUT"/{lib/newlib,startup,linker,headers}
 
-          # Static libraries pulled in by a minimal GPIO-only app
-          find firmware/build -name "*.a" -print -exec cp {} "$OUT"/lib/ \;
+          # ---- App-side .o objects -----------------------------------
+          # Tar the conduit_app CMakeFiles tree the same way the local
+          # script does: relative to the .dir root so multiple .c.o
+          # files from different sub-modules don't collide on basename.
+          pushd firmware/build/app/CMakeFiles/conduit_app.dir >/dev/null
+          find . -name '*.o' | tar -cf "$OUT/lib/pico-sdk-objects.tar" -T -
+          popd >/dev/null
 
-          # Startup / crt0 / boot-stage-2 objects. Copy everything the app
-          # ELF depends on at link time that isn't in a .a; inspecting the
-          # CMake link line is the reliable way but a grep suffices here.
+          # ---- Newlib + libgcc multilib ------------------------------
+          # Match the firmware's compile flags via print-multi-directory.
+          # On Ubuntu the multilib lives under:
+          #   /usr/lib/arm-none-eabi/lib/<multilib>/  → libc/libm/libnosys
+          #   /usr/lib/gcc/arm-none-eabi/<gcc>/<multilib>/ → libgcc + crt*
+          MULTILIB=$(arm-none-eabi-gcc -print-multi-directory \
+              -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp)
+          GCC_VER=$(arm-none-eabi-gcc -dumpversion)
+          # newlib root differs across distros; resolve via the multilib
+          # search path so this works on whichever runner image GH gives us.
+          NEWLIB_SEARCH=$(arm-none-eabi-gcc -print-search-dirs \
+              -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp \
+              | awk '/^libraries:/ {print $2}' | tr ':' '\n' | head -1)
+          # Locate libc.a — it's in the multilib subdir of one of the
+          # libraries: paths that print-search-dirs reports.
+          LIBC_PATH=$(arm-none-eabi-gcc -print-file-name=libc.a \
+              -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp)
+          NEWLIB_DIR=$(dirname "$LIBC_PATH")
+          LIBGCC_PATH=$(arm-none-eabi-gcc -print-file-name=libgcc.a \
+              -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp)
+          LIBGCC_DIR=$(dirname "$LIBGCC_PATH")
+          echo "multilib: $MULTILIB (gcc $GCC_VER)"
+          echo "newlib_dir: $NEWLIB_DIR"
+          echo "libgcc_dir: $LIBGCC_DIR"
+          for f in libc.a libm.a libnosys.a; do
+            cp "$NEWLIB_DIR/$f" "$OUT/lib/newlib/$f"
+          done
+          for f in libgcc.a crti.o crtn.o crtbegin.o crtend.o; do
+            cp "$LIBGCC_DIR/$f" "$OUT/lib/newlib/$f"
+          done
+
+          # ---- Startup objects ---------------------------------------
+          # Only bs2_default_padded_checksummed.S.o is referenced by
+          # compiler.js; the others are kept to match the local layout
+          # in case future flows pick them up.
           find firmware/build -name 'crt0*.o' -exec cp {} "$OUT"/startup/ \;
           find firmware/build -name 'boot_stage2*.o' -exec cp {} "$OUT"/startup/ \;
           find firmware/build -name 'bs2_default_padded_checksummed*.o' -exec cp {} "$OUT"/startup/ \;
           find firmware/build -name 'conduit_slower_boot2*.o' -exec cp {} "$OUT"/startup/ \;
 
-          # Linker script. The SDK preprocesses memmap_*.ld via a custom
-          # target; we copy the generated .ld alongside its originals.
-          find "$PICO_SDK_PATH" -name 'memmap_default.ld' -exec cp {} "$OUT"/linker/ \;
-          find firmware/build -name '*.ld' -exec cp {} "$OUT"/linker/ \;
+          # ---- Linker scripts ----------------------------------------
+          LD_PRE=$(find firmware/build -name 'memmap_default.ld' 2>/dev/null | head -1)
+          LD_SRC="$PICO_SDK_PATH/src/rp2_common/pico_crt0/rp2350/memmap_default.ld"
+          cp "${LD_PRE:-$LD_SRC}" "$OUT/linker/memmap_default.ld"
+          PFR=$(find firmware/build -maxdepth 4 -name 'pico_flash_region.ld' 2>/dev/null | head -1)
+          [ -n "$PFR" ] && cp "$PFR" "$OUT/linker/pico_flash_region.ld" || \
+            echo "::warning::pico_flash_region.ld missing — IDE link will fail"
 
-          # Public headers. The browser clang needs -isystem paths pointing
-          # at SDK public headers. We pack the entire tree into a single
-          # .tar that compiler.js fetches and walks with its built-in
-          # walkTar() — one fetch instead of ~400 individual .h fetches.
+          # ---- Public headers tree -----------------------------------
+          # Flatten src/<category>/<module>/include/ into one merged tree
+          # the same way build-sdk-bundle.sh does, so a single -I
+          # /pico-sdk/include resolves any pico/, hardware/, etc. include.
           STAGE_HDR=$(mktemp -d)
-          rsync -a --include='*/' --include='*.h' --exclude='*' \
-            "$PICO_SDK_PATH/src/" "$STAGE_HDR/"
+          mkdir -p "$STAGE_HDR/include"
+          find "$PICO_SDK_PATH/src" -type d -name include | while read -r inc; do
+            rsync -a "$inc/" "$STAGE_HDR/include/"
+          done
+          # Generated config headers (board/platform/lwip opts) +
+          # firmware/include + web/lib/sdk-extras (libc-stubs).
+          find firmware/build -type d \( -name 'generated' -o -name 'pico_base' \) | \
+            while read -r d; do rsync -a "$d/" "$STAGE_HDR/include/" 2>/dev/null || true; done
+          [ -d firmware/include ]      && rsync -a firmware/include/      "$STAGE_HDR/include/"
+          [ -d web/lib/sdk-extras ]    && rsync -a web/lib/sdk-extras/    "$STAGE_HDR/include/"
+          # Rewrite absolute SDK paths in CMake-generated config_autogen.h
+          # so they resolve under /pico-sdk/include in the WASM VFS.
+          ESC_SDK=$(printf '%s' "$PICO_SDK_PATH" | sed 's/[][\\.*^$/]/\\&/g')
+          find "$STAGE_HDR/include" -name 'config_autogen.h' | while read -r f; do
+            sed -i "s|\"$ESC_SDK/[^\"]*/include/|\"|g" "$f"
+          done
           mkdir -p "$OUT/headers"
-          ( cd "$STAGE_HDR" && tar -cf "$OUT/headers/include.tar" . )
+          ( cd "$STAGE_HDR/include" && tar -cf "$OUT/headers/include.tar" . )
           rm -rf "$STAGE_HDR"
 
           echo '--- staged sizes ---'
           du -sh "$OUT"/{lib,startup,linker,headers}
-          ls "$OUT"/lib | head
+          echo '--- lib/newlib contents ---'
+          ls "$OUT"/lib/newlib
+          echo '--- lib/ contents ---'
+          ls "$OUT"/lib
 
       - name: Record SDK version manifest
         if: steps.ver.outputs.should_build == 'true'
