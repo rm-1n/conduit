@@ -1,5 +1,6 @@
 #include "network.h"
 #include "conduit_config.h"
+#include "dev_log.h"
 #ifndef CONDUIT_MINIMAL
 #include "http_server.h"
 #endif
@@ -57,7 +58,7 @@ static void link_callback(struct netif *netif) {
     #define CABLE_REPLUG_MIN_DOWN_MS  2000
     static absolute_time_t link_down_at;
     static bool            link_down_at_valid = false;
-    printf("[net] link %s\n", up ? "up" : "down");
+    DEV_LOG("[net] link %s\n", up ? "up" : "down");
     if (up) {
         bool real_replug = false;
         if (link_down_at_valid) {
@@ -104,7 +105,7 @@ static void status_callback(struct netif *netif) {
     const ip4_addr_t *ip = netif_ip4_addr(netif);
     if (ip->addr != 0) {
         snprintf(g_ip_str, sizeof(g_ip_str), "%s", ip4addr_ntoa(ip));
-        printf("[net] IP: %s\n", g_ip_str);
+        DEV_LOG("[net] IP: %s\n", g_ip_str);
     }
 }
 
@@ -124,14 +125,14 @@ int network_init(void) {
     // Board-level init (resets PHY, sets EN_1V8, configures clock, stdio_init_all)
     arch_pico_init();
 
-    printf("[net] System clock: %lu Hz\n", (unsigned long)clock_get_hz(clk_sys));
+    DEV_LOG("[net] System clock: %lu Hz\n", (unsigned long)clock_get_hz(clk_sys));
 
     // Initialize lwIP
     lwip_init();
 
     // Initialize the RMII Ethernet interface
     if (netif_rmii_ethernet_init(&g_netif) != ERR_OK) {
-        printf("[net] RMII init failed\n");
+        DEV_LOG("[net] RMII init failed\n");
         return -1;
     }
 
@@ -140,7 +141,7 @@ int network_init(void) {
 
     // Read PHY status register for immediate diagnostics
     uint16_t bsr = netif_rmii_ethernet_mdio_read(phy_address, LAN8720A_BASIC_STATUS_REG);
-    printf("[net] PHY BSR: 0x%04x (link=%d autoneg_done=%d)\n",
+    DEV_LOG("[net] PHY BSR: 0x%04x (link=%d autoneg_done=%d)\n",
            bsr, (bsr >> 2) & 1, (bsr >> 5) & 1);
 
     // Format MAC address string
@@ -148,7 +149,7 @@ int network_init(void) {
              "%02X:%02X:%02X:%02X:%02X:%02X",
              g_netif.hwaddr[0], g_netif.hwaddr[1], g_netif.hwaddr[2],
              g_netif.hwaddr[3], g_netif.hwaddr[4], g_netif.hwaddr[5]);
-    printf("[net] MAC: %s\n", g_mac_str);
+    DEV_LOG("[net] MAC: %s\n", g_mac_str);
 
     // Set callbacks
     netif_set_link_callback(&g_netif, link_callback);
@@ -165,7 +166,7 @@ int network_init(void) {
     }
     netif_set_up(&g_netif);
 
-    printf("[net] Static IP: %s\n", CONDUIT_STATIC_IP);
+    DEV_LOG("[net] Static IP: %s\n", CONDUIT_STATIC_IP);
 
     return 0;
 }

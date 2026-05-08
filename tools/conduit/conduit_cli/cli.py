@@ -1,10 +1,13 @@
 """CONDUIT CLI — manage devices from the command line."""
 
+import json as _json
 import os
 import sys
+import time
 import click
 from .api import ConduitDevice, scan_subnet
 from . import dev
+from . import discover as _discover
 
 
 @click.group()
@@ -58,7 +61,19 @@ def status(device):
 @main.command()
 @click.option("-s", "--subnet", required=True, help="Subnet prefix (e.g. 192.168.1)")
 def scan(subnet):
-    """Scan a /24 subnet for CONDUIT devices."""
+    """Scan a /24 subnet for CONDUIT devices.
+
+    Deprecated — use ``conduit discover`` instead. The /24 HTTP-status
+    sweep predates the Plex-style hostname architecture; once devices
+    are reachable via per-device ``*.<id>.devices.rm1n.com`` names
+    there's no need to enumerate raw IPs. Discovery now happens via
+    the multicast beacon firmware emits at 1 Hz.
+    """
+    click.echo(
+        "warning: `conduit scan` is deprecated and will be removed. "
+        "Use `conduit discover` (multicast-based, no subnet sweep needed).",
+        err=True,
+    )
     click.echo(f"Scanning {subnet}.0/24...")
     results = scan_subnet(subnet)
     if not results:
@@ -67,6 +82,69 @@ def scan(subnet):
     click.echo(f"Found {len(results)} device(s):")
     for d in results:
         click.echo(f"  {d['_ip']:16s}  v{d.get('version','?'):8s}  {d.get('mac','?')}")
+
+
+@main.command()
+@click.option("-t", "--timeout", default=5.0, type=float,
+              show_default=True,
+              help="Listen window in seconds")
+@click.option("--json", "as_json", is_flag=True,
+              help="Emit machine-readable JSON instead of a table")
+@click.option("-v", "--verbose", is_flag=True,
+              help="Print every UDP packet received (incl. malformed) for debugging")
+def discover(timeout, as_json, verbose):
+    """Find CONDUIT devices on the LAN via multicast.
+
+    Listens for the firmware's once-per-second JSON beacon
+    (group 239.255.42.42:5354) for the requested window and prints
+    one row per unique-id. This is the supported way to find a
+    device's current LAN IP — no /24 sweep, no HTTP probing,
+    works the moment a device's link is up.
+    """
+    if verbose:
+        click.echo(
+            f"[discover] joining {_discover.DISCOVERY_GROUP}:{_discover.DISCOVERY_PORT}, "
+            f"listening for {timeout:.1f}s",
+            err=True,
+        )
+
+        def _trace(raw: bytes, addr) -> None:
+            try:
+                preview = raw.decode("utf-8", errors="replace")[:120]
+            except Exception:
+                preview = repr(raw[:64])
+            click.echo(f"[discover] {len(raw):4d} B from {addr[0]}:{addr[1]}  {preview}", err=True)
+
+        seen: dict[str, _discover.DiscoveredDevice] = {}
+        for d in _discover.listen_for_devices(timeout_s=timeout, on_raw=_trace):
+            seen[d.unique_id] = d
+        devices = list(seen.values())
+    else:
+        devices = _discover.collect_unique_devices(timeout_s=timeout)
+
+    now = time.time()
+    if as_json:
+        click.echo(_json.dumps([
+            {
+                "id": d.unique_id,
+                "ip": d.ip,
+                "name": d.name,
+                "version": d.version,
+                "age_s": round(now - d.last_seen, 2),
+            }
+            for d in devices
+        ], indent=2))
+        return
+    if not devices:
+        click.echo(f"No devices heard in {timeout:.1f}s.")
+        if not verbose:
+            click.echo("Tip: rerun with -v to see whether ANY UDP packets reach your laptop.")
+        return
+    click.echo(f"Found {len(devices)} device(s):")
+    click.echo(f"  {'unique-id':<20}  {'ip':<16}  {'name':<16}  {'version':<10}  age")
+    for d in sorted(devices, key=lambda x: x.unique_id):
+        age = f"{now - d.last_seen:.1f}s"
+        click.echo(f"  {d.unique_id:<20}  {d.ip:<16}  {d.name:<16}  {d.version:<10}  {age}")
 
 
 @main.command()
@@ -128,10 +206,14 @@ def _env(name, default):
 @click.option("--firmware-dir", default=None, help="Path to firmware/ directory")
 @click.option("--sdk",       envvar="PICO_SDK_PATH",  default=dev.DEFAULT_SDK_PATH,      help="Pico SDK path")
 @click.option("--toolchain", envvar="TOOLCHAIN_PATH",  default=dev.DEFAULT_TOOLCHAIN_BIN, help="GCC toolchain bin/")
-def build(firmware_dir, sdk, toolchain):
+@click.option("--dev", "dev_logs", is_flag=True, default=False,
+              help="Enable verbose firmware status prints over USB CDC "
+                   "([net]/[discovery]/[main]/etc.). Off by default — "
+                   "production firmware is silent on serial.")
+def build(firmware_dir, sdk, toolchain, dev_logs):
     """Build the firmware (cmake --build)."""
     firmware_dir = firmware_dir or dev.DEFAULT_FIRMWARE_DIR
-    dev.build_firmware(firmware_dir, sdk, toolchain)
+    dev.build_firmware(firmware_dir, sdk, toolchain, dev_logs=dev_logs)
 
 
 @main.command()
@@ -147,7 +229,11 @@ def build(firmware_dir, sdk, toolchain):
                    "flash-update reboot + /api/commit to persist; via the BOOTSEL "
                    "USB path it boots once and rolls back, leaving the device "
                    "unreachable. Use only for testing the rollback path.")
-def flash(firmware_dir, sdk, toolchain, picotool, serial, serial_port, tbyb):
+@click.option("--dev", "dev_logs", is_flag=True, default=False,
+              help="Enable verbose firmware status prints over USB CDC "
+                   "([net]/[discovery]/[main]/etc.). Off by default — "
+                   "production firmware is silent on serial.")
+def flash(firmware_dir, sdk, toolchain, picotool, serial, serial_port, tbyb, dev_logs):
     """Build firmware, flash via picotool, and reboot.
 
     Defaults to the non-TBYB conduit_app_initial.uf2 so a USB reflash always
@@ -155,7 +241,7 @@ def flash(firmware_dir, sdk, toolchain, picotool, serial, serial_port, tbyb):
     you specifically want to exercise the watchdog rollback path.
     """
     firmware_dir = firmware_dir or dev.DEFAULT_FIRMWARE_DIR
-    dev.build_firmware(firmware_dir, sdk, toolchain)
+    dev.build_firmware(firmware_dir, sdk, toolchain, dev_logs=dev_logs)
     _pt, initial_uf2, ota_uf2 = dev.firmware_uf2_paths(firmware_dir)
     if tbyb:
         dev.warn("--tbyb: flashing the TBYB image via USB. The device will boot "

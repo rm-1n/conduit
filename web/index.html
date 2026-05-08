@@ -100,7 +100,6 @@
              title="Add a device by IP"
              onkeydown="if(event.key==='Enter')document.getElementById('ide-quick-connect').click()">
       <button class="btn-ghost" id="ide-quick-connect" type="button" title="Probe this IP">Add</button>
-      <button class="btn-ghost" id="ide-rescan-btn" type="button" title="Scan /24 subnet for devices">Scan</button>
 
       <!-- Auth token used by /api/upload, /api/commit, /api/cmd. The
            token is no longer surfaced in the topbar — it sits hidden
@@ -117,9 +116,6 @@
       <button class="iconbtn" id="ide-toggle-telemetry" type="button"
               aria-pressed="false" title="Show/hide telemetry pane"></button>
     </div>
-
-    <!-- hidden subnet field used by the scanner helper -->
-    <input id="subnet" type="hidden" value="">
   </header>
 
   <!-- Layout:
@@ -370,35 +366,6 @@
             <button class="seg-btn" data-value="discrete" type="button" aria-pressed="false">Discrete</button>
           </div>
         </article>
-        <article class="setting-row" data-setting="scan-range"
-                 data-search="ip scan range subnet network address discover device probe lan octet">
-          <div class="setting-row__label">
-            <span class="setting-row__title">IP scan range</span>
-            <span class="setting-row__desc">First three octets of the /24 to probe when you click Scan. Leave blank to derive the range from the picker's selected device or the IP you've typed into Add.</span>
-          </div>
-          <div class="setting-row__control">
-            <input class="setting-input" id="setting-scan-range" type="text"
-                   placeholder="192.168.178"
-                   pattern="\d{1,3}\.\d{1,3}\.\d{1,3}"
-                   autocomplete="off"
-                   inputmode="decimal"
-                   aria-label="IP scan range — first three octets">
-          </div>
-        </article>
-        <article class="setting-row" data-setting="scan-timeout"
-                 data-search="scan timeout probe latency response time wait device discover seconds">
-          <div class="setting-row__label">
-            <span class="setting-row__title">Scan timeout</span>
-            <span class="setting-row__desc">Per-probe abort timeout (seconds) for the /24 scan and the Add button. Higher values give slow devices more headroom; lower values fail an empty subnet faster. Default 10. Range 1–60.</span>
-          </div>
-          <div class="setting-row__control">
-            <input class="setting-input" id="setting-scan-timeout" type="number"
-                   min="1" max="60" step="1" placeholder="10"
-                   autocomplete="off"
-                   inputmode="numeric"
-                   aria-label="Scan timeout in seconds">
-          </div>
-        </article>
       </div>
       <p class="settings-empty" id="settings-empty" hidden>No settings match your search.</p>
     </section>
@@ -558,68 +525,6 @@
     });
   }
 
-  // ---- Settings: IP scan range ----------------------------------------
-  // Persisted under the same `conduit` localStorage object the IDE
-  // already uses (alongside ide_ip / quick_ip / token). The Scan
-  // button in ide.js reads it back via the same key — see the
-  // rescanBtn handler.
-  const scanRangeInput = $('setting-scan-range');
-  function readScanRange() {
-    try {
-      const s = JSON.parse(localStorage.getItem('conduit') || '{}');
-      return s.scanRange || '';
-    } catch (_) { return ''; }
-  }
-  function writeScanRange(v) {
-    try {
-      const s = JSON.parse(localStorage.getItem('conduit') || '{}');
-      s.scanRange = v;
-      localStorage.setItem('conduit', JSON.stringify(s));
-    } catch (_) {}
-  }
-  if (scanRangeInput) {
-    scanRangeInput.value = readScanRange();
-    scanRangeInput.addEventListener('input', (ev) => {
-      // Strip a trailing dot so "192.168.1." persists as "192.168.1".
-      writeScanRange(ev.target.value.trim().replace(/\.$/, ''));
-    });
-  }
-
-  // ---- Settings: Scan timeout (in seconds) ----------------------------
-  // Persisted as ms under the same `conduit` localStorage object that
-  // app.js's configuredScanTimeoutMs() reads. Default is 10 s; the
-  // input's min/max attributes (1–60) match the clamp on the read
-  // side so a manual localStorage edit can't make the IDE feel
-  // unresponsive or stuck on an unbounded probe.
-  const scanTimeoutInput = $('setting-scan-timeout');
-  function readScanTimeoutSec() {
-    try {
-      const s = JSON.parse(localStorage.getItem('conduit') || '{}');
-      const ms = Number(s.scanTimeoutMs);
-      if (Number.isFinite(ms) && ms >= 500) return Math.round(ms / 1000);
-    } catch (_) {}
-    return 10;
-  }
-  function writeScanTimeoutSec(sec) {
-    try {
-      const s = JSON.parse(localStorage.getItem('conduit') || '{}');
-      if (Number.isFinite(sec) && sec >= 1 && sec <= 60) {
-        s.scanTimeoutMs = sec * 1000;
-      } else {
-        // Empty / invalid input → drop the override so the next
-        // scan picks the in-code default (10 s).
-        delete s.scanTimeoutMs;
-      }
-      localStorage.setItem('conduit', JSON.stringify(s));
-    } catch (_) {}
-  }
-  if (scanTimeoutInput) {
-    scanTimeoutInput.value = readScanTimeoutSec();
-    scanTimeoutInput.addEventListener('input', (ev) => {
-      writeScanTimeoutSec(Number(ev.target.value));
-    });
-  }
-
   // ---- Account sidebar build-line --------------------------------------
   // "<asset version> · <8-char commit>". Both globals are set in the
   // CONDUIT_BUILD script block at the bottom of this file; the deploy
@@ -689,7 +594,7 @@
   // Account view's sidebar footer. CONDUIT_COMMIT is an 8-char prefix
   // of the git SHA the assets were built from; the deploy workflow
   // sed-replaces 'dev' with the real value at publish time.
-  window.CONDUIT_ASSET_VERSION = '2026-05-03-strip-dup-prefix';
+  window.CONDUIT_ASSET_VERSION = '2026-05-08-scan-removed';
   window.CONDUIT_COMMIT        = 'dev';
 </script>
 <!-- uPlot — high-performance time-series plotting via CDN. Pinned for

@@ -14,6 +14,7 @@
 
 #include "network.h"
 #include "conduit_config.h"
+#include "dev_log.h"
 #include "rmii_ethernet/netif.h"
 #include "lan8720a.h"
 #ifndef CONDUIT_MINIMAL
@@ -23,6 +24,7 @@
 #include "data_buffer.h"
 #include "commands.h"
 #include "diag.h"
+#include "discovery.h"
 #endif
 
 // Symbol from the rmii_ethernet driver — the inner step of its loop.
@@ -98,7 +100,7 @@ int main() {
     // So we just call network_init() directly — it handles everything.
 
     if (network_init() != 0) {
-        printf("[main] Network init failed, halting\n");
+        DEV_LOG("[main] Network init failed, halting\n");
         while (1) tight_loop_contents();
     }
 
@@ -114,7 +116,7 @@ int main() {
     // can conduit_command_register() additional handlers from conduit_setup().
     commands_init();
 
-    printf("\n=== CONDUIT v%s ===\n", CONDUIT_VERSION_STRING);
+    DEV_LOG("\n=== CONDUIT v%s ===\n", CONDUIT_VERSION_STRING);
 
     // Latch boot_type / TBYB-pending state before anything else can touch
     // the bootrom. Needed for /api/status and /api/commit semantics.
@@ -129,16 +131,26 @@ int main() {
 
     // Start the HTTP API server (registers callbacks, no lwIP polling here)
     http_server_init();
+
+    // Multicast discovery beacon — broadcasts {id, ip, name, v} every
+    // 1 s so `conduit discover` can find us by unique-id without
+    // sweeping the subnet. Init runs on Core 0 (we're still pre-
+    // multicore_launch_core1); the actual sends fire from Core 1's
+    // sys_check_timeouts. Failure is non-fatal — the beacon is a
+    // convenience; the device still works fine without it.
+    if (discovery_init() != 0) {
+        DEV_LOG("[main] discovery_init failed (non-fatal)\n");
+    }
 #else
     // Minimal-firmware diagnostic build: no log_buffer, no data_buffer,
     // no commands, no OTA, no HTTP server. Just RMII + lwIP + ICMP. The
     // tiny heartbeat printf in the user loop below replaces diag.c.
-    printf("\n=== CONDUIT MINIMAL diag build ===\n");
+    DEV_LOG("\n=== CONDUIT MINIMAL diag build ===\n");
 #endif
 
     // Read PHY registers before launching Core 1 (avoids MDIO bus race)
     uint16_t bsr = netif_rmii_ethernet_mdio_read(phy_address, LAN8720A_BASIC_STATUS_REG);
-    printf("[main] PHY BSR=0x%04x (link=%d autoneg=%d)\n",
+    DEV_LOG("[main] PHY BSR=0x%04x (link=%d autoneg=%d)\n",
            bsr, (bsr >> 2) & 1, (bsr >> 5) & 1);
 
     // Register core 0 as a flash_safe_execute victim BEFORE launching core 1.
@@ -151,14 +163,14 @@ int main() {
     // core 1 as a victim (symmetric safety).
     multicore_launch_core1(core1_entry);
 
-    printf("[main] Core 1 launched, entering diagnostic loop\n");
+    DEV_LOG("[main] Core 1 launched, entering diagnostic loop\n");
 
 #ifdef CONDUIT_SIMULATE_HANG
     // Rollback sanity check: pretend we wedged just after init. Watchdog
     // will reset us before COMMIT_AFTER_TICKS, ROM rolls back to the
     // previous partition because explicit_buy never ran.
     watchdog_enable(WATCHDOG_TIMEOUT_MS, true);
-    printf("[main] CONDUIT_SIMULATE_HANG set — hanging forever\n");
+    DEV_LOG("[main] CONDUIT_SIMULATE_HANG set — hanging forever\n");
     while (1) tight_loop_contents();
 #endif
 
@@ -206,7 +218,7 @@ int main() {
             // programmed by rom_reboot / watchdog_reboot will fire within
             // its scheduled delay_ms.
             static bool announced = false;
-            if (!announced) { announced = true; printf("[main] reboot_pending observed — stopping watchdog pat\n"); }
+            if (!announced) { announced = true; DEV_LOG("[main] reboot_pending observed — stopping watchdog pat\n"); }
             tight_loop_contents();
             continue;
         }
@@ -219,7 +231,7 @@ int main() {
             iter = 0;
             bool link_up = network_is_link_up();
             if (link_up != last_link_up) {
-                printf("[health] link transition: %s\n", link_up ? "DOWN→UP" : "UP→DOWN");
+                DEV_LOG("[health] link transition: %s\n", link_up ? "DOWN→UP" : "UP→DOWN");
                 last_link_up = link_up;
                 if (!link_up) {
                     link_down_since = get_absolute_time();
@@ -232,7 +244,7 @@ int main() {
             if (!link_up && !is_nil_time(link_down_since) && !link_down_warned) {
                 int64_t down_ms = absolute_time_diff_us(link_down_since, get_absolute_time()) / 1000;
                 if (down_ms >= HEALTH_LINK_DOWN_WARN_MS) {
-                    printf("[health] link down for %lld ms — sustained outage, "
+                    DEV_LOG("[health] link down for %lld ms — sustained outage, "
                            "no auto-reboot (per user policy)\n", (long long)down_ms);
                     link_down_warned = true;
                 }
@@ -253,7 +265,7 @@ int main() {
             static uint32_t last_crc = 0;
             uint32_t crc_now = netif_rmii_ethernet_rx_crc_errors();
             uint32_t crc_d = crc_now - last_crc; last_crc = crc_now;
-            printf("[min] link=%d rx=%lu tx=%lu rxu=%lu rxs=%lu "
+            DEV_LOG("[min] link=%d rx=%lu tx=%lu rxu=%lu rxs=%lu "
                    "mdio=%lu/%lu mdc=%lu(+%lu) crc=%lu(+%lu)\n",
                    (int)network_is_link_up(),
                    (unsigned long)g_rmii_rx_frames,

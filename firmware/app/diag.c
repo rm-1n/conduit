@@ -23,6 +23,7 @@
 // we print a value torn between updates, which is fine for a heartbeat).
 
 #include "diag.h"
+#include "dev_log.h"
 
 #include <stdio.h>
 
@@ -34,6 +35,7 @@
 
 #include "network.h"
 #include "ota.h"
+#include "discovery.h"
 #include "http_server.h"
 #include "rmii_ethernet/netif.h"
 
@@ -130,13 +132,25 @@ void diag_print_line(void) {
     uint32_t mdio_total = netif_rmii_ethernet_mdio_total_reads();
     uint32_t mdio_bad   = netif_rmii_ethernet_mdio_bad_reads();
 
-    printf("[diag] link=%d ip=%s c1=%lu(+%lu) "
+    // Multicast discovery beacon counters — fold the cumulative ok /
+    // fail totals into the heartbeat so a quiet `conduit serial`
+    // capture (started after boot, when [discovery] init prints have
+    // scrolled past) still shows whether sends are happening.
+    uint32_t disc_ok = 0, disc_fail = 0;
+    discovery_get_stats(&disc_ok, &disc_fail);
+    static uint32_t last_disc_ok = 0, last_disc_fail = 0;
+    uint32_t ddisc_ok   = disc_ok   - last_disc_ok;
+    uint32_t ddisc_fail = disc_fail - last_disc_fail;
+    last_disc_ok = disc_ok; last_disc_fail = disc_fail;
+
+    DEV_LOG("[diag] link=%d ip=%s c1=%lu(+%lu) "
            "heap=%lu/%lu pbuf=%u/%u tcp_pcb=%u/%u "
            "tcp=%ua/%ut/%ul rx=%lu(+%lu) tx=%lu(+%lu) "
            "rxu=%lu(+%lu) rxs=%lu(+%lu) "
            "acpt=%lu(+%lu) strm=%lu(+%lu) "
            "ipdrop=%lu(+%lu) tcpdrop=%lu(+%lu) tcperr=%lu(+%lu) tcpchk=%lu(+%lu) "
-           "mdio=%lu/%lu crc=%lu logc=%lu/%lub commit_pending=%d\n",
+           "mdio=%lu/%lu crc=%lu logc=%lu/%lub "
+           "disc=%lu(+%lu)/%lu(+%lu) commit_pending=%d\n",
            network_is_link_up(), network_get_ip_str(),
            (unsigned long)c1, (unsigned long)dc1,
            (unsigned long)m->used,  (unsigned long)m->avail,
@@ -157,5 +171,7 @@ void diag_print_line(void) {
            (unsigned long)netif_rmii_ethernet_rx_crc_errors(),
            (unsigned long)log_buffer_call_count(),
            (unsigned long)log_buffer_total_written(),
+           (unsigned long)disc_ok,   (unsigned long)ddisc_ok,
+           (unsigned long)disc_fail, (unsigned long)ddisc_fail,
            (int)ota_commit_pending());
 }

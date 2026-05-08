@@ -86,6 +86,24 @@ jobs:
             ls web/assets/sdk
           fi
 
+      - name: Pack clang-headers tarball
+        # compiler.js fetches a single clang-headers.tar (one HTTP fetch
+        # instead of ~180 individual .h fetches). The loose tree ships
+        # via LFS; we tar it here at deploy time rather than committing
+        # the redundant .tar to LFS too. Output goes one level up from
+        # the loose tree, since compiler.js URL-resolves it as
+        # ./assets/emception/clang-headers.tar (sibling of the dir).
+        run: |
+          EMC=web/assets/emception
+          CHD=$EMC/clang-headers
+          if [ -d "$CHD" ]; then
+            ( cd "$CHD" && tar --exclude=files.txt -cf "$GITHUB_WORKSPACE/$EMC/clang-headers.tar" . )
+            echo "Packed $(find "$CHD" -type f -not -name files.txt | wc -l) clang headers → $(stat -c '%s' "$EMC/clang-headers.tar") bytes"
+          else
+            echo "::error::clang-headers dir missing — LFS pull failed?"
+            exit 1
+          fi
+
       - name: Sanity-check assets
         # The toolchain bundle (LFS) and the SDK bundle (just-downloaded)
         # are the two heavyweights the IDE needs at runtime. Failing
@@ -96,8 +114,10 @@ jobs:
             || (echo "::error::emception WASM missing — LFS pull failed?"; exit 1)
           test -f web/assets/emception/packages/emscripten.pack.br \
             || (echo "::error::emception pack.br missing — LFS pull failed?"; exit 1)
-          if [ ! -d web/assets/sdk/headers ]; then
-            echo "::warning::SDK headers directory absent — IDE compile will fail on first Build."
+          test -f web/assets/emception/clang-headers.tar \
+            || (echo "::error::clang-headers.tar missing — pack step failed?"; exit 1)
+          if [ ! -f web/assets/sdk/headers/include.tar ]; then
+            echo "::warning::SDK headers tarball absent — IDE compile will fail on first Build."
           fi
 
       - name: Configure Pages
