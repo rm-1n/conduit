@@ -104,33 +104,20 @@ jobs:
             exit 1
           fi
 
-      - name: Sanity-check assets
-        # The toolchain bundle (LFS) and the SDK bundle (just-downloaded)
-        # are the two heavyweights the IDE needs at runtime. Failing
-        # loudly here turns a broken deploy into a CI failure instead
-        # of a silently-shipped 404 farm. Every file listed below is
-        # fetched at first-Build time by web/compiler.js — if any is
-        # absent the in-browser link will 404 with a confusing error.
-        run: |
-          fail=0
-          must_have() {
-            if [ ! -f "$1" ]; then
-              echo "::error::missing required asset: $1"
-              fail=1
-            fi
-          }
-          must_have web/assets/emception/llvm/llvm-box.wasm
-          must_have web/assets/emception/packages/emscripten.pack.br
-          must_have web/assets/emception/clang-headers.tar
-          must_have web/assets/sdk/headers/include.tar
-          must_have web/assets/sdk/lib/pico-sdk-objects.tar
-          must_have web/assets/sdk/startup/bs2_default_padded_checksummed.S.o
-          must_have web/assets/sdk/linker/memmap_default.ld
-          must_have web/assets/sdk/linker/pico_flash_region.ld
-          for f in libc.a libm.a libnosys.a libgcc.a crti.o crtn.o crtbegin.o crtend.o; do
-            must_have "web/assets/sdk/lib/newlib/$f"
-          done
-          [ "$fail" = 0 ] || exit 1
+      - name: Verify bundle (host web/ over HTTP, probe every URL compiler.js fetches)
+        # This used to be a list of `test -f` checks. Replaced with the
+        # deploy_bundle.mjs test, which is a strict superset: it spins
+        # up a localhost server with web/ as docroot, issues HEAD for
+        # every URL compiler.js fetches at first-Build time, AND walks
+        # each tarball to confirm critical entries exist (so a 0-byte
+        # or truncated tar that would pass `test -f` still fails here).
+        # The test's WEB_ROOT env var skips the build-sdk-bundle.sh
+        # staging step — the bundle is already assembled in web/ by the
+        # earlier "Download latest web-sdk bundle" + "Pack clang-headers
+        # tarball" steps.
+        env:
+          WEB_ROOT: ${{ github.workspace }}/web
+        run: node web/tests/deploy_bundle.mjs
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
