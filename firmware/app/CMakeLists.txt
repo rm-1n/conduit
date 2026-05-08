@@ -162,7 +162,7 @@ function(conduit_define_app TARGET)
     # Binary version for A/B partition selection — bump MINOR per OTA test
     # cycle. The RP2350 bootrom compares versions across partitions and
     # boots the newer.
-    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 1)
+    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 2)
 
     # Embed the A/B partition table so the bootrom can discover the layout
     # and pick between A and B based on binary version.
@@ -228,7 +228,7 @@ function(conduit_define_app_minimal TARGET)
     pico_enable_stdio_usb(${TARGET} 1)
     pico_enable_stdio_uart(${TARGET} 0)
 
-    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 1)
+    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 2)
     pico_embed_pt_in_binary(${TARGET} ${CMAKE_SOURCE_DIR}/bootloader/partitions.json)
     if(EXISTS "${CMAKE_SOURCE_DIR}/keys/private.pem")
         pico_sign_binary(${TARGET} ${CMAKE_SOURCE_DIR}/keys/private.pem)

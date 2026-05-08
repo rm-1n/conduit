@@ -108,17 +108,29 @@ jobs:
         # The toolchain bundle (LFS) and the SDK bundle (just-downloaded)
         # are the two heavyweights the IDE needs at runtime. Failing
         # loudly here turns a broken deploy into a CI failure instead
-        # of a silently-shipped 404 farm.
+        # of a silently-shipped 404 farm. Every file listed below is
+        # fetched at first-Build time by web/compiler.js — if any is
+        # absent the in-browser link will 404 with a confusing error.
         run: |
-          test -f web/assets/emception/llvm/llvm-box.wasm \
-            || (echo "::error::emception WASM missing — LFS pull failed?"; exit 1)
-          test -f web/assets/emception/packages/emscripten.pack.br \
-            || (echo "::error::emception pack.br missing — LFS pull failed?"; exit 1)
-          test -f web/assets/emception/clang-headers.tar \
-            || (echo "::error::clang-headers.tar missing — pack step failed?"; exit 1)
-          if [ ! -f web/assets/sdk/headers/include.tar ]; then
-            echo "::warning::SDK headers tarball absent — IDE compile will fail on first Build."
-          fi
+          fail=0
+          must_have() {
+            if [ ! -f "$1" ]; then
+              echo "::error::missing required asset: $1"
+              fail=1
+            fi
+          }
+          must_have web/assets/emception/llvm/llvm-box.wasm
+          must_have web/assets/emception/packages/emscripten.pack.br
+          must_have web/assets/emception/clang-headers.tar
+          must_have web/assets/sdk/headers/include.tar
+          must_have web/assets/sdk/lib/pico-sdk-objects.tar
+          must_have web/assets/sdk/startup/bs2_default_padded_checksummed.S.o
+          must_have web/assets/sdk/linker/memmap_default.ld
+          must_have web/assets/sdk/linker/pico_flash_region.ld
+          for f in libc.a libm.a libnosys.a libgcc.a crti.o crtn.o crtbegin.o crtend.o; do
+            must_have "web/assets/sdk/lib/newlib/$f"
+          done
+          [ "$fail" = 0 ] || exit 1
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
