@@ -586,7 +586,6 @@ void conduit_loop(void) {
                 (window.CONDUIT_ASSET_VERSION || 'unknown'));
 
     const deviceSelect = document.getElementById('ide-device-select');
-    const rescanBtn = document.getElementById('ide-rescan-btn');
     const token = document.getElementById('ide-auth-token');
 
     // Restore persisted token + last-typed IP so reload reconnects to
@@ -641,7 +640,7 @@ void conduit_loop(void) {
       if (known.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
-        opt.textContent = '(no device — Add or Scan)';
+        opt.textContent = '(no device — Add an IP)';
         deviceSelect.appendChild(opt);
       } else {
         for (const d of known) {
@@ -673,7 +672,7 @@ void conduit_loop(void) {
       if (!known || known.length === 0) {
         const empty = document.createElement('li');
         empty.className = 'device-picker__menu-empty';
-        empty.textContent = 'No devices yet — Add an IP or Scan the subnet.';
+        empty.textContent = 'No devices yet — find one with `conduit discover` and Add its IP.';
         deviceMenu.appendChild(empty);
         return;
       }
@@ -693,7 +692,7 @@ void conduit_loop(void) {
     function updateDevicePickerLabel() {
       if (!deviceLabel) return;
       const opt = deviceSelect.options[deviceSelect.selectedIndex];
-      deviceLabel.textContent = (opt && opt.textContent) || '(no device — Add or Scan)';
+      deviceLabel.textContent = (opt && opt.textContent) || '(no device — Add an IP)';
       // Highlight the active row in the menu (if it's open).
       if (deviceMenu) {
         for (const row of deviceMenu.querySelectorAll('.device-picker__menu-item')) {
@@ -768,49 +767,9 @@ void conduit_loop(void) {
     refreshDeviceList();
     window.addEventListener('conduit:devices-updated', refreshDeviceList);
 
-    // Rescan button. Subnet resolution priority:
-    //   1. `conduit.scanRange` from Settings → Account → IP scan range
-    //      (user explicitly configured this)
-    //   2. The first three octets of whatever IP is in the Add field
-    //   3. The first three octets of the most recently known device
-    // No popup fallback — if all three are empty, the connection
-    // status line tells the user what to fill in instead. The hidden
-    // #subnet input is still updated so any other code reading it
-    // (legacy paths, dev-tools probes) sees the chosen subnet.
-    rescanBtn.addEventListener('click', async () => {
-      let subnet = '';
-      try {
-        const s = JSON.parse(localStorage.getItem('conduit') || '{}');
-        if (s.scanRange) subnet = String(s.scanRange).trim().replace(/\.$/, '');
-      } catch (_) {}
-      if (!subnet) {
-        const quick = document.getElementById('ide-quick-ip').value.trim();
-        const known = window.Conduit.getKnownDevices();
-        if (quick && quick.split('.').length >= 3) {
-          subnet = quick.split('.').slice(0, 3).join('.');
-        } else if (known.length && known[0].ip) {
-          subnet = known[0].ip.split('.').slice(0, 3).join('.');
-        }
-      }
-      if (!subnet) {
-        connStatus('Set IP scan range in Settings, or type an IP into Add first', 'err');
-        return;
-      }
-      document.getElementById('subnet').value = subnet;
-      rescanBtn.disabled = true;
-      connStatus(`Scanning ${subnet}.0/24…`);
-      try {
-        const found = await window.Conduit.startScan({ subnet });
-        connStatus(`${found.length} device(s)`, 'ok');
-      } catch (e) {
-        connStatus(`scan error: ${e.message || e}`, 'err');
-      } finally {
-        rescanBtn.disabled = false;
-        refreshDeviceList();
-      }
-    });
-
-    // Add-by-IP button: probe a single host. Faster than /24 scan.
+    // Add-by-IP button: probe a single host. Devices broadcast their IP
+    // over UDP multicast (firmware/app/discovery.c) — find them via
+    // `conduit discover` on the CLI, then paste the IP here.
     const quickBtn = document.getElementById('ide-quick-connect');
     const quickInput = document.getElementById('ide-quick-ip');
     quickBtn.addEventListener('click', async () => {
@@ -847,7 +806,7 @@ void conduit_loop(void) {
     async function reconnect() {
       const ip = (deviceSelect.value || '').trim()
               || (document.getElementById('ide-quick-ip').value || '').trim();
-      if (!ip) { connStatus('no device — Add or Scan first', 'err'); return; }
+      if (!ip) { connStatus('no device — Add an IP first', 'err'); return; }
       try {
         connStatus(`Reconnecting ${ip}…`);
         const result = await window.Conduit.probeAndRemember(ip);
@@ -1000,7 +959,7 @@ void conduit_loop(void) {
     const ip = document.getElementById('ide-device-select').value.trim();
     const token = document.getElementById('ide-auth-token').value;
     if (!ip) {
-      setProgressBar({ pct: 0, label: 'Pick a device (Add or Scan)', kind: 'err' });
+      setProgressBar({ pct: 0, label: 'Pick a device (Add an IP)', kind: 'err' });
       return;
     }
     if (!token) {

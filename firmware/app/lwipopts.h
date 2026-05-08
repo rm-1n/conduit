@@ -13,6 +13,12 @@
 #define LWIP_ICMP                       1
 #define LWIP_UDP                        1
 #define LWIP_TCP                        1
+// Multicast TX requires IGMP for the device to advertise group
+// membership on the LAN (per RFC 1112). The discovery module sends
+// to 239.255.42.42:5354 once per second so the conduit-cli can find
+// the device by unique-id; without IGMP the upstream switch may
+// drop the multicast frames before they leave the wire.
+#define LWIP_IGMP                       1
 #define ETH_PAD_SIZE                    0
 #define LWIP_IP_ACCEPT_UDP_PORT(p)      ((p) == PP_NTOHS(67))
 

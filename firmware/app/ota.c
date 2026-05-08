@@ -1,5 +1,6 @@
 #include "ota.h"
 #include "conduit_config.h"
+#include "dev_log.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -91,7 +92,7 @@ ota_err_t ota_begin(void) {
     // Load partition table so ROM can resolve the UF2 target partition.
     int rc = rom_load_partition_table(workarea, sizeof(workarea), false);
     if (rc) {
-        printf("[ota] PT load failed %d\n", rc);
+        DEV_LOG("[ota] PT load failed %d\n", rc);
         return OTA_ERR_NO_PARTITION;
     }
 
@@ -106,7 +107,7 @@ ota_err_t ota_begin(void) {
     rc = rom_get_uf2_target_partition(workarea, sizeof(workarea),
                                       UF2_FAMILY_RP2350_ARM_S, &target);
     if (rc < 0) {
-        printf("[ota] UF2 target partition pick failed %d\n", rc);
+        DEV_LOG("[ota] UF2 target partition pick failed %d\n", rc);
         return OTA_ERR_NO_PARTITION;
     }
 
@@ -143,12 +144,12 @@ ota_err_t ota_begin(void) {
 
                 if (current_off >= a_start && current_off < a_end) continue;
                 target.permissions_and_location = alt_loc;
-                printf("[ota] Switched to alternate partition %u to avoid self-overwrite\n", id);
+                DEV_LOG("[ota] Switched to alternate partition %u to avoid self-overwrite\n", id);
                 alt_found = true;
                 break;
             }
             if (!alt_found) {
-                printf("[ota] No non-overlapping alternate partition found\n");
+                DEV_LOG("[ota] No non-overlapping alternate partition found\n");
                 return OTA_ERR_NO_PARTITION;
             }
         }
@@ -169,7 +170,7 @@ ota_err_t ota_begin(void) {
     ota.block_buf_pos = 0;
     ota.active = true;
 
-        printf("[ota] Target partition: offset 0x%x, size 0x%x\n",
+        DEV_LOG("[ota] Target partition: offset 0x%x, size 0x%x\n",
             ota.partition_start, ota.partition_size);
 
     return OTA_OK;
@@ -209,14 +210,14 @@ static ota_err_t process_uf2_block(const uf2_block_t *block) {
     int64_t translated_runtime = (int64_t)block->target_addr + (int64_t)ota.addr_delta;
     int64_t flash_addr_64 = translated_runtime - (int64_t)XIP_BASE;
     if (flash_addr_64 < 0 || flash_addr_64 > 0xffffffffll) {
-        printf("[ota] Block addr translation overflow (target=0x%x)\n", block->target_addr);
+        DEV_LOG("[ota] Block addr translation overflow (target=0x%x)\n", block->target_addr);
         return OTA_ERR_OVERFLOW;
     }
     uint32_t flash_addr = (uint32_t)flash_addr_64;
 
     if (flash_addr < ota.partition_start ||
         flash_addr + block->payload_size > ota.partition_start + ota.partition_size) {
-        printf("[ota] Block addr 0x%x outside partition\n", flash_addr);
+        DEV_LOG("[ota] Block addr 0x%x outside partition\n", flash_addr);
         return OTA_ERR_OVERFLOW;
     }
 
@@ -232,7 +233,7 @@ static ota_err_t process_uf2_block(const uf2_block_t *block) {
             uint32_t erase_addr = ota.partition_start + s * CONDUIT_FLASH_SECTOR_SIZE;
             int erc = flash_safe_execute(flash_safe_erase, (void *)(uintptr_t)erase_addr, 5000);
             if (erc != PICO_OK) {
-                printf("[ota] flash_safe_execute(erase) failed %d\n", erc);
+                DEV_LOG("[ota] flash_safe_execute(erase) failed %d\n", erc);
                 return OTA_ERR_FLASH_ERASE;
             }
             ota.last_erased_sector = (int32_t)s;
@@ -247,7 +248,7 @@ static ota_err_t process_uf2_block(const uf2_block_t *block) {
     };
     int wrc = flash_safe_execute(flash_safe_program, &wp, 5000);
     if (wrc != PICO_OK) {
-        printf("[ota] flash_safe_execute(program) failed %d\n", wrc);
+        DEV_LOG("[ota] flash_safe_execute(program) failed %d\n", wrc);
         return OTA_ERR_FLASH_WRITE;
     }
 
@@ -294,19 +295,19 @@ ota_err_t ota_finish(void) {
 
     // Check all blocks received
     if (ota.num_blocks_expected > 0 && ota.blocks_received != ota.num_blocks_expected) {
-        printf("[ota] Block count mismatch: got %u, expected %u\n",
+        DEV_LOG("[ota] Block count mismatch: got %u, expected %u\n",
                ota.blocks_received, ota.num_blocks_expected);
         ota_abort();
         return OTA_ERR_BLOCK_COUNT;
     }
 
-    printf("[ota] Complete: %u blocks, %u bytes written\n",
+    DEV_LOG("[ota] Complete: %u blocks, %u bytes written\n",
            ota.blocks_received, ota.bytes_written);
 
     ota.active = false;
 
     // Reboot — ROM will pick the partition with the newer version
-    printf("[ota] Rebooting...\n");
+    DEV_LOG("[ota] Rebooting...\n");
     sleep_ms(100);  // Let printf flush
 
     // Hint ROM to boot the updated image after this write completes.
@@ -330,7 +331,7 @@ ota_err_t ota_finish(void) {
 
 void ota_abort(void) {
     if (ota.active) {
-        printf("[ota] Aborted after %u blocks\n", ota.blocks_received);
+        DEV_LOG("[ota] Aborted after %u blocks\n", ota.blocks_received);
     }
     memset(&ota, 0, sizeof(ota));
     ota.last_erased_sector = -1;
@@ -350,7 +351,7 @@ void ota_init_boot_state(void) {
     boot_info_t info;
     int rc = rom_get_boot_info(&info);
     if (rc < 0) {
-        printf("[ota] rom_get_boot_info failed %d\n", rc);
+        DEV_LOG("[ota] rom_get_boot_info failed %d\n", rc);
         g_boot_type_str = "unknown";
         g_commit_pending = false;
         return;
@@ -371,7 +372,7 @@ void ota_init_boot_state(void) {
     // either on a committed image already, or the ROM rolled us back — in
     // both cases there is nothing for us to commit.
     g_commit_pending = (info.boot_type == BOOT_TYPE_FLASH_UPDATE);
-    printf("[ota] boot_type=%s, commit_pending=%d\n",
+    DEV_LOG("[ota] boot_type=%s, commit_pending=%d\n",
            g_boot_type_str, (int)g_commit_pending);
 }
 
@@ -390,9 +391,9 @@ ota_commit_result_t ota_commit(void) {
     int rc = rom_explicit_buy(workarea, sizeof(workarea));
     if (rc == 0) {
         g_commit_pending = false;
-        printf("[ota] Committed via /api/commit\n");
+        DEV_LOG("[ota] Committed via /api/commit\n");
         return OTA_COMMIT_OK;
     }
-    printf("[ota] rom_explicit_buy returned %d\n", rc);
+    DEV_LOG("[ota] rom_explicit_buy returned %d\n", rc);
     return OTA_COMMIT_FAILED;
 }

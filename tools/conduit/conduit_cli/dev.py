@@ -59,12 +59,32 @@ def _run(cmd, env=None, cwd=None, check=True):
 
 # ── Build ────────────────────────────────────────────────────────────────────
 
-def build_firmware(firmware_dir, sdk_path, toolchain_bin):
-    """Run cmake --build in the firmware directory. Returns the app UF2 path."""
+def build_firmware(firmware_dir, sdk_path, toolchain_bin, dev_logs=False):
+    """Run cmake --build in the firmware directory. Returns the app UF2 path.
+
+    When ``dev_logs`` is True, the firmware is built with
+    ``CONDUIT_DEV_LOGS=ON`` so all the [net] / [discovery] / [main]
+    status chatter prints over USB CDC. Default builds are silent —
+    end users plugging a device in shouldn't see firmware-internal
+    status spam in `conduit serial`. The flag is reflected by re-
+    running cmake configure (no-op if already in sync) before each
+    build, so toggling --dev between two consecutive `conduit build`
+    invocations does the right thing.
+    """
     info("Building firmware...")
     env = os.environ.copy()
     env["PICO_SDK_PATH"] = sdk_path
     env["PATH"] = f"{toolchain_bin}:{env['PATH']}"
+
+    # Re-run configure with the wanted CONDUIT_DEV_LOGS value. cmake is
+    # cache-aware: if the value matches what's already in CMakeCache.txt
+    # this is fast and idempotent; if it changed, the relevant TUs get
+    # rebuilt. The `-S firmware -B build` form works whether or not
+    # build/ exists yet.
+    dev_flag = "ON" if dev_logs else "OFF"
+    _run(f"cmake -S . -B build -G Ninja -DPICO_BOARD=pico2 "
+         f"-DCONDUIT_DEV_LOGS={dev_flag}",
+         env=env, cwd=firmware_dir)
 
     ncpu = os.cpu_count() or 4
     _run(f"cmake --build build -j{ncpu}", env=env, cwd=firmware_dir)
@@ -73,6 +93,9 @@ def build_firmware(firmware_dir, sdk_path, toolchain_bin):
     if not os.path.isfile(uf2):
         fail(f"UF2 not found at {uf2}")
         sys.exit(1)
+    if dev_logs:
+        info("Built with CONDUIT_DEV_LOGS=ON — firmware will print [net]/"
+             "[discovery]/[main] status over USB CDC.")
     ok(f"Build complete: {os.path.basename(uf2)}")
     return uf2
 

@@ -49,6 +49,34 @@ TARN=$(tar -tf "$OUT/lib/pico-sdk-objects.tar" | wc -l | tr -d ' ')
 TARSZ=$(stat -f '%z' "$OUT/lib/pico-sdk-objects.tar")
 echo "  $TARN objects, $(( TARSZ / 1024 )) KB (tarball)"
 
+echo "=== Newlib + libgcc archives ==="
+# Stage the arm-none-eabi multilib that matches the firmware's compile
+# flags (cortex-m33, softfp, +fp+dsp). gcc's print-multi-directory
+# resolves the multilib subpath; libgcc lives under lib/gcc/...
+# rather than arm-none-eabi/lib/.
+TOOLCHAIN_ROOT="${TOOLCHAIN_PATH:-$HOME/.pico-sdk/toolchain/14_2_Rel1}"
+TOOLCHAIN_BIN="$TOOLCHAIN_ROOT/bin"
+[ -x "$TOOLCHAIN_BIN/arm-none-eabi-gcc" ] || {
+    echo "error: arm-none-eabi-gcc not found at $TOOLCHAIN_BIN"
+    exit 1
+}
+MULTILIB=$("$TOOLCHAIN_BIN/arm-none-eabi-gcc" -print-multi-directory \
+    -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp)
+NEWLIB_SRC="$TOOLCHAIN_ROOT/arm-none-eabi/lib/$MULTILIB"
+GCC_VER=$("$TOOLCHAIN_BIN/arm-none-eabi-gcc" -dumpversion)
+LIBGCC_SRC="$TOOLCHAIN_ROOT/lib/gcc/arm-none-eabi/$GCC_VER/$MULTILIB"
+mkdir -p "$OUT/lib/newlib"
+# Newlib archives only — libc/libm/libnosys live under arm-none-eabi/lib/.
+for f in libc.a libm.a libnosys.a; do
+    cp "$NEWLIB_SRC/$f" "$OUT/lib/newlib/$f"
+done
+# libgcc + crt startup objects all live under lib/gcc/.../<multilib>/.
+for f in libgcc.a crti.o crtn.o crtbegin.o crtend.o; do
+    cp "$LIBGCC_SRC/$f" "$OUT/lib/newlib/$f"
+done
+echo "  multilib: $MULTILIB (gcc $GCC_VER)"
+ls "$OUT/lib/newlib/" | tr '\n' ' '; echo
+
 echo "=== Startup objects ==="
 # bs2 lives at .../boot_stage2/CMakeFiles/bs2_default_library.dir/...S.o
 # (~8 directories deep) — drop the maxdepth limit, the build tree is
@@ -128,12 +156,36 @@ find "$OUT/headers/include" -name 'config_autogen.h' | while read -r f; do
     fi
 done
 
-# Generate the files.txt manifest required by compiler.js (the browser
-# can't list directories, so each fetched tree ships an explicit list).
-# Sorted for stable diffs across rebuilds.
-( cd "$OUT/headers/include" && \
-  find . -type f -not -name files.txt | sed 's|^\./||' | LC_ALL=C sort > files.txt )
-echo "  manifest: $(wc -l < "$OUT/headers/include/files.txt") header files"
+# Pack the entire header tree into a single tarball. compiler.js walks
+# this with its built-in walkTar() and mounts each entry into the WASM
+# VFS. One fetch instead of ~400 individual .h fetches drops first-load
+# time from ~1-2 min to a few seconds. The loose tree is kept alongside
+# the .tar so the local Node-side unit test (web/tests/sdk_build.mjs)
+# can read individual .h files via fs APIs without untarring. It's not
+# checked in (web/assets/sdk/ is gitignored) and the CI release strips
+# the loose tree from the published bundle.
+HEADER_COUNT=$(find "$OUT/headers/include" -type f | wc -l | tr -d ' ')
+( cd "$OUT/headers/include" && tar -cf "$OUT/headers/include.tar" . )
+TARSZ_HDR=$(stat -f '%z' "$OUT/headers/include.tar")
+echo "  $HEADER_COUNT headers → $(( TARSZ_HDR / 1024 )) KB (tarball; loose tree retained for tests)"
+
+# Mirror the clang builtin headers into a tarball as a SIBLING of the
+# loose tree (web/assets/emception/clang-headers.tar — one level above
+# the .h files). compiler.js fetches it via `./assets/emception/clang-
+# headers.tar`. The loose tree is committed via Git LFS and stays in
+# place so the unit test (web/tests/sdk_build.mjs) can read it via
+# Node fs APIs. Idempotent.
+EMC_DIR="$REPO_ROOT/web/assets/emception"
+CLANG_HDR_DIR="$EMC_DIR/clang-headers"
+if [ -d "$CLANG_HDR_DIR" ]; then
+    # files.txt is no longer used by compiler.js; exclude it from the tar
+    # so the bundle contains only headers.
+    ( cd "$CLANG_HDR_DIR" && \
+      tar --exclude=files.txt -cf "$EMC_DIR/clang-headers.tar" . )
+    CLANG_TARSZ=$(stat -f '%z' "$EMC_DIR/clang-headers.tar")
+    CLANG_COUNT=$(find "$CLANG_HDR_DIR" -type f -not -name 'files.txt' | wc -l | tr -d ' ')
+    echo "  clang-headers: $CLANG_COUNT files → $(( CLANG_TARSZ / 1024 )) KB (tarball at $EMC_DIR/clang-headers.tar)"
+fi
 
 # Boot2 + tinyUSB are absent from this lite bundle; touch stubs so downstream
 # #include doesn't explode. Users writing network-heavy code will hit
@@ -156,7 +208,8 @@ cat > "$OUT/manifest.json" <<EOF
   "startup_objects": ["/pico-sdk/startup/bs2_default_padded_checksummed.S.obj"],
   "lib_tarball": "/pico-sdk/lib/pico-sdk-objects.tar",
   "include_root": "/pico-sdk/include",
-  "notes": "Harvested from arm-none-eabi-gcc build; lld links GCC-compiled .o files fine. tinyUSB/lwIP excluded — this is a pico-sdk-LITE for GPIO/time/stdio demos."
+  "header_tarball": "/pico-sdk/headers/include.tar",
+  "notes": "Harvested from arm-none-eabi-gcc build. Bundles the FULL firmware (network.c.o, http_server.c.o, ota.c.o, discovery.c.o, lwIP, RMII driver, tinyUSB) so user main.c uploaded via the web IDE links as a supplement — strong conduit_setup/loop overrides replace the weak hooks in the framework's main.c, preserving network + OTA + telemetry + discovery."
 }
 EOF
 

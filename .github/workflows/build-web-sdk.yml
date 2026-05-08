@@ -197,9 +197,15 @@ jobs:
           find firmware/build -name '*.ld' -exec cp {} "$OUT"/linker/ \;
 
           # Public headers. The browser clang needs -isystem paths pointing
-          # at SDK public headers; we ship the full tree (it compresses well).
+          # at SDK public headers. We pack the entire tree into a single
+          # .tar that compiler.js fetches and walks with its built-in
+          # walkTar() — one fetch instead of ~400 individual .h fetches.
+          STAGE_HDR=$(mktemp -d)
           rsync -a --include='*/' --include='*.h' --exclude='*' \
-            "$PICO_SDK_PATH/src/" "$OUT/headers/pico-sdk/"
+            "$PICO_SDK_PATH/src/" "$STAGE_HDR/"
+          mkdir -p "$OUT/headers"
+          ( cd "$STAGE_HDR" && tar -cf "$OUT/headers/include.tar" . )
+          rm -rf "$STAGE_HDR"
 
           echo '--- staged sizes ---'
           du -sh "$OUT"/{lib,startup,linker,headers}

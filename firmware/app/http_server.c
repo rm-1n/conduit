@@ -16,6 +16,7 @@
 #include "network.h"
 #include "ota.h"
 #include "conduit_config.h"
+#include "dev_log.h"
 #include "log_buffer.h"
 #include "data_buffer.h"
 #include "commands.h"
@@ -876,7 +877,7 @@ void http_server_on_link_down(void) {
         aborted++;
     }
     if (aborted > 0) {
-        printf("[http] link-down: aborted %d stream PCB%s\n",
+        DEV_LOG("[http] link-down: aborted %d stream PCB%s\n",
                aborted, aborted == 1 ? "" : "s");
     }
 }
@@ -1159,23 +1160,23 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err) {
 void http_server_init(void) {
     struct tcp_pcb *pcb = tcp_new();
     if (!pcb) {
-        printf("[http] Failed to create PCB\n");
+        DEV_LOG("[http] Failed to create PCB\n");
         return;
     }
 
     err_t err = tcp_bind(pcb, IP_ADDR_ANY, CONDUIT_HTTP_PORT);
     if (err != ERR_OK) {
-        printf("[http] Bind failed: %d\n", err);
+        DEV_LOG("[http] Bind failed: %d\n", err);
         return;
     }
 
     pcb = tcp_listen(pcb);
     if (!pcb) {
-        printf("[http] Listen failed\n");
+        DEV_LOG("[http] Listen failed\n");
         return;
     }
 
     tcp_accept(pcb, http_accept);
 
-    printf("[http] Server listening on port %d\n", CONDUIT_HTTP_PORT);
+    DEV_LOG("[http] Server listening on port %d\n", CONDUIT_HTTP_PORT);
 }

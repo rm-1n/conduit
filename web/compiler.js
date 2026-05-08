@@ -82,13 +82,15 @@ SECTIONS {
 
   async function fetchBytes(url, stage) {
     // Append CONDUIT_ASSET_VERSION as a query param so each deploy gets a
-    // distinct URL — Python's dev server doesn't emit Last-Modified or ETag
-    // headers, so `cache: 'no-cache'` alone can't force revalidation of the
-    // SDK bundle / newlib archives / clang headers. The version query makes
-    // every new deploy bypass the browser cache unconditionally.
+    // distinct URL. That alone is enough to bust caches per deploy — we
+    // intentionally use the default browser cache (NOT cache: 'no-cache')
+    // so within a single deploy, reloads serve from the HTTP cache and
+    // skip the network entirely. GitHub Pages emits proper ETag /
+    // Last-Modified, so 304s would also be cheap, but with the version
+    // query they aren't even needed.
     const v = (typeof window !== 'undefined' && window.CONDUIT_ASSET_VERSION) || 'dev';
     const busted = url + (url.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(v);
-    const res = await fetch(busted, { cache: 'no-cache' });
+    const res = await fetch(busted);
     if (!res.ok) throw new Error(`fetch ${url} → HTTP ${res.status}`);
     const total = Number(res.headers.get('content-length') || 0);
     if (!res.body || !total) {
@@ -139,26 +141,19 @@ SECTIONS {
     }
   }
 
-  // Fetch every file in a manifest-enumerated tree into a host-side Map<rel,
-  // Uint8Array>. The browser can't list directories, so we ship files.txt
-  // alongside each tree. The returned Map is bulk-written to the VFS of every
-  // freshly-instantiated Module during compile().
-  async function fetchManifest(baseUrl, stage) {
-    const v = (typeof window !== 'undefined' && window.CONDUIT_ASSET_VERSION) || 'dev';
-    const manifestUrl = new URL('files.txt', baseUrl).href + '?v=' + encodeURIComponent(v);
-    const res = await fetch(manifestUrl, { cache: 'no-cache' });
-    if (!res.ok) throw new Error(`manifest fetch failed: ${res.status}`);
-    const list = (await res.text()).split('\n').filter(Boolean);
+  // Fetch a tarball at `tarUrl` and return a Map<relPath, Uint8Array> of
+  // its contents. Replaces the prior per-file fetchManifest() approach:
+  // one fetch instead of hundreds, smaller wire bytes after gzip, no
+  // files.txt manifest needed (the tar header lists everything).
+  async function fetchTarMap(tarUrl, stage) {
+    const tarBytes = await fetchBytes(tarUrl, stage);
     const map = new Map();
-    const total = list.length;
-    let done = 0;
-    for (const rel of list) {
-      const url = new URL(rel, baseUrl).href;
-      const data = await fetchBytes(url, stage);
-      map.set(rel, data);
-      done++;
-      progress(stage, (done / total) * 100, `${done}/${total} files (${rel})`);
+    let count = 0;
+    for (const { path, data } of walkTar(tarBytes)) {
+      map.set(path, data);
+      count++;
     }
+    progress(stage, 100, `${count} files unpacked`);
     return map;
   }
 
@@ -185,12 +180,12 @@ SECTIONS {
       LlvmBoxFactory = (await import(LLVM_BOX_MJS)).default;
 
       progress('clang-headers', 0, 'fetching clang builtin headers');
-      const clangHeaders = await fetchManifest(
-        new URL('clang-headers/', COMPILER_ROOT), 'clang-headers');
+      const clangHeaders = await fetchTarMap(
+        new URL('clang-headers.tar', COMPILER_ROOT).href, 'clang-headers');
 
       progress('sdk', 0, 'fetching Pico SDK headers');
-      const sdkHeaders = await fetchManifest(
-        new URL('headers/include/', SDK_ROOT), 'sdk');
+      const sdkHeaders = await fetchTarMap(
+        new URL('headers/include.tar', SDK_ROOT).href, 'sdk');
 
       const startupFiles = new Map();
       for (const rel of ['startup/bs2_default_padded_checksummed.S.o',

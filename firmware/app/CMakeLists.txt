@@ -79,6 +79,14 @@ target_link_libraries(conduit_rmii INTERFACE
 # rollback path so we can verify it works end-to-end.
 option(CONDUIT_SIMULATE_HANG "Hang after init to exercise the TBYB watchdog rollback" OFF)
 
+# ---- Developer logging ----------------------------------------------------
+# When OFF (default), every DEV_LOG(...) call in firmware/app/ expands to a
+# no-op — the production firmware is silent over USB CDC. Turn ON via
+# `cmake -DCONDUIT_DEV_LOGS=ON` (or `conduit build --dev` / `conduit flash --dev`)
+# to get the [net] / [discovery] / [main] status chatter back. See dev_log.h
+# for the full rationale.
+option(CONDUIT_DEV_LOGS "Enable verbose firmware status prints over USB CDC" OFF)
+
 # ---- App executable helper --------------------------------------------------
 #
 # The app ships as two UF2s built from the same source:
@@ -109,6 +117,7 @@ function(conduit_define_app TARGET)
         data_buffer.c
         commands.c
         diag.c
+        discovery.c
     )
 
     target_include_directories(${TARGET} PRIVATE
@@ -128,6 +137,9 @@ function(conduit_define_app TARGET)
     endif()
     if(CONDUIT_SIMULATE_HANG)
         target_compile_definitions(${TARGET} PRIVATE CONDUIT_SIMULATE_HANG=1)
+    endif()
+    if(CONDUIT_DEV_LOGS)
+        target_compile_definitions(${TARGET} PRIVATE CONDUIT_DEV_LOGS=1)
     endif()
 
     target_link_libraries(${TARGET}
@@ -150,7 +162,7 @@ function(conduit_define_app TARGET)
     # Binary version for A/B partition selection — bump MINOR per OTA test
     # cycle. The RP2350 bootrom compares versions across partitions and
     # boots the newer.
-    pico_set_binary_version(${TARGET} MAJOR 9 MINOR 99)
+    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 1)
 
     # Embed the A/B partition table so the bootrom can discover the layout
     # and pick between A and B based on binary version.
@@ -216,7 +228,7 @@ function(conduit_define_app_minimal TARGET)
     pico_enable_stdio_usb(${TARGET} 1)
     pico_enable_stdio_uart(${TARGET} 0)
 
-    pico_set_binary_version(${TARGET} MAJOR 9 MINOR 99)
+    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 1)
     pico_embed_pt_in_binary(${TARGET} ${CMAKE_SOURCE_DIR}/bootloader/partitions.json)
     if(EXISTS "${CMAKE_SOURCE_DIR}/keys/private.pem")
         pico_sign_binary(${TARGET} ${CMAKE_SOURCE_DIR}/keys/private.pem)
