@@ -169,10 +169,18 @@ bool conduit_identity_load(conduit_identity_t *out) {
     int32_t offset = find_identity_partition_offset();
     if (offset < 0) return false;
 
-    // Flash is memory-mapped via XIP, so a plain memcpy from the XIP
-    // address into our SRAM buffer is enough — no flash-read API or
-    // cache-flush needed because the partition was written before the
-    // device booted (picotool flashes from BOOTSEL).
+    // KNOWN-BROKEN as written: a direct XIP memcpy from partition 2's flash
+    // window (e.g. 0x103F0000 on 4 MB flash) HardFaults on this device.
+    // After rom_load_partition_table + rom_get_partition_table_info above,
+    // the bootrom has narrowed XIP coverage to the booted partition's
+    // range only, and reads outside that fault. The fix is to wrap the
+    // read in a flash_safe_execute call against a thunk in RAM that does:
+    //     rom_connect_internal_flash → rom_flash_exit_xip
+    //     → rom_flash_flush_cache → rom_flash_enter_cmd_xip → memcpy
+    // — the rom_flash_* dance can't run from XIP because it cuts XIP
+    // mid-call. That work belongs with the PR 4 (TLS server) refactor;
+    // until then main.c bypasses conduit_identity_load() entirely so the
+    // firmware boots cleanly over plain HTTP.
     const uint8_t *src = (const uint8_t *)(XIP_BASE + (uint32_t)offset);
     memcpy(g_identity_blob, src, CONDUIT_IDENTITY_BLOB_SIZE);
 

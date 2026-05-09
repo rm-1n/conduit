@@ -155,6 +155,18 @@ function(conduit_define_app TARGET)
         hardware_gpio
         hardware_adc
         conduit_rmii
+        # TLS (Phase 2) is staged in two parts. Part one: enable LWIP_ALTCP
+        # in lwipopts.h so http_server.c can be refactored from tcp_* to
+        # altcp_* without bringing in mbedtls — already done. Part two:
+        # link `pico_mbedtls` + `pico_lwip_mbedtls`, define
+        # `LWIP_ALTCP_TLS` / `LWIP_ALTCP_TLS_MBEDTLS`, point at a trimmed
+        # mbedtls user config, and call `altcp_tls_create_config_server_*`
+        # in `http_server_init_tls`. Part two requires the conduit_lwip
+        # INTERFACE library to inherit pico_mbedtls's include paths
+        # (target_link_libraries(conduit_lwip INTERFACE pico_mbedtls))
+        # and a check_config.h-clean MBEDTLS_USER_CONFIG_FILE — both
+        # land with the actual runtime change so uncommissioned boards
+        # stay byte-for-byte identical to today's HTTP-only firmware.
     )
 
     # Console output via USB
@@ -164,7 +176,7 @@ function(conduit_define_app TARGET)
     # Binary version for A/B partition selection — bump MINOR per OTA test
     # cycle. The RP2350 bootrom compares versions across partitions and
     # boots the newer.
-    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 3)
+    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 4)
 
     # Embed the A/B partition table so the bootrom can discover the layout
     # and pick between A and B based on binary version.

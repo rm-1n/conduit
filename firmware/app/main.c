@@ -130,15 +130,15 @@ int main() {
     // Failure is non-fatal — the firmware keeps booting over plain HTTP
     // for diagnosis (a fresh dev board with no IDENTITY blob yet hits
     // this path, and we want it reachable).
-    conduit_identity_t identity = {0};
-    if (conduit_identity_load(&identity)) {
-        DEV_LOG("[identity] loaded id=%s key=%uB cert=%uB\n",
-                identity.unique_id,
-                (unsigned)identity.key_len,
-                (unsigned)identity.cert_len);
-    } else {
-        DEV_LOG("[identity] no valid IDENTITY partition; running unauthenticated\n");
-    }
+    // IDENTITY partition load is gated off until the XIP-restore path is
+    // proven safe on hardware. With partition 2 added to the table, the
+    // bootrom narrows XIP coverage to partition A's range only — direct
+    // reads from 0x103F0000 (partition 2) HardFault. The proper fix needs
+    // conduit_identity_load() to run via flash_safe_execute against a
+    // RAM-resident copy of the rom XIP-restore dance, which is part of
+    // PR 4 (TLS server) and not safe to land alone.
+    // Until then, the firmware runs unauthenticated over plain HTTP — the
+    // self-host story stays fully intact.
 
     // Seed the runtime console with a boot banner so users see something
     // immediately when the web IDE attaches, even before their own log()

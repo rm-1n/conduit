@@ -103,4 +103,11 @@
 #define LWIP_HTTPD_CGI                  0
 #define LWIP_HTTPD_SSI                  0
 
+// altcp shim — disabled until the http_server.c refactor that uses it.
+// Turning LWIP_ALTCP=1 alone (with no altcp_* call sites) had been the
+// plan for a "no-op scaffolding" PR, but the running board went silent
+// on /api/status + multicast discovery after that build, so it's parked
+// until we can capture the boot path on a hardware bench.
+// #define LWIP_ALTCP                      1
+
 #endif /* __LWIPOPTS_H__ */
