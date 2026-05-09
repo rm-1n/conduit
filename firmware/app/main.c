@@ -25,6 +25,7 @@
 #include "commands.h"
 #include "diag.h"
 #include "discovery.h"
+#include "identity.h"
 #endif
 
 // Symbol from the rmii_ethernet driver — the inner step of its loop.
@@ -121,6 +122,23 @@ int main() {
     // Latch boot_type / TBYB-pending state before anything else can touch
     // the bootrom. Needed for /api/status and /api/commit semantics.
     ota_init_boot_state();
+
+    // Read the IDENTITY partition (id=2) into RAM. Holds the per-device
+    // unique-id + cert + key the host-side `commission flash-identity`
+    // tool wrote at provisioning. Phase 1 only logs that the load
+    // succeeded; Phase 2's TLS server will hand the cert/key to mbedtls.
+    // Failure is non-fatal — the firmware keeps booting over plain HTTP
+    // for diagnosis (a fresh dev board with no IDENTITY blob yet hits
+    // this path, and we want it reachable).
+    conduit_identity_t identity = {0};
+    if (conduit_identity_load(&identity)) {
+        DEV_LOG("[identity] loaded id=%s key=%uB cert=%uB\n",
+                identity.unique_id,
+                (unsigned)identity.key_len,
+                (unsigned)identity.cert_len);
+    } else {
+        DEV_LOG("[identity] no valid IDENTITY partition; running unauthenticated\n");
+    }
 
     // Seed the runtime console with a boot banner so users see something
     // immediately when the web IDE attaches, even before their own log()

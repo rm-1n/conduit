@@ -640,16 +640,13 @@ void conduit_loop(void) {
       if (known.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
-        opt.textContent = '(no device — Add an IP)';
+        opt.textContent = '(no device — Add one in Hardware Manager)';
         deviceSelect.appendChild(opt);
       } else {
         for (const d of known) {
           const opt = document.createElement('option');
           opt.value = d.ip;
-          const parts = [d.ip];
-          if (d.version) parts.push(`v${d.version}`);
-          if (d.partition) parts.push(d.partition);
-          opt.textContent = parts.join(' — ');
+          opt.textContent = devicePickerLabel(d);
           deviceSelect.appendChild(opt);
         }
       }
@@ -666,13 +663,25 @@ void conduit_loop(void) {
     const deviceLabel   = document.getElementById('ide-device-label');
     const deviceLed     = document.getElementById('ide-device-led');
 
+    // Picker label: prefer human name, then unique-id, then bare IP.
+    // Same shape as Hardware Manager's row label so the picker doesn't
+    // surprise people who registered the device under a name.
+    function devicePickerLabel(d) {
+      const head = d.name || d.uniqueId || d.ip;
+      const tail = [];
+      if (head !== d.ip)    tail.push(d.ip);
+      if (d.version)        tail.push(`v${d.version}`);
+      if (d.partition)      tail.push(d.partition);
+      return tail.length ? `${head} — ${tail.join(' · ')}` : head;
+    }
+
     function rebuildDeviceMenu(known) {
       if (!deviceMenu) return;
       deviceMenu.innerHTML = '';
       if (!known || known.length === 0) {
         const empty = document.createElement('li');
         empty.className = 'device-picker__menu-empty';
-        empty.textContent = 'No devices yet — find one with `conduit discover` and Add its IP.';
+        empty.textContent = 'No devices yet — open Hardware Manager to add one.';
         deviceMenu.appendChild(empty);
         return;
       }
@@ -681,10 +690,7 @@ void conduit_loop(void) {
         li.className = 'device-picker__menu-item';
         li.setAttribute('role', 'option');
         li.dataset.value = d.ip;
-        const parts = [d.ip];
-        if (d.version)   parts.push(`v${d.version}`);
-        if (d.partition) parts.push(d.partition);
-        li.textContent = parts.join(' — ');
+        li.textContent = devicePickerLabel(d);
         if (d.ip === deviceSelect.value) li.setAttribute('aria-selected', 'true');
         deviceMenu.appendChild(li);
       }
@@ -692,7 +698,7 @@ void conduit_loop(void) {
     function updateDevicePickerLabel() {
       if (!deviceLabel) return;
       const opt = deviceSelect.options[deviceSelect.selectedIndex];
-      deviceLabel.textContent = (opt && opt.textContent) || '(no device — Add an IP)';
+      deviceLabel.textContent = (opt && opt.textContent) || '(no device — Add one in Hardware Manager)';
       // Highlight the active row in the menu (if it's open).
       if (deviceMenu) {
         for (const row of deviceMenu.querySelectorAll('.device-picker__menu-item')) {

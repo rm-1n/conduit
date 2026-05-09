@@ -88,7 +88,7 @@
                 aria-haspopup="listbox" aria-expanded="false"
                 title="Select a discovered device">
           <span class="device-picker__led" id="ide-device-led" data-state="off" aria-hidden="true"></span>
-          <span class="device-picker__label" id="ide-device-label">(no device — Add or Scan)</span>
+          <span class="device-picker__label" id="ide-device-label">(no device — Add one in Hardware Manager)</span>
           <span class="device-picker__caret material-symbols-outlined" aria-hidden="true">expand_more</span>
         </button>
         <ul class="device-picker__menu" id="ide-device-menu" role="listbox" hidden></ul>
@@ -282,19 +282,59 @@
 </div>
 </section><!-- /#view-ide -->
 
-<!-- Hardware Manager view — placeholder until the fleet UI lands.
+<!-- Hardware Manager view — register devices the IDE can talk to.
      Lives in the same .route/.view chain as the IDE so the same
      `.is-active` toggle pattern handles both. The IDE's DOM stays
      mounted (just display:none) while we're here, so its telemetry
      stream, runtime console, build artefacts, editor state, and
-     device connection survive the round-trip. -->
+     device connection survive the round-trip.
+     IP is required; unique-id and name are optional. With a unique-id
+     the IDE talks to the device over HTTPS via the per-device wildcard
+     hostname; without it, plain HTTP. -->
 <section class="view view--hardware" id="view-hardware">
-  <div class="view-placeholder">
-    <h2>Hardware Manager</h2>
-    <p>Fleet management coming soon. Looking to expand it?</p>
-    <!-- CTA → rm1n.com (the Shopify storefront). External, opens in a
-         new tab; rel=noopener strips the back-reference for safety. -->
-    <a class="btn-cta" href="https://rm1n.com" target="_blank" rel="noopener noreferrer">Visit our store</a>
+  <div class="hardware-pane">
+    <header class="hardware-pane__header">
+      <h2>Hardware Manager</h2>
+      <p class="hardware-pane__hint">
+        Find a device with <code>conduit discover</code> on the CLI, then add its IP here.
+        Add a unique-id (16 hex chars) too if the board was commissioned for HTTPS.
+      </p>
+    </header>
+
+    <form class="hardware-form" id="hardware-add-form" novalidate>
+      <div class="hardware-form__row">
+        <label class="hardware-form__field">
+          <span class="hardware-form__label">IP address</span>
+          <input class="hardware-form__input" id="hardware-ip" type="text"
+                 inputmode="numeric"
+                 pattern="^(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])){3}$"
+                 placeholder="192.168.178.200" autocomplete="off" required>
+        </label>
+        <label class="hardware-form__field">
+          <span class="hardware-form__label">Unique-id <small>(optional, enables HTTPS)</small></span>
+          <input class="hardware-form__input" id="hardware-uid" type="text"
+                 pattern="^[a-f0-9]{16}$"
+                 placeholder="29166ac0e5917701" autocomplete="off"
+                 maxlength="16" spellcheck="false">
+        </label>
+        <label class="hardware-form__field">
+          <span class="hardware-form__label">Name <small>(optional)</small></span>
+          <input class="hardware-form__input" id="hardware-name" type="text"
+                 placeholder="bench-1" autocomplete="off" maxlength="32">
+        </label>
+        <button class="hardware-form__submit" id="hardware-add-btn" type="submit">Add</button>
+      </div>
+      <div class="hardware-form__status" id="hardware-status" role="status"></div>
+    </form>
+
+    <div class="hardware-list-wrap">
+      <h3 class="hardware-list-title">Known devices</h3>
+      <ul class="hardware-list" id="hardware-list" aria-live="polite">
+        <li class="hardware-list__empty" id="hardware-list-empty">
+          No devices yet. Add one above to get started.
+        </li>
+      </ul>
+    </div>
   </div>
 </section>
 
@@ -594,7 +634,7 @@
   // Account view's sidebar footer. CONDUIT_COMMIT is an 8-char prefix
   // of the git SHA the assets were built from; the deploy workflow
   // sed-replaces 'dev' with the real value at publish time.
-  window.CONDUIT_ASSET_VERSION = '2026-05-08-scan-removed';
+  window.CONDUIT_ASSET_VERSION = '2026-05-09-hardware-manager';
   window.CONDUIT_COMMIT        = 'dev';
 </script>
 <!-- uPlot — high-performance time-series plotting via CDN. Pinned for
@@ -604,24 +644,25 @@
 <!-- Inline SVG icon helper. Loaded early so other scripts can call
      Conduit.icons.set(buttonEl, 'pause') without races. -->
 <script src="icons.js?v=127"></script>
-<script src="upload.js?v=121"></script>
+<script src="upload.js?v=122"></script>
 <script src="elf.js?v=121"></script>
 <script src="uf2.js?v=121"></script>
 <script src="finalize.js?v=121"></script>
 <script src="editor.js?v=121"></script>
 <script src="compiler.js?v=121"></script>
-<script src="app.js?v=145"></script>
-<script src="ide.js?v=146"></script>
+<script src="app.js?v=146"></script>
+<script src="hardware.js?v=1"></script>
+<script src="ide.js?v=147"></script>
 <script src="log_store.js?v=121"></script>
 <script src="log_export.js?v=121"></script>
-<script src="console.js?v=121"></script>
+<script src="console.js?v=122"></script>
 <script src="chart.js?v=143"></script>
 <!-- data_store.js: in-memory time-series store. Loaded before
      telemetry.js so the append target exists by the time the first
      record arrives. -->
 <script src="data_store.js?v=121"></script>
-<script src="telemetry.js?v=131"></script>
+<script src="telemetry.js?v=132"></script>
 <script src="netcon.js?v=121"></script>
-<script src="commands.js?v=121"></script>
+<script src="commands.js?v=122"></script>
 </body>
 </html>

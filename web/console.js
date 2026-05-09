@@ -330,7 +330,7 @@
 
   async function runStream(ip, signal) {
     const since = cursor === null ? 0 : cursor;
-    const url = `http://${ip}/api/log?since=${since}&stream=1`;
+    const url = `${window.Conduit.deviceUrlForIp(ip, '/api/log')}?since=${since}&stream=1`;
     wallMsAnchor = Date.now();  // consumed by the first record of this run
     console.log('[con] runStream.open', { url, cursor });
 

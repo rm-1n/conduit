@@ -665,11 +665,11 @@ def provision_clean(picotool, pt_uf2, app_uf2, ip):
 
     partition = status.get("partition", "?")
     version = status.get("version", "?")
-    if partition == "A":
-        ok(f"Provisioned — partition A, v{version}")
-        return True
-    fail(f"Partition is {partition!r}, expected 'A' (version {version})")
-    return False
+    if partition != "A":
+        fail(f"Partition is {partition!r}, expected 'A' (version {version})")
+        return False
+    ok(f"Provisioned — partition A, v{version}")
+    return True
 
 
 def ota_commit(ip, token, timeout=5):

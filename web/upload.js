@@ -72,7 +72,7 @@
 
       const total = blob.size;
       const nChunks = Math.max(1, Math.ceil(total / chunkSize));
-      const url = `http://${ip}/api/upload`;
+      const url = window.Conduit.deviceUrlForIp(ip, '/api/upload');
 
       for (let i = 0; i < nChunks; i++) {
         if (aborted) return;
@@ -131,7 +131,7 @@
   }
 
   async function getStatus(ip, timeoutMs = 2000) {
-    const res = await fetch(`http://${ip}/api/status`, {
+    const res = await fetch(window.Conduit.deviceUrlForIp(ip, '/api/status'), {
       mode: 'cors',
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -176,7 +176,7 @@
   // POST /api/commit — flips a TBYB image from "on probation" to permanent.
   // Idempotent (returns committed:false if there's nothing to commit).
   async function commitFirmware(ip, token) {
-    const res = await fetch(`http://${ip}/api/commit`, {
+    const res = await fetch(window.Conduit.deviceUrlForIp(ip, '/api/commit'), {
       method: 'POST',
       mode: 'cors',
       headers: { 'X-Auth-Token': token, 'Content-Length': '0' },

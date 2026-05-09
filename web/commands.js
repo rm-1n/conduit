@@ -46,7 +46,7 @@
     const ip = getIp();
     if (!ip) throw new Error('no device selected');
     const tok = getToken();
-    const url = `http://${ip}/api/cmd?${buildQuery(name, args)}`;
+    const url = `${window.Conduit.deviceUrlForIp(ip, '/api/cmd')}?${buildQuery(name, args)}`;
     const res = await fetch(url, {
       method: 'POST',
       mode: 'cors',

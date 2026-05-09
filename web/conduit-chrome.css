@@ -311,6 +311,182 @@ body {
   outline-offset: 2px;
 }
 
+/* ---------- Hardware Manager view ----------
+   Form to register a device by IP (+ optional unique-id / name).
+   Variables (--ink, --surface, etc.) come from conduit-tokens.css. */
+.hardware-pane {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+.hardware-pane__header h2 {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 6px 0;
+}
+.hardware-pane__hint {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin: 0;
+}
+.hardware-pane__hint code {
+  background: var(--surface);
+  padding: 0 4px;
+  border: 1px solid var(--hairline);
+}
+.hardware-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+}
+.hardware-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+}
+@media (max-width: 720px) {
+  .hardware-form__row { grid-template-columns: 1fr; }
+}
+.hardware-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.hardware-form__label small {
+  color: var(--ink-faint);
+  font-weight: 400;
+  margin-left: 4px;
+}
+.hardware-form__input {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 8px 10px;
+  background: var(--canvas, #FFF);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 0;
+  min-height: 36px;
+}
+.hardware-form__input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-color: var(--accent);
+}
+.hardware-form__submit {
+  min-height: 36px;
+  padding: 0 16px;
+  background: var(--accent);
+  color: #FFF;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.hardware-form__submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.hardware-form__status {
+  font-size: 12px;
+  min-height: 16px;
+  color: var(--ink-faint);
+}
+.hardware-form__status[data-kind="ok"]      { color: var(--accent); }
+.hardware-form__status[data-kind="err"]     { color: #CC2222; }
+.hardware-form__status[data-kind="pending"] { color: var(--ink-faint); }
+
+.hardware-list-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hardware-list-title {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0;
+}
+.hardware-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hardware-list__empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--ink-faint);
+  border: 1px dashed var(--hairline);
+  background: var(--surface);
+}
+.hardware-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+}
+.hardware-list__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hardware-list__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hardware-list__meta {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.hardware-list__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.hardware-list__btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+.hardware-list__btn:hover { background: var(--canvas, #FFF); }
+.hardware-list__btn--danger { color: #CC2222; }
+.hardware-list__btn--danger:hover { background: rgba(204, 34, 34, 0.06); }
+
 /* ---------- Topbar (Conduit) ----------
    Mirrors the live Shopify storefront nav: a single black band that
    stays black in BOTH light and dark mode (per design spec it's

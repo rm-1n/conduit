@@ -262,7 +262,7 @@
       }
     }
     try {
-      const res = await fetch(`http://${ip}/api/data_schema`,
+      const res = await fetch(window.Conduit.deviceUrlForIp(ip, '/api/data_schema'),
                               { mode: 'cors', cache: 'no-store', signal: schemaAbort.signal });
       clearTimeout(schemaTimer);
       if (!res.ok) return;
@@ -441,7 +441,7 @@
     // current data, adding seconds to perceived recovery time. The user
     // accepts losing samples that occurred while the cable was out —
     // the chart just shows a gap (chart.gap() below) and resumes live.
-    const url = `http://${ip}/api/data?stream=1`;
+    const url = `${window.Conduit.deviceUrlForIp(ip, '/api/data')}?stream=1`;
     wallMsAnchor = Date.now();
     parseBuf = new Uint8Array(0);
     diag('runStream.open', { url, cursor });

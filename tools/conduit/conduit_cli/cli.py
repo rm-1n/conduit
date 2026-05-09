@@ -5,7 +5,7 @@ import os
 import sys
 import time
 import click
-from .api import ConduitDevice, scan_subnet
+from .api import ConduitDevice
 from . import dev
 from . import discover as _discover
 
@@ -56,32 +56,6 @@ def status(device):
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
-
-
-@main.command()
-@click.option("-s", "--subnet", required=True, help="Subnet prefix (e.g. 192.168.1)")
-def scan(subnet):
-    """Scan a /24 subnet for CONDUIT devices.
-
-    Deprecated — use ``conduit discover`` instead. The /24 HTTP-status
-    sweep predates the Plex-style hostname architecture; once devices
-    are reachable via per-device ``*.<id>.devices.rm1n.com`` names
-    there's no need to enumerate raw IPs. Discovery now happens via
-    the multicast beacon firmware emits at 1 Hz.
-    """
-    click.echo(
-        "warning: `conduit scan` is deprecated and will be removed. "
-        "Use `conduit discover` (multicast-based, no subnet sweep needed).",
-        err=True,
-    )
-    click.echo(f"Scanning {subnet}.0/24...")
-    results = scan_subnet(subnet)
-    if not results:
-        click.echo("No devices found.")
-        return
-    click.echo(f"Found {len(results)} device(s):")
-    for d in results:
-        click.echo(f"  {d['_ip']:16s}  v{d.get('version','?'):8s}  {d.get('mac','?')}")
 
 
 @main.command()
@@ -360,13 +334,19 @@ def ota_upload(device, token, filepath):
 @click.option("--picotool",  envvar="PICOTOOL",        default=dev.DEFAULT_PICOTOOL,      help="Path to picotool")
 @click.option("--skip-build", is_flag=True, default=False, help="Skip cmake build step")
 def provision(device, firmware_dir, sdk, toolchain, picotool, skip_build):
-    """Clean first-time install: bootloader + partition A seed + verify /api/status == A."""
+    """Clean first-time install: partition table + partition A seed.
+
+    Hold BOOTSEL while plugging the board in, then run `conduit provision`.
+    The tool erases flash, lays down the partition table, seeds the app
+    into partition A, and reboots. After the reboot the device is reachable
+    over HTTP at the configured IP.
+    """
     firmware_dir = firmware_dir or dev.DEFAULT_FIRMWARE_DIR
     if not skip_build:
         dev.build_firmware(firmware_dir, sdk, toolchain)
     pt_uf2, initial_uf2, _ota_uf2 = dev.firmware_uf2_paths(firmware_dir)
-    ok = dev.provision_clean(picotool, pt_uf2, initial_uf2, device)
-    sys.exit(0 if ok else 1)
+    success = dev.provision_clean(picotool, pt_uf2, initial_uf2, device)
+    sys.exit(0 if success else 1)
 
 
 @main.command(name="ab-cycle")
