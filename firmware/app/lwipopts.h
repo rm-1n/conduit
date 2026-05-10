@@ -55,7 +55,16 @@
 // blinking but no new connections succeed. Keepalive (below) is the
 // cleanup mechanism; the bump is a safety margin while keepalive
 // probes do their work.
-#define MEMP_NUM_TCP_PCB                8
+// Bumped 8 → 24 because OTA via the conduit CLI / web IDE opens a fresh
+// TCP connection per 8 KB chunk (47 chunks for a typical app), and at 8
+// PCBs the pool exhausts: lwIP starts RST'ing new SYNs and OTA dies
+// with "Connection reset by peer". 24 leaves comfortable headroom for
+// short-lived OTA chunks plus the two listening pcbs (HTTP + HTTPS),
+// plus persistent browser streams (/api/log + /api/data). Each pcb is
+// ~140 B → ~2.2 KB extra SRAM, trivial. The proper fix is HTTP/1.1
+// keep-alive on the OTA path so all chunks share one TCP connection;
+// that's a CLI + IDE change for a follow-up.
+#define MEMP_NUM_TCP_PCB                24
 
 // lwIP's default LWIP_NUM_SYS_TIMEOUT_INTERNAL on this build is 2
 // (LWIP_TCP + LWIP_ARP). That's only enough for the cyclic system
@@ -86,8 +95,16 @@
 // tcp_tmr() call every ~50 ms (microseconds of work per call).
 #define TCP_TMR_INTERVAL                50
 
-// Memory pool — need enough for OTA upload buffering
-#define MEM_SIZE                        8192
+// Memory pool — bumped 8 KB → 48 KB after observing heap exhaustion
+// during OTA. lwIP's global heap backs short-lived per-conn allocations
+// (tcp segment data not in MEMP, altcp_tls handshake state, mbedtls
+// session bookkeeping). At 8 KB and 24 PCBs + 2 listeners, the heap
+// fills within a few seconds of upload activity, lwIP starts aborting
+// connections (err=-13 ERR_ABRT cascade in diag), and OTA chunk 1
+// eventually times out without ever completing. 48 KB leaves headroom
+// for many concurrent TLS handshakes plus an OTA stream. SRAM cost is
+// 40 KB more; trivial against RP2350's 520 KB total.
+#define MEM_SIZE                        49152
 
 // Stats — explicit so the firmware-side diag.c heartbeat can read
 // real numbers for heap, MEMP pools, and link layer. Defaults are
@@ -103,11 +120,13 @@
 #define LWIP_HTTPD_CGI                  0
 #define LWIP_HTTPD_SSI                  0
 
-// altcp shim — disabled until the http_server.c refactor that uses it.
-// Turning LWIP_ALTCP=1 alone (with no altcp_* call sites) had been the
-// plan for a "no-op scaffolding" PR, but the running board went silent
-// on /api/status + multicast discovery after that build, so it's parked
-// until we can capture the boot path on a hardware bench.
-// #define LWIP_ALTCP                      1
+// altcp + altcp_tls — http_server.c uses the altcp API for both the
+// plain-HTTP listener (port 80) and the TLS listener (port 443). Both
+// flags are required to compile altcp_tls_mbedtls.c into the build.
+// pico_lwip_mbedtls is linked from app/CMakeLists.txt; the MBEDTLS_*
+// configuration lives there too.
+#define LWIP_ALTCP                      1
+#define LWIP_ALTCP_TLS                  1
+#define LWIP_ALTCP_TLS_MBEDTLS          1
 
 #endif /* __LWIPOPTS_H__ */

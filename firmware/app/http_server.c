@@ -20,13 +20,17 @@
 #include "log_buffer.h"
 #include "data_buffer.h"
 #include "commands.h"
+#include "identity.h"
 #include "rmii_ethernet/netif.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
-#include "lwip/tcp.h"
+#include "lwip/altcp.h"
+#include "lwip/altcp_tcp.h"
+#include "lwip/altcp_tls.h"
+#include "lwip/tcp.h"           // tcp_pcb fields for keepalive (walked via altcp inner_conn)
 #include "lwip/pbuf.h"
 #include "pico/unique_id.h"
 #include "pico/stdlib.h"
@@ -149,9 +153,9 @@ static size_t copy_header_value(const char *val, char *out, size_t max) {
 }
 
 // Forward decls.
-static err_t http_poll(void *arg, struct tcp_pcb *pcb);
-static void conn_close(struct tcp_pcb *pcb, http_conn_t *conn);
-static void enable_keepalive(struct tcp_pcb *pcb);
+static err_t http_poll(void *arg, struct altcp_pcb *pcb);
+static void conn_close(struct altcp_pcb *pcb, http_conn_t *conn);
+static void enable_keepalive(struct altcp_pcb *pcb);
 
 // --------------------------------------------------------------------------
 // Streaming-connection registry
@@ -162,7 +166,7 @@ static void enable_keepalive(struct tcp_pcb *pcb);
 // MEMP_NUM_TCP_PCB pool for ~50 s (keepalive probe duration) and the
 // browser's reconnect SYNs get refused because the pool is full.
 typedef struct {
-    struct tcp_pcb *pcb;
+    struct altcp_pcb *pcb;
     http_conn_t    *conn;
 } stream_reg_entry_t;
 
@@ -178,7 +182,7 @@ static volatile uint32_t g_streams_started_total = 0;
 uint32_t http_server_accepts(void)         { return g_accepts_total; }
 uint32_t http_server_streams_started(void) { return g_streams_started_total; }
 
-static void register_streaming(struct tcp_pcb *pcb, http_conn_t *conn) {
+static void register_streaming(struct altcp_pcb *pcb, http_conn_t *conn) {
     for (int i = 0; i < STREAM_REG_SIZE; i++) {
         if (stream_registry[i].pcb == NULL) {
             stream_registry[i].pcb  = pcb;
@@ -191,7 +195,7 @@ static void register_streaming(struct tcp_pcb *pcb, http_conn_t *conn) {
 // Idempotent. Matches by pcb when available, otherwise by conn (http_err
 // only has the conn pointer because lwIP has already freed the pcb by
 // the time the err callback fires).
-static void unregister_streaming(struct tcp_pcb *pcb, http_conn_t *conn) {
+static void unregister_streaming(struct altcp_pcb *pcb, http_conn_t *conn) {
     for (int i = 0; i < STREAM_REG_SIZE; i++) {
         if ((pcb && stream_registry[i].pcb == pcb) ||
             (conn && stream_registry[i].conn == conn)) {
@@ -206,7 +210,7 @@ static void unregister_streaming(struct tcp_pcb *pcb, http_conn_t *conn) {
 // Response builders
 // --------------------------------------------------------------------------
 
-static err_t send_response(struct tcp_pcb *pcb, const char *status,
+static err_t send_response(struct altcp_pcb *pcb, const char *status,
                            const char *content_type, const char *body, size_t body_len) {
     char hdr[512];
     int hdr_len = snprintf(hdr, sizeof(hdr),
@@ -218,25 +222,25 @@ static err_t send_response(struct tcp_pcb *pcb, const char *status,
         "\r\n",
         status, content_type, (unsigned)body_len, cors_headers);
 
-    tcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
+    altcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
     if (body && body_len > 0) {
-        tcp_write(pcb, body, body_len, TCP_WRITE_FLAG_COPY);
+        altcp_write(pcb, body, body_len, TCP_WRITE_FLAG_COPY);
     }
-    tcp_output(pcb);
+    altcp_output(pcb);
     return ERR_OK;
 }
 
-static err_t send_json(struct tcp_pcb *pcb, const char *status, const char *json) {
+static err_t send_json(struct altcp_pcb *pcb, const char *status, const char *json) {
     return send_response(pcb, status, "application/json", json, strlen(json));
 }
 
-static err_t send_error(struct tcp_pcb *pcb, const char *status, const char *message) {
+static err_t send_error(struct altcp_pcb *pcb, const char *status, const char *message) {
     char buf[256];
     int len = snprintf(buf, sizeof(buf), "{\"error\":\"%s\"}", message);
     return send_response(pcb, status, "application/json", buf, len);
 }
 
-static err_t send_cors_preflight(struct tcp_pcb *pcb) {
+static err_t send_cors_preflight(struct altcp_pcb *pcb) {
     return send_response(pcb, "204 No Content", "text/plain", NULL, 0);
 }
 
@@ -244,7 +248,7 @@ static err_t send_cors_preflight(struct tcp_pcb *pcb) {
 // Route handlers
 // --------------------------------------------------------------------------
 
-static void handle_status(struct tcp_pcb *pcb) {
+static void handle_status(struct altcp_pcb *pcb) {
     char board_id[32];
     get_board_id(board_id, sizeof(board_id));
 
@@ -296,7 +300,7 @@ static void handle_status(struct tcp_pcb *pcb) {
     send_json(pcb, "200 OK", json);
 }
 
-static void handle_upload_begin(struct tcp_pcb *pcb, http_conn_t *conn) {
+static void handle_upload_begin(struct altcp_pcb *pcb, http_conn_t *conn) {
     if (!conn->authenticated) {
         send_error(pcb, "403 Forbidden", "invalid or missing auth token");
         conn->state = CONN_STATE_DONE;
@@ -326,7 +330,7 @@ static void handle_upload_begin(struct tcp_pcb *pcb, http_conn_t *conn) {
     conn->state = CONN_STATE_BODY;
 }
 
-static void handle_upload_data(struct tcp_pcb *pcb, http_conn_t *conn,
+static void handle_upload_data(struct altcp_pcb *pcb, http_conn_t *conn,
                                const uint8_t *data, size_t len) {
     ota_err_t err = ota_write_chunk(data, len);
     if (err != OTA_OK) {
@@ -356,7 +360,7 @@ static void handle_upload_data(struct tcp_pcb *pcb, http_conn_t *conn,
     }
 }
 
-static void handle_reboot(struct tcp_pcb *pcb, http_conn_t *conn) {
+static void handle_reboot(struct altcp_pcb *pcb, http_conn_t *conn) {
     if (!conn->authenticated) {
         send_error(pcb, "403 Forbidden", "invalid or missing auth token");
         conn->state = CONN_STATE_DONE;
@@ -384,7 +388,7 @@ static void handle_reboot(struct tcp_pcb *pcb, http_conn_t *conn) {
 // Send the log response for a given `since`. Used by both the immediate
 // path and the long-poll deadline path. log_out is static because both
 // callers run on the lwIP tcpip thread, so calls are serialized.
-static void send_log_response(struct tcp_pcb *pcb, uint32_t since) {
+static void send_log_response(struct altcp_pcb *pcb, uint32_t since) {
     static uint8_t log_out[4096];
     uint32_t next_cursor = since;
     size_t n = log_buffer_read(since, log_out, sizeof(log_out), &next_cursor);
@@ -405,16 +409,16 @@ static void send_log_response(struct tcp_pcb *pcb, uint32_t since) {
     // unbounded; clamp so we never tcp_write bytes past the buffer end.
     if (hdr_len < 0) hdr_len = 0;
     if (hdr_len > (int)sizeof(hdr)) hdr_len = (int)sizeof(hdr);
-    tcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
-    if (n > 0) tcp_write(pcb, log_out, n, TCP_WRITE_FLAG_COPY);
-    tcp_output(pcb);
+    altcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
+    if (n > 0) altcp_write(pcb, log_out, n, TCP_WRITE_FLAG_COPY);
+    altcp_output(pcb);
 }
 
 // Send the streaming-mode response headers — no Content-Length, no
 // Transfer-Encoding; the body extends until we close the connection.
 // HTTP/1.1 § 3.3.3 case 7 allows this when Connection: close is set, and
 // browsers consume it via fetch().body.getReader() with no special framing.
-static void send_log_stream_headers(struct tcp_pcb *pcb, uint32_t start_cursor) {
+static void send_log_stream_headers(struct altcp_pcb *pcb, uint32_t start_cursor) {
     char hdr[768];
     int hdr_len = snprintf(hdr, sizeof(hdr),
         "HTTP/1.1 200 OK\r\n"
@@ -431,8 +435,8 @@ static void send_log_stream_headers(struct tcp_pcb *pcb, uint32_t start_cursor) 
         (unsigned)start_cursor, cors_headers);
     if (hdr_len < 0) hdr_len = 0;
     if (hdr_len > (int)sizeof(hdr)) hdr_len = (int)sizeof(hdr);
-    tcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
-    tcp_output(pcb);
+    altcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
+    altcp_output(pcb);
 }
 
 // Return the chunk of the log ring buffer the caller hasn't seen yet.
@@ -453,7 +457,7 @@ static void send_log_stream_headers(struct tcp_pcb *pcb, uint32_t start_cursor) 
 //
 // No auth required — this endpoint is read-only and only exposes printf
 // output, which is already echoed on USB serial.
-static void handle_log(struct tcp_pcb *pcb, http_conn_t *conn) {
+static void handle_log(struct altcp_pcb *pcb, http_conn_t *conn) {
     // Parse ?since=N, ?wait_ms=M, ?stream=1 from the request line.
     uint32_t since = 0;
     uint32_t wait_ms = 0;
@@ -502,11 +506,11 @@ static void handle_log(struct tcp_pcb *pcb, http_conn_t *conn) {
         send_log_stream_headers(pcb, since);
         conn->log_since = since;
         conn->state = CONN_STATE_STREAMING;
-        tcp_nagle_disable(pcb);
+        altcp_nagle_disable(pcb);
         enable_keepalive(pcb);
         register_streaming(pcb, conn);
         g_streams_started_total++;
-        tcp_poll(pcb, http_poll, 1);
+        altcp_poll(pcb, http_poll, 1);
         return;
     }
 
@@ -519,7 +523,7 @@ static void handle_log(struct tcp_pcb *pcb, http_conn_t *conn) {
         conn->log_since = since;
         conn->log_deadline = make_timeout_time_ms(wait_ms);
         conn->state = CONN_STATE_WAITING;
-        tcp_poll(pcb, http_poll, 1);
+        altcp_poll(pcb, http_poll, 1);
         return;
     }
 
@@ -530,7 +534,7 @@ static void handle_log(struct tcp_pcb *pcb, http_conn_t *conn) {
 // Send the response headers for /api/data?stream=1. Content is octet-
 // stream; body extends to close. X-Data-Cursor hands the client its
 // starting byte offset so it can track position across reconnects.
-static void send_data_stream_headers(struct tcp_pcb *pcb, uint32_t start_cursor) {
+static void send_data_stream_headers(struct altcp_pcb *pcb, uint32_t start_cursor) {
     char hdr[768];
     int hdr_len = snprintf(hdr, sizeof(hdr),
         "HTTP/1.1 200 OK\r\n"
@@ -545,15 +549,15 @@ static void send_data_stream_headers(struct tcp_pcb *pcb, uint32_t start_cursor)
         (unsigned)start_cursor, cors_headers);
     if (hdr_len < 0) hdr_len = 0;
     if (hdr_len > (int)sizeof(hdr)) hdr_len = (int)sizeof(hdr);
-    tcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
-    tcp_output(pcb);
+    altcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
+    altcp_output(pcb);
 }
 
 // GET /api/data?stream=1[&since=N] — persistent binary push of poe_data
 // records. Wire format is documented in data_buffer.h. Unlike /api/log
 // this endpoint has no long-poll mode: the browser's parser relies on
 // immediate framing recovery at the magic-byte boundary.
-static void handle_data(struct tcp_pcb *pcb, http_conn_t *conn) {
+static void handle_data(struct altcp_pcb *pcb, http_conn_t *conn) {
     uint32_t since = 0;
     bool have_since = false;
     bool stream = false;
@@ -588,11 +592,11 @@ static void handle_data(struct tcp_pcb *pcb, http_conn_t *conn) {
         conn->log_since = since;          // reused field; holds data-ring cursor
         conn->data_stream = true;
         conn->state = CONN_STATE_STREAMING;
-        tcp_nagle_disable(pcb);
+        altcp_nagle_disable(pcb);
         enable_keepalive(pcb);
         register_streaming(pcb, conn);
         g_streams_started_total++;
-        tcp_poll(pcb, http_poll, 1);
+        altcp_poll(pcb, http_poll, 1);
         return;
     }
 
@@ -614,22 +618,22 @@ static void handle_data(struct tcp_pcb *pcb, http_conn_t *conn) {
         (unsigned)n, (unsigned)next_cursor, cors_headers);
     if (hdr_len < 0) hdr_len = 0;
     if (hdr_len > (int)sizeof(hdr)) hdr_len = (int)sizeof(hdr);
-    tcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
-    if (n > 0) tcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
-    tcp_output(pcb);
+    altcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
+    if (n > 0) altcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
+    altcp_output(pcb);
     conn->state = CONN_STATE_DONE;
 }
 
 // GET /api/data_schema — returns {"id":"name", …} so the browser can label
 // each record stream with a human-readable name when exporting HDF5.
-static void handle_data_schema(struct tcp_pcb *pcb, http_conn_t *conn) {
+static void handle_data_schema(struct altcp_pcb *pcb, http_conn_t *conn) {
     char body[512];
     size_t n = data_buffer_schema_json(body, sizeof(body));
     send_response(pcb, "200 OK", "application/json", body, n);
     conn->state = CONN_STATE_DONE;
 }
 
-static void handle_commit(struct tcp_pcb *pcb, http_conn_t *conn) {
+static void handle_commit(struct altcp_pcb *pcb, http_conn_t *conn) {
     if (!conn->authenticated) {
         send_error(pcb, "403 Forbidden", "invalid or missing auth token");
         conn->state = CONN_STATE_DONE;
@@ -667,7 +671,7 @@ static void handle_commit(struct tcp_pcb *pcb, http_conn_t *conn) {
 // Args go in the query string to keep the firmware free of a JSON parser
 // (matches the /api/log query-string style). Handler-side parsers live
 // in commands.c.
-static void handle_cmd(struct tcp_pcb *pcb, http_conn_t *conn) {
+static void handle_cmd(struct altcp_pcb *pcb, http_conn_t *conn) {
     if (!conn->authenticated) {
         send_error(pcb, "403 Forbidden", "invalid or missing auth token");
         conn->state = CONN_STATE_DONE;
@@ -843,34 +847,49 @@ static void parse_request_line(http_conn_t *conn) {
 // Probes start after KEEP_IDLE_MS of silence, retry every KEEP_INTVL_MS
 // up to KEEP_CNT failures → vanished client costs ≈ 50 s before the
 // PCB is reaped.
+//
+// Keepalive lives on the TCP pcb, not the altcp wrapper, so we walk
+// the altcp inner_conn chain down to the underlying transport. For
+// plain HTTP that's one hop (altcp_tcp's state is the tcp_pcb); for
+// HTTPS it's altcp_tls → altcp_tcp → tcp_pcb. A NULL return means
+// the wrapper layout doesn't match what we expect (e.g. we're inside
+// a different altcp transport in the future); skip keepalive in that
+// case rather than blow up.
 #define HTTP_KEEP_IDLE_MS   30000
 #define HTTP_KEEP_INTVL_MS   5000
 #define HTTP_KEEP_CNT           4
-static void enable_keepalive(struct tcp_pcb *pcb) {
-    pcb->so_options |= SOF_KEEPALIVE;
-    pcb->keep_idle  = HTTP_KEEP_IDLE_MS;
-    pcb->keep_intvl = HTTP_KEEP_INTVL_MS;
-    pcb->keep_cnt   = HTTP_KEEP_CNT;
+static struct tcp_pcb *altcp_to_tcp_pcb(struct altcp_pcb *pcb) {
+    while (pcb && pcb->inner_conn) pcb = pcb->inner_conn;
+    if (!pcb || !pcb->state) return NULL;
+    return (struct tcp_pcb *)pcb->state;
+}
+static void enable_keepalive(struct altcp_pcb *pcb) {
+    struct tcp_pcb *tpcb = altcp_to_tcp_pcb(pcb);
+    if (!tpcb) return;
+    tpcb->so_options |= SOF_KEEPALIVE;
+    tpcb->keep_idle  = HTTP_KEEP_IDLE_MS;
+    tpcb->keep_intvl = HTTP_KEEP_INTVL_MS;
+    tpcb->keep_cnt   = HTTP_KEEP_CNT;
 }
 
 void http_server_on_link_down(void) {
     int aborted = 0;
     for (int i = 0; i < STREAM_REG_SIZE; i++) {
-        struct tcp_pcb *pcb = stream_registry[i].pcb;
+        struct altcp_pcb *pcb = stream_registry[i].pcb;
         http_conn_t   *conn = stream_registry[i].conn;
         if (!pcb) continue;
         // Belt-and-braces: only abort entries that are still in the
         // streaming state. Anything mid-OTA (CONN_STATE_BODY) or
         // mid-header (CONN_STATE_HEADER) is intentionally left alone.
         if (conn && conn->state != CONN_STATE_STREAMING) continue;
-        // Detach all callbacks BEFORE tcp_abort. lwIP fires the err
-        // callback synchronously from inside tcp_abort, and we want
+        // Detach all callbacks BEFORE altcp_abort. lwIP fires the err
+        // callback synchronously from inside altcp_abort, and we want
         // it to no-op since we're freeing the conn ourselves below.
-        tcp_arg (pcb, NULL);
-        tcp_recv(pcb, NULL);
-        tcp_err (pcb, NULL);
-        tcp_poll(pcb, NULL, 0);
-        tcp_abort(pcb);
+        altcp_arg(pcb, NULL);
+        altcp_recv(pcb, NULL);
+        altcp_err (pcb, NULL);
+        altcp_poll(pcb, NULL, 0);
+        altcp_abort(pcb);
         if (conn) free(conn);
         stream_registry[i].pcb  = NULL;
         stream_registry[i].conn = NULL;
@@ -882,20 +901,20 @@ void http_server_on_link_down(void) {
     }
 }
 
-static void conn_close(struct tcp_pcb *pcb, http_conn_t *conn) {
+static void conn_close(struct altcp_pcb *pcb, http_conn_t *conn) {
     unregister_streaming(pcb, conn);
     if (conn) {
-        // If OTA was started but connection dropped, abort it
+        // If OTA was started but connection dropped mid-body, abort it.
         if (conn->state == CONN_STATE_BODY && ota_in_progress()) {
             ota_abort();
         }
         free(conn);
     }
-    tcp_arg(pcb, NULL);
-    tcp_recv(pcb, NULL);
-    tcp_err(pcb, NULL);
-    tcp_poll(pcb, NULL, 0);  // clears any /api/log long-poll callback
-    tcp_close(pcb);
+    altcp_arg(pcb, NULL);
+    altcp_recv(pcb, NULL);
+    altcp_err(pcb, NULL);
+    altcp_poll(pcb, NULL, 0);  // clears any /api/log long-poll callback
+    altcp_close(pcb);
 }
 
 // Periodic callback for /api/log long-poll waiters and stream pushers.
@@ -907,7 +926,7 @@ static void conn_close(struct tcp_pcb *pcb, http_conn_t *conn) {
 //              copy a chunk onto the wire and advance log_since. The
 //              connection stays open until the client closes (FIN/RST,
 //              detected by http_recv with a NULL pbuf).
-static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
+static err_t http_poll(void *arg, struct altcp_pcb *pcb) {
     http_conn_t *conn = (http_conn_t *)arg;
     if (!conn) return ERR_OK;
 
@@ -922,7 +941,7 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
     }
 
     if (conn->state == CONN_STATE_STREAMING) {
-        u16_t avail = tcp_sndbuf(pcb);
+        u16_t avail = altcp_sndbuf(pcb);
         if (avail == 0) return ERR_OK;  // wait for ACK; retry next poll
         uint32_t total = conn->data_stream
             ? data_buffer_total_written()
@@ -962,14 +981,14 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
             // browser via a renderer guard in web/console.js (strips a stray
             // "<digits>]\t" tail from the parsed msg). Revisit if the
             // duplication ever exceeds one prefix length.
-            err_t e = tcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
+            err_t e = altcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
             if (e == ERR_MEM) return ERR_OK;  // sndbuf race — retry next poll
             if (e != ERR_OK) {
                 conn->state = CONN_STATE_DONE;
                 conn_close(pcb, conn);
                 return ERR_OK;
             }
-            tcp_output(pcb);
+            altcp_output(pcb);
             conn->last_tx_at = get_absolute_time();
             return ERR_OK;
         }
@@ -998,7 +1017,7 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
             hdr[7] = 0;                   // reserved
             uint64_t now_us = (uint64_t)to_us_since_boot(get_absolute_time());
             for (int i = 0; i < 8; i++) hdr[8 + i] = (uint8_t)(now_us >> (8 * i));
-            err_t e = tcp_write(pcb, hdr, sizeof(hdr), TCP_WRITE_FLAG_COPY);
+            err_t e = altcp_write(pcb, hdr, sizeof(hdr), TCP_WRITE_FLAG_COPY);
             if (e == ERR_MEM) return ERR_OK;
             if (e != ERR_OK) {
                 conn->state = CONN_STATE_DONE;
@@ -1008,7 +1027,7 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
         } else {
             if (avail < 1) return ERR_OK;
             const char nl = '\n';
-            err_t e = tcp_write(pcb, &nl, 1, TCP_WRITE_FLAG_COPY);
+            err_t e = altcp_write(pcb, &nl, 1, TCP_WRITE_FLAG_COPY);
             if (e == ERR_MEM) return ERR_OK;
             if (e != ERR_OK) {
                 conn->state = CONN_STATE_DONE;
@@ -1016,13 +1035,13 @@ static err_t http_poll(void *arg, struct tcp_pcb *pcb) {
                 return ERR_OK;
             }
         }
-        tcp_output(pcb);
+        altcp_output(pcb);
         conn->last_tx_at = get_absolute_time();
     }
     return ERR_OK;
 }
 
-static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err) {
+static err_t http_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t err) {
     http_conn_t *conn = (http_conn_t *)arg;
 
     if (!p || err != ERR_OK) {
@@ -1031,7 +1050,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
         return ERR_OK;
     }
 
-    tcp_recved(pcb, p->tot_len);
+    altcp_recved(pcb, p->tot_len);
 
     if (conn->state == CONN_STATE_DONE
         || conn->state == CONN_STATE_WAITING
@@ -1121,14 +1140,22 @@ static void http_err(void *arg, err_t err) {
     // only match the registry entry by conn pointer.
     unregister_streaming(NULL, conn);
     if (conn) {
-        if (ota_in_progress()) {
+        // Only abort the OTA if THIS conn is the one streaming it
+        // (CONN_STATE_BODY = mid-upload). Without that guard, every
+        // unrelated reset connection — failed TLS handshakes, stray
+        // browser tabs, ERR_ABRT from PCB pool churn — would nuke an
+        // active OTA simply because its err callback fired. Mirror the
+        // same check `conn_close` already has. Keep the DEV_LOG so a
+        // genuine mid-upload abort still leaves a breadcrumb.
+        if (conn->state == CONN_STATE_BODY && ota_in_progress()) {
+            DEV_LOG("[http] mid-upload conn err=%d → ota_abort\n", err);
             ota_abort();
         }
         free(conn);
     }
 }
 
-static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err) {
+static err_t http_accept(void *arg, struct altcp_pcb *pcb, err_t err) {
     g_accepts_total++;
     if (err != ERR_OK || pcb == NULL) {
         return ERR_VAL;
@@ -1137,18 +1164,18 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err) {
     // Allocate connection state
     http_conn_t *conn = calloc(1, sizeof(http_conn_t));
     if (!conn) {
-        tcp_abort(pcb);
+        altcp_abort(pcb);
         return ERR_MEM;
     }
 
     conn->state = CONN_STATE_HEADER;
 
-    tcp_arg(pcb, conn);
-    tcp_recv(pcb, http_recv);
-    tcp_err(pcb, http_err);
+    altcp_arg(pcb, conn);
+    altcp_recv(pcb, http_recv);
+    altcp_err(pcb, http_err);
 
     // Lower priority so network stack stays responsive
-    tcp_setprio(pcb, TCP_PRIO_MIN);
+    altcp_setprio(pcb, TCP_PRIO_MIN);
 
     return ERR_OK;
 }
@@ -1158,25 +1185,104 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err) {
 // --------------------------------------------------------------------------
 
 void http_server_init(void) {
-    struct tcp_pcb *pcb = tcp_new();
+    struct altcp_pcb *pcb = altcp_new(NULL);
     if (!pcb) {
         DEV_LOG("[http] Failed to create PCB\n");
         return;
     }
 
-    err_t err = tcp_bind(pcb, IP_ADDR_ANY, CONDUIT_HTTP_PORT);
+    err_t err = altcp_bind(pcb, IP_ADDR_ANY, CONDUIT_HTTP_PORT);
     if (err != ERR_OK) {
         DEV_LOG("[http] Bind failed: %d\n", err);
         return;
     }
 
-    pcb = tcp_listen(pcb);
+    pcb = altcp_listen(pcb);
     if (!pcb) {
         DEV_LOG("[http] Listen failed\n");
         return;
     }
 
-    tcp_accept(pcb, http_accept);
+    altcp_accept(pcb, http_accept);
 
     DEV_LOG("[http] Server listening on port %d\n", CONDUIT_HTTP_PORT);
+}
+
+bool http_server_init_tls(void) {
+    // Per-device TLS server. Reuses every accept/recv/sent/poll/err
+    // callback from the plain-HTTP path — all of http_server.c was
+    // refactored to the lwIP altcp API so a single set of handlers
+    // works for both transports. The only difference here is the
+    // pcb constructor (altcp_new with a TLS allocator) and the bind
+    // port (CONDUIT_HTTPS_PORT, 443).
+    //
+    // Caller is responsible for calling conduit_identity_load()
+    // before this; we just consume the cached identity.
+    const conduit_identity_t *id = conduit_identity_get();
+    if (!id) {
+        DEV_LOG("[tls] no identity, skipping HTTPS listener\n");
+        return false;
+    }
+
+    // mbedtls's PEM parser requires the cert buffer to be NUL-terminated
+    // with the length INCLUDING the trailing '\0'. Without that, mbedtls
+    // falls back to DER parsing and rejects our PEM-encoded chain. The
+    // IDENTITY blob stores cert_pem as raw bytes without a NUL (the
+    // commission/identity.py encoder pads with 0xFF after the cert), so
+    // copy into a NUL-terminated static buffer before handoff. Sized to
+    // CONDUIT_IDENTITY_MAX_PAYLOAD which already bounds cert_len in the
+    // parser. Static (not stack) so we don't blow the boot stack — and
+    // the buffer survives because altcp_tls keeps a parsed copy of the
+    // cert internally; we don't need to retain the PEM text.
+    static char cert_pem_terminated[CONDUIT_IDENTITY_MAX_PAYLOAD + 1];
+    if (id->cert_len > sizeof(cert_pem_terminated) - 1) {
+        DEV_LOG("[tls] cert too large: %u > %u\n",
+                (unsigned)id->cert_len, (unsigned)(sizeof(cert_pem_terminated) - 1));
+        return false;
+    }
+    memcpy(cert_pem_terminated, id->cert_pem, id->cert_len);
+    cert_pem_terminated[id->cert_len] = '\0';
+
+    struct altcp_tls_config *tls_cfg = altcp_tls_create_config_server_privkey_cert(
+        id->key_der,  id->key_len,
+        NULL, 0,
+        (const u8_t *)cert_pem_terminated, id->cert_len + 1);
+    if (!tls_cfg) {
+        // Most likely failure modes:
+        //   - cert chain has a cert whose pubkey curve isn't enabled in
+        //     mbedtls_config.h (LE intermediates use P-384)
+        //   - chain has a sig OID whose hash isn't enabled (LE leaf
+        //     uses ECDSA-SHA384, intermediate uses RSA-SHA256)
+        //   - cert / key parse mismatch (key is for a different cert)
+        // Re-add the mbedtls_x509_crt_parse + mbedtls_pk_parse_key probes
+        // from git history if you need to pin the exact failure.
+        DEV_LOG("[tls] altcp_tls_create_config_server_privkey_cert failed\n");
+        return false;
+    }
+
+    struct altcp_pcb *pcb = altcp_new(&(altcp_allocator_t){
+        .alloc = altcp_tls_alloc,
+        .arg   = tls_cfg,
+    });
+    if (!pcb) {
+        DEV_LOG("[tls] altcp_new failed\n");
+        return false;
+    }
+
+    err_t err = altcp_bind(pcb, IP_ADDR_ANY, CONDUIT_HTTPS_PORT);
+    if (err != ERR_OK) {
+        DEV_LOG("[tls] bind failed: %d\n", err);
+        altcp_close(pcb);
+        return false;
+    }
+
+    pcb = altcp_listen(pcb);
+    if (!pcb) {
+        DEV_LOG("[tls] listen failed\n");
+        return false;
+    }
+
+    altcp_accept(pcb, http_accept);
+    DEV_LOG("[tls] HTTPS listening on port %d\n", CONDUIT_HTTPS_PORT);
+    return true;
 }

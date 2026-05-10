@@ -335,6 +335,47 @@
         </li>
       </ul>
     </div>
+
+    <!-- HTTPS troubleshooting hint. The wildcard hostname resolves to
+         a private IP (RFC1918), and most consumer routers ship with
+         DNS Rebind Protection on by default which strips those out of
+         public DNS responses. Allowlisting devices.rm1n.com on the
+         router is the one-shot fix. -->
+    <details class="hardware-troubleshoot">
+      <summary>HTTPS Add fails with "no response" or "could not resolve"?</summary>
+      <div class="hardware-troubleshoot__body">
+        <p>
+          Your router is filtering the device's private-IP reply.
+          Allow <code>devices.rm1n.com</code> in its DNS rebind settings:
+        </p>
+        <ul>
+          <li>
+            <strong>Fritz!Box:</strong> Heimnetz → Netzwerk →
+            Netzwerkeinstellungen → DNS-Rebind-Schutz → Hostnamen-Ausnahmen
+            → add <code>devices.rm1n.com</code>.
+          </li>
+          <li>
+            <strong>OpenWrt:</strong> add <code>rebind_domain devices.rm1n.com</code>
+            to <code>/etc/config/dhcp</code> (dnsmasq section), then
+            <code>service dnsmasq restart</code>.
+          </li>
+          <li>
+            <strong>pfSense:</strong> Services → DNS Resolver → Advanced
+            Settings → Domain Insecure → add <code>devices.rm1n.com</code>.
+          </li>
+        </ul>
+        <p>
+          Or, without touching the router, set <code>1.1.1.1</code> and
+          <code>8.8.8.8</code> as your machine's DNS, flush the cache,
+          and reload.
+        </p>
+        <p>
+          Self-host the DNS / CA stack on your own zone? Set
+          <code>Conduit.deviceTlsZone = '&lt;your-zone&gt;'</code> in
+          the browser console before adding devices.
+        </p>
+      </div>
+    </details>
   </div>
 </section>
 
@@ -634,7 +675,7 @@
   // Account view's sidebar footer. CONDUIT_COMMIT is an 8-char prefix
   // of the git SHA the assets were built from; the deploy workflow
   // sed-replaces 'dev' with the real value at publish time.
-  window.CONDUIT_ASSET_VERSION = '2026-05-09-hardware-manager';
+  window.CONDUIT_ASSET_VERSION = '2026-05-10-https-troubleshoot-4';
   window.CONDUIT_COMMIT        = 'dev';
 </script>
 <!-- uPlot — high-performance time-series plotting via CDN. Pinned for

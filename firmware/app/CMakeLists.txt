@@ -43,10 +43,27 @@ target_sources(conduit_lwip INTERFACE
 
 target_include_directories(conduit_lwip INTERFACE
     ${LWIP_PATH}/src/include
-    # Our lwipopts.h takes precedence (searched first)
+    # Our lwipopts.h takes precedence (searched first). Also where
+    # mbedtls_config.h lives — pico_mbedtls's trampoline header does
+    # `#include "mbedtls_config.h"` and expects to find ours via the
+    # consuming target's include path.
     ${CMAKE_CURRENT_LIST_DIR}
     # Fall through to RMII lib for arch/cc.h
     ${RMII_LIB_DIR}/src/lwip
+)
+
+# altcp_alloc.c (compiled into conduit_lwip above) includes lwip/altcp_tls.h
+# which pulls in mbedtls headers when LWIP_ALTCP_TLS_MBEDTLS=1. Linking
+# pico_mbedtls + pico_lwip_mbedtls into conduit_lwip propagates the
+# mbedtls include paths down to every consumer of conduit_lwip, so the
+# altcp source files compile cleanly. The actual TLS server config lives
+# in http_server.c's http_server_init_tls(); pico_lwip_mbedtls also
+# brings in altcp_tls_mbedtls.c which implements the TLS adapter the
+# server config plugs into. Mbedtls feature flags live in
+# firmware/app/mbedtls_config.h.
+target_link_libraries(conduit_lwip INTERFACE
+    pico_mbedtls
+    pico_lwip_mbedtls
 )
 
 # ---- RMII Ethernet driver ----
@@ -176,7 +193,7 @@ function(conduit_define_app TARGET)
     # Binary version for A/B partition selection — bump MINOR per OTA test
     # cycle. The RP2350 bootrom compares versions across partitions and
     # boots the newer.
-    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 4)
+    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 19)
 
     # Embed the A/B partition table so the bootrom can discover the layout
     # and pick between A and B based on binary version.

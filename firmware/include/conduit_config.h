@@ -33,8 +33,11 @@
 #define CONDUIT_STATIC_MASK    "255.255.255.0"
 #define CONDUIT_STATIC_GW      "192.168.178.1"
 
-// HTTP server port
+// HTTP server port (always bound; the self-host story relies on it).
 #define CONDUIT_HTTP_PORT      80
+// HTTPS server port. Only bound when conduit_identity_load() succeeds —
+// uncommissioned boards are HTTP-only and 443 stays closed.
+#define CONDUIT_HTTPS_PORT     443
 
 // =============================================================================
 // CORS Configuration

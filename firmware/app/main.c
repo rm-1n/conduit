@@ -130,15 +130,20 @@ int main() {
     // Failure is non-fatal — the firmware keeps booting over plain HTTP
     // for diagnosis (a fresh dev board with no IDENTITY blob yet hits
     // this path, and we want it reachable).
-    // IDENTITY partition load is gated off until the XIP-restore path is
-    // proven safe on hardware. With partition 2 added to the table, the
-    // bootrom narrows XIP coverage to partition A's range only — direct
-    // reads from 0x103F0000 (partition 2) HardFault. The proper fix needs
-    // conduit_identity_load() to run via flash_safe_execute against a
-    // RAM-resident copy of the rom XIP-restore dance, which is part of
-    // PR 4 (TLS server) and not safe to land alone.
-    // Until then, the firmware runs unauthenticated over plain HTTP — the
-    // self-host story stays fully intact.
+    // Read the IDENTITY partition (id=2) into RAM. flash_start_xip()
+    // restores full-flash XIP coverage so partition 2 is reachable —
+    // see identity.c. Failure is non-fatal; the firmware keeps booting
+    // over plain HTTP for diagnosis. MUST run before multicore_launch_core1
+    // because flash_start_xip cuts XIP mid-call.
+    conduit_identity_t identity = {0};
+    if (conduit_identity_load(&identity)) {
+        DEV_LOG("[identity] loaded id=%s key=%uB cert=%uB\n",
+                identity.unique_id,
+                (unsigned)identity.key_len,
+                (unsigned)identity.cert_len);
+    } else {
+        DEV_LOG("[identity] no valid IDENTITY partition; running unauthenticated\n");
+    }
 
     // Seed the runtime console with a boot banner so users see something
     // immediately when the web IDE attaches, even before their own log()
@@ -147,8 +152,14 @@ int main() {
     conduit_log("[poe] firmware v%s booted (%s), ip %s\n",
             CONDUIT_VERSION_STRING, ota_boot_type_str(), network_get_ip_str());
 
-    // Start the HTTP API server (registers callbacks, no lwIP polling here)
+    // Start the HTTP API server (registers callbacks, no lwIP polling here).
+    // Port 80 binds unconditionally — the self-host story relies on it.
     http_server_init();
+
+    // Start the HTTPS server on port 443 if a valid IDENTITY blob was
+    // loaded above. Without an identity, leaves 443 closed; the device
+    // is HTTP-only by design until commissioning.
+    http_server_init_tls();
 
     // Multicast discovery beacon — broadcasts {id, ip, name, v} every
     // 1 s so `conduit discover` can find us by unique-id without

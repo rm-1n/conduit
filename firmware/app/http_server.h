@@ -1,10 +1,20 @@
 #ifndef HTTP_SERVER_H
 #define HTTP_SERVER_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
-// Initialize the raw TCP HTTP server on CONDUIT_HTTP_PORT
+// Initialize the HTTP server on CONDUIT_HTTP_PORT (port 80, plain HTTP).
 void http_server_init(void);
+
+// Initialize the HTTPS server on CONDUIT_HTTPS_PORT (port 443, TLS via
+// altcp_tls + mbedtls). Reads the cert + key from the IDENTITY
+// partition via conduit_identity_get(). Returns false if no identity
+// is loaded (caller hasn't called conduit_identity_load(), or the
+// partition is missing/invalid). On a self-host / uncommissioned
+// board, leaving HTTPS off is the intended path — the plain HTTP
+// listener stays bound regardless.
+bool http_server_init_tls(void);
 
 // Reap persistent stream PCBs (/api/log?stream=1, /api/data?stream=1)
 // when the PHY link drops. Called from network.c link_callback on the

@@ -25,6 +25,7 @@
 // Pico-side includes. Skipped under host tests so we can compile the
 // parser standalone with a normal C compiler.
 #include "hardware/regs/addressmap.h"   // XIP_BASE
+#include "hardware/flash.h"             // flash_start_xip
 #include "pico/bootrom.h"
 #include "boot/picobin.h"
 #include "boot/picoboot.h"
@@ -159,8 +160,8 @@ static int32_t find_identity_partition_offset(void) {
 
 bool conduit_identity_load(conduit_identity_t *out) {
     // Idempotent — subsequent calls just hand back the cached parse
-    // without re-reading flash. Important because Phase 2's TLS init
-    // will probably call this too.
+    // without re-reading flash. Important because the TLS init in
+    // http_server.c calls this after main.c's first invocation.
     if (g_identity_loaded) {
         if (out) *out = g_identity_cached;
         return true;
@@ -169,19 +170,33 @@ bool conduit_identity_load(conduit_identity_t *out) {
     int32_t offset = find_identity_partition_offset();
     if (offset < 0) return false;
 
-    // KNOWN-BROKEN as written: a direct XIP memcpy from partition 2's flash
-    // window (e.g. 0x103F0000 on 4 MB flash) HardFaults on this device.
-    // After rom_load_partition_table + rom_get_partition_table_info above,
-    // the bootrom has narrowed XIP coverage to the booted partition's
-    // range only, and reads outside that fault. The fix is to wrap the
-    // read in a flash_safe_execute call against a thunk in RAM that does:
-    //     rom_connect_internal_flash → rom_flash_exit_xip
-    //     → rom_flash_flush_cache → rom_flash_enter_cmd_xip → memcpy
-    // — the rom_flash_* dance can't run from XIP because it cuts XIP
-    // mid-call. That work belongs with the PR 4 (TLS server) refactor;
-    // until then main.c bypasses conduit_identity_load() entirely so the
-    // firmware boots cleanly over plain HTTP.
-    const uint8_t *src = (const uint8_t *)(XIP_BASE + (uint32_t)offset);
+    // Two pieces of careful access ceremony, both required:
+    //
+    // 1. flash_start_xip() restores full-flash XIP coverage. After
+    //    rom_load_partition_table + rom_get_partition_table_info above,
+    //    the bootrom has narrowed XIP to the booted partition's range
+    //    only — direct reads from partition 2 HardFault until the
+    //    bootrom's full-flash XIP setup is reissued (with the RP2350's
+    //    QMI CS1 save/restore and boot2 XIP shim that flash_start_xip
+    //    handles internally). flash_start_xip is in RAM (the function
+    //    body is __no_inline_not_in_flash_func) so it can safely cut
+    //    XIP mid-call; we must call it before multicore_launch_core1
+    //    or Core 1 instruction fetches would hang during the cut.
+    //
+    // 2. Read via XIP_NOCACHE_NOALLOC_NOTRANSLATE_BASE (0x1C000000)
+    //    rather than XIP_BASE (0x10000000). Even with full-flash XIP
+    //    restored, the 16 KB XIP cache appears to be configured by
+    //    boot2 to only serve cache lines for the booted partition;
+    //    cache misses to addresses outside that range fault. The
+    //    "notranslate" window bypasses cache + address translation
+    //    entirely and hits the QMI controller directly — an 8 KB
+    //    one-shot read at boot has no performance concern.
+    //
+    // Memory note `project_identity_xip_wedge.md` has the full
+    // diagnosis and traces from finding this.
+    flash_start_xip();
+    const uint8_t *src = (const uint8_t *)(XIP_NOCACHE_NOALLOC_NOTRANSLATE_BASE
+                                          + (uint32_t)offset);
     memcpy(g_identity_blob, src, CONDUIT_IDENTITY_BLOB_SIZE);
 
     if (!conduit_identity_parse(g_identity_blob,
