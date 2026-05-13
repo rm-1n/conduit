@@ -813,30 +813,60 @@ void conduit_loop(void) {
       const ip = (deviceSelect.value || '').trim()
               || (document.getElementById('ide-quick-ip').value || '').trim();
       if (!ip) { connStatus('no device — Add an IP first', 'err'); return; }
+
+      // Pause both streams BEFORE the probe. Two reasons:
+      //
+      //  1. On page reload, telemetry.js + console.js auto-start their
+      //     streamLoops (each opens a TLS connection). If we then run
+      //     a status probe in parallel, the device's mbedtls (single-
+      //     threaded on Core 1, ~3 s per handshake on Cortex-M33) has
+      //     to serialize 3 handshakes — the last one is still in
+      //     CONNECT_TIMEOUT_MS jeopardy. Aborting the in-flight
+      //     stream fetches first frees the queue for our single probe.
+      //
+      //  2. Even after probe success, resuming the streams back-to-back
+      //     would re-create two parallel handshakes. Stagger them with a
+      //     small gap so each handshake runs alone.
+      const tel = window.Conduit && window.Conduit.telemetry;
+      const con = window.Conduit && window.Conduit.console;
+      if (tel && tel.pause)        tel.pause();
+      if (con && con.pauseStream)  con.pauseStream();
+
       try {
         connStatus(`Reconnecting ${ip}…`);
         const result = await window.Conduit.probeAndRemember(ip);
-        if (!result) { connStatus(`no response from ${ip}`, 'err'); return; }
-        // Cycle telemetry: pause aborts the in-flight fetch + clears
-        // chart, resume starts a fresh stream against the now-verified
-        // device. Console has the same effect via resetCursor + clear.
-        const tel = window.Conduit && window.Conduit.telemetry;
-        if (tel && tel.pause)  tel.pause();
-        if (tel && tel.resume) tel.resume();
-        const con = window.Conduit && window.Conduit.console;
-        if (con && con.resetCursor) con.resetCursor();
-        if (con && con.clear)       con.clear();
+        if (!result) {
+          connStatus(`no response from ${ip}`, 'err');
+          // Even on failure, resume so we don't leave the panes stuck
+          // in 'paused' indefinitely — the streams' own retry loops
+          // will surface unreachability.
+          if (tel && tel.resume)        tel.resume();
+          if (con && con.resumeStream)  con.resumeStream();
+          return;
+        }
         connStatus(`Reconnected (v${result.version}, ${result.partition})`, 'ok');
       } catch (e) {
         connStatus(`reconnect error: ${e.message || e}`, 'err');
+        if (tel && tel.resume)        tel.resume();
+        if (con && con.resumeStream)  con.resumeStream();
+        return;
       } finally {
         refreshDeviceList();
       }
+
+      // Probe succeeded. Resume streams one at a time so each handshake
+      // runs alone. 1500 ms covers the ~3 s budget for the previous
+      // handshake to complete + a margin (handshake usually finishes
+      // before the gap is up; this is just insurance against burst).
+      if (tel && tel.resume) tel.resume();
+      setTimeout(() => {
+        if (con && con.resumeStream) con.resumeStream();
+      }, 1500);
     }
     // Auto-kick reconnect once on boot. Deferred slightly so the rest
     // of init (telemetry's streamLoop, console's poll loop) has wired
     // up — pause/resume needs the loops to exist to do their thing.
-    setTimeout(() => { reconnect().catch(() => {}); }, 800);
+    setTimeout(() => { reconnect().catch(() => {}); }, 200);
 
     setupResizers();
 

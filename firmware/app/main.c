@@ -252,6 +252,14 @@ int main() {
             continue;
         }
         watchdog_update();
+#ifndef CONDUIT_MINIMAL
+        // Drain one UF2 block from the OTA ring per loop iteration
+        // (~1 kHz). Decouples the lwIP recv callback (Core 1) from
+        // synchronous flash erase/program — recv stays non-blocking,
+        // window slides, HTTPS upload doesn't wedge in TCP zero-window
+        // persist. See firmware/app/ota_ring.h for the contract.
+        if (ota_in_progress()) ota_pump();
+#endif
         conduit_loop();
 
         // Health check — once per diag print interval (≈ 1 s) is plenty

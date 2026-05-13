@@ -35,6 +35,7 @@
 
 #include "network.h"
 #include "ota.h"
+#include "ota_ring.h"
 #include "discovery.h"
 #include "http_server.h"
 #include "rmii_ethernet/netif.h"
@@ -143,6 +144,14 @@ void diag_print_line(void) {
     uint32_t ddisc_fail = disc_fail - last_disc_fail;
     last_disc_ok = disc_ok; last_disc_fail = disc_fail;
 
+    // OTA ring stats — used = bytes currently buffered awaiting flash;
+    // short = count of partial-accept events (ring filled, producer
+    // backpressured the TCP layer). Sustained nonzero `used` during
+    // an upload is normal; high `short` means Core 0 is falling
+    // behind the producer (e.g. flash slow path) — investigate.
+    unsigned long ota_used  = (unsigned long)ota_ring_used();
+    unsigned long ota_short = (unsigned long)ota_ring_short_writes();
+
     DEV_LOG("[diag] link=%d ip=%s c1=%lu(+%lu) "
            "heap=%lu/%lu pbuf=%u/%u tcp_pcb=%u/%u "
            "tcp=%ua/%ut/%ul rx=%lu(+%lu) tx=%lu(+%lu) "
@@ -150,6 +159,7 @@ void diag_print_line(void) {
            "acpt=%lu(+%lu) strm=%lu(+%lu) "
            "ipdrop=%lu(+%lu) tcpdrop=%lu(+%lu) tcperr=%lu(+%lu) tcpchk=%lu(+%lu) "
            "mdio=%lu/%lu crc=%lu logc=%lu/%lub "
+           "ota_ring=%lu/%u short=%lu "
            "disc=%lu(+%lu)/%lu(+%lu) commit_pending=%d\n",
            network_is_link_up(), network_get_ip_str(),
            (unsigned long)c1, (unsigned long)dc1,
@@ -171,6 +181,7 @@ void diag_print_line(void) {
            (unsigned long)netif_rmii_ethernet_rx_crc_errors(),
            (unsigned long)log_buffer_call_count(),
            (unsigned long)log_buffer_total_written(),
+           ota_used, OTA_RING_SIZE, ota_short,
            (unsigned long)disc_ok,   (unsigned long)ddisc_ok,
            (unsigned long)disc_fail, (unsigned long)ddisc_fail,
            (int)ota_commit_pending());

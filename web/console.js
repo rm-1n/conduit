@@ -38,12 +38,16 @@
   const PERSIST_BATCH_MS   = 250;    // …after M ms idle, whichever hits first.
   // Connect-phase timeout — same pattern as telemetry.js. Firmware emits
   // a `\n` keepalive every ~500 ms when the log ring is empty (see
-  // http_poll), so 750 ms covers one keepalive + jitter and a healthy
-  // connection produces a byte well within this window.
-  const CONNECT_TIMEOUT_MS = 750;
-  // Stall watchdog — now safe because firmware emits `\n` keepalives
-  // every ~500 ms even when the log is silent. 1 s covers one missed
-  // keepalive plus jitter.
+  // http_poll). 8 s covers a fresh HTTPS handshake (~3 s on Cortex-M33)
+  // plus a keepalive + jitter; the original 750 ms aborted every HTTPS
+  // log-stream open before the TLS handshake completed, producing a
+  // NS_BINDING_ABORTED reconnect storm at 150 ms intervals.
+  const CONNECT_TIMEOUT_MS = 8000;
+  // Stall watchdog — applies AFTER the connect phase, so this stays
+  // tight. Firmware emits `\n` keepalives every ~500 ms even when the
+  // log is silent. 1 s covers one missed keepalive plus jitter. The
+  // HTTPS-specific 4 s threshold tested briefly with a 3000 ms
+  // firmware-side keepalive cadence wedged the device — reverted.
   const STALL_MS           = 1000;
   const STALL_CHECK_MS     = 150;
   // Prefix regex: "[<digits>]\t<msg>". The greedy `(.*)$` captures the entire
@@ -540,6 +544,13 @@
 
     watchIp();
     watchStall();
+    // Start the stream PAUSED. ide.js's reconnect() resumes us once the
+    // initial status probe has succeeded — this prevents 2 streams +
+    // probe from doing 3 simultaneous TLS handshakes against a single-
+    // threaded mbedtls (~3 s per handshake) on page load. Without this
+    // gate, the third handshake never fits in CONNECT_TIMEOUT_MS and
+    // the panes get stuck in NS_BINDING_ABORTED retry loops.
+    streamPaused = true;
     streamLoop();
 
     window.Conduit = window.Conduit || {};

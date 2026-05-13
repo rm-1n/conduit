@@ -27,11 +27,18 @@
 
 // ---- Buffers --------------------------------------------------------------
 
-// Halve the default 16 KB buffers — our largest single response is the
-// cert chain (~3 KB) plus framing. 8 KB leaves comfortable headroom and
-// reclaims 16 KB of SRAM versus defaults.
+// Keep mbedtls's default 16 KB buffer for INCOMING TLS records. The TLS
+// 1.2 spec allows records up to 16384 bytes, and browsers (Chrome /
+// Firefox / Safari) routinely send full-sized records on sustained
+// uploads. Trimming this to 8 KB silently broke OTA over HTTPS:
+// mbedtls rejected any oversized record with RECORD_OVERFLOW and the
+// stream just hung. The 8 KB SRAM saving wasn't worth it.
+//
+// OUT can still be trimmed — our largest response is the cert chain
+// (~3 KB) plus framing, so 8 KB is plenty and saves a per-connection
+// 8 KB allocation.
+#define MBEDTLS_SSL_IN_CONTENT_LEN     16384
 #define MBEDTLS_SSL_OUT_CONTENT_LEN    8192
-#define MBEDTLS_SSL_IN_CONTENT_LEN     8192
 
 // Smaller AES tables save flash — TLS handshakes aren't throughput-bound.
 #define MBEDTLS_AES_FEWER_TABLES

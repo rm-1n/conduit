@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test unit/chart_picker.test.mjs unit/commands.test.mjs unit/data_store.test.mjs unit/elf_uf2.test.mjs unit/layout_solver.test.mjs unit/log_export.test.mjs unit/probe_device.test.mjs unit/telemetry_wire.test.mjs"
+    "test": "node --test unit/chart_picker.test.mjs unit/commands.test.mjs unit/data_store.test.mjs unit/elf_uf2.test.mjs unit/layout_solver.test.mjs unit/log_export.test.mjs unit/probe_device.test.mjs unit/telemetry_wire.test.mjs unit/upload_reboot_success.test.mjs"
   },
   "keywords": [],
   "author": "",

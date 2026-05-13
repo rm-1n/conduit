@@ -445,18 +445,25 @@ def validate_uf2(data: bytes):
     return num_blocks, family_id
 
 
-OTA_CHUNK_SIZE = 8 * 1024  # bytes per HTTP request; kept small so the
-# RMII NCE driver's Rx ring doesn't overflow on large TCP transactions
-# (see firmware/lib/pico-rmii-ethernet_nce/README.md "Limitations").
-
-
 def ota_upload(ip, token, uf2_path):
-    """Upload a UF2 over HTTP in small chunks (see OTA_CHUNK_SIZE).
+    """Upload a UF2 over HTTP as a single POST.
 
-    Each chunk is a separate POST to /api/upload whose body is a slice of
-    the file. The first request carries X-OTA-Start: 1 to call ota_begin()
-    on the device; the last carries X-OTA-Finish: 1 to call ota_finish()
-    and reboot. Middle requests just stream bytes."""
+    Sends the entire UF2 in one request with both X-OTA-Start and
+    X-OTA-Finish set. The device's handle_upload_data accumulates body
+    bytes from however many TCP packets lwIP delivers them in — the
+    HTTP-layer chunking that this function used to do gave nothing
+    beyond what TCP windowing already provides, and forced the same
+    UF2 through 47 short-lived connections. With one POST: one TCP
+    handshake, one in-flight HTTP request, no PCB churn, and OTA
+    completes in ~10 s for a 380 KB image. The previous chunked
+    design predates the current TCP_WND tuning; with TCP_WND≈17 KB the
+    "single large POST hangs RMII" concern in OTA.md no longer holds.
+
+    Plain HTTP only. The TLS path can't sustain a long incoming stream
+    yet (mbedtls record buffering); browser-based OTA over HTTPS is a
+    follow-up. CLI clients are LAN-local so the integrity comes from
+    the bootrom hash check on the signed UF2, not from transport TLS.
+    """
     import urllib.request
 
     info(f"Reading {uf2_path}...")
@@ -466,11 +473,11 @@ def ota_upload(ip, token, uf2_path):
     num_blocks, family_id = validate_uf2(data)
     ok(f"Valid UF2: {num_blocks} blocks, {len(data) / 1024:.1f} KB, family 0x{family_id:08x}")
 
-    # Check device is reachable first
+    # Pre-flight: confirm the device is reachable + on a real partition
     info(f"Checking device at {ip}...")
-    url = f"http://{ip}/api/status"
     try:
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        req = urllib.request.Request(f"http://{ip}/api/status",
+                                     headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             status_data = json.loads(resp.read().decode())
             ok(f"Device online — v{status_data.get('version', '?')}, "
@@ -480,54 +487,46 @@ def ota_upload(ip, token, uf2_path):
         return False
 
     total = len(data)
-    n_chunks = (total + OTA_CHUNK_SIZE - 1) // OTA_CHUNK_SIZE
-    info(f"Uploading {total} bytes in {n_chunks} chunks of ≤{OTA_CHUNK_SIZE} bytes ...")
-    url = f"http://{ip}/api/upload"
+    info(f"Uploading {total} bytes as a single POST ...")
 
-    for i in range(n_chunks):
-        chunk = data[i * OTA_CHUNK_SIZE : (i + 1) * OTA_CHUNK_SIZE]
-        headers = {
-            "Content-Type": "application/octet-stream",
-            "X-Auth-Token": token,
-            "Content-Length": str(len(chunk)),
-        }
-        if i == 0:
-            headers["X-OTA-Start"] = "1"
-        if i == n_chunks - 1:
-            headers["X-OTA-Finish"] = "1"
+    headers = {
+        "Content-Type": "application/octet-stream",
+        "X-Auth-Token": token,
+        "X-OTA-Start": "1",
+        "X-OTA-Finish": "1",
+        "Content-Length": str(total),
+    }
+    req = urllib.request.Request(f"http://{ip}/api/upload",
+                                 data=data, method="POST", headers=headers)
 
-        req = urllib.request.Request(url, data=chunk, method="POST", headers=headers)
-        is_last = (i == n_chunks - 1)
+    # Generous timeout — single POST takes ~upload_time + flash_program_time
+    # (a few seconds for a typical UF2). 60 s leaves slack for slow links.
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            body = resp.read().decode()
+            result = json.loads(body)
+            if not result.get("ok"):
+                fail(f"Upload rejected: {body}")
+                return False
+            ok("Upload acknowledged; device rebooting into new image")
+    except urllib.error.HTTPError as e:
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                body = resp.read().decode()
-                result = json.loads(body)
-                if not result.get("ok"):
-                    fail(f"Chunk {i+1}/{n_chunks} rejected: {body}")
-                    return False
-        except urllib.error.HTTPError as e:
-            try:
-                body = e.read().decode()
-            except Exception:
-                body = ""
-            fail(f"HTTP {e.code} on chunk {i+1}/{n_chunks}: {body}")
+            body = e.read().decode()
+        except Exception:
+            body = ""
+        fail(f"HTTP {e.code}: {body}")
+        return False
+    except Exception as e:
+        # The device calls reboot() inside its 200 OK response on
+        # X-OTA-Finish. The TCP connection drops before we read the
+        # body — that's success, not failure.
+        if ("Connection reset" in str(e)
+                or "RemoteDisconnected" in str(e)
+                or "timed out" in str(e)):
+            warn("Connection reset on response (device rebooting — expected)")
+        else:
+            fail(f"Upload failed: {e}")
             return False
-        except Exception as e:
-            # The final chunk triggers an immediate reboot, so the device
-            # typically tears down the TCP connection before we read the
-            # response — that's expected success, not a failure.
-            if is_last and ("Connection reset" in str(e)
-                            or "RemoteDisconnected" in str(e)
-                            or "timed out" in str(e)):
-                warn("Connection reset on final chunk (device rebooting — expected)")
-                break
-            fail(f"Chunk {i+1}/{n_chunks} failed: {e}")
-            return False
-
-        if (i + 1) % 4 == 0 or is_last:
-            print(f"  chunk {i+1}/{n_chunks} ok ({(i+1)*OTA_CHUNK_SIZE}/{total} bytes)")
-
-    ok("All chunks uploaded")
 
     info("Device is rebooting with new firmware...")
 

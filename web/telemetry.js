@@ -34,8 +34,11 @@
   // unplug, NAT timeout, browser idle suspend) and abort so the loop
   // reconnects cleanly. The firmware emits a 16-byte keepalive record
   // every ~500 ms when the data ring is otherwise idle (see
-  // CONDUIT_DATA_KEEPALIVE_MSG_ID), so 1 s is one missed keepalive plus
-  // jitter — anything longer is genuinely broken.
+  // CONDUIT_DATA_KEEPALIVE_MSG_ID), so 1 s is one missed keepalive
+  // plus jitter — anything longer is genuinely broken. Tried a
+  // separate HTTPS threshold of 4 s coupled to a 3000 ms firmware-
+  // side keepalive cadence — combo wedged the device on the IDE's
+  // multi-conn startup. Revert and rely on the v10.29 cadence.
   const STALL_MS           = 1000;
   const STALL_CHECK_MS     = 150;
   // Connect-phase timeout — between issuing fetch() and the first byte
@@ -43,14 +46,23 @@
   // but firmware isn't ready to serve) leaves runStream blocked
   // indefinitely on `await fetch(...)` or `await reader.read()`. The
   // stall watchdog can't help here because it skips when lastByteMs is
-  // still 0. Firmware emits a 16-byte keepalive every ~500 ms, so
-  // 750 ms covers one keepalive + jitter.
-  const CONNECT_TIMEOUT_MS = 750;
+  // still 0. Firmware emits a 16-byte keepalive every ~500 ms.
+  // 8 s covers a fresh HTTPS handshake (~3 s on Cortex-M33) plus
+  // headroom; the original 750 ms aborted every HTTPS stream open
+  // before the TLS handshake even finished, producing a NS_BINDING_ABORTED
+  // reconnect storm at 150 ms intervals. Plain HTTP still gets a
+  // first byte in <50 ms so the abort is still useful for that path.
+  const CONNECT_TIMEOUT_MS = 8000;
   // Schema fetch timeout. Sized to match CONNECT_TIMEOUT_MS so an
   // unreachable device doesn't hold runStream's awaited refreshSchema
   // for several seconds while the data path retries every 750 ms.
-  // /api/data_schema is ~200 bytes; a healthy LAN delivers it in <10 ms.
-  const SCHEMA_TIMEOUT_MS  = 750;
+  // /api/data_schema is ~200 bytes; a healthy LAN delivers it in <10 ms
+  // over plain HTTP. With HTTPS via the device's per-device LE cert,
+  // the TLS handshake on Cortex-M33 dominates at ~3 s on a fresh
+  // connection. 750 ms always aborts the fetch over HTTPS, the
+  // telemetry stream init never completes, and the IDE shows a
+  // NS_BINDING_ABORTED storm. 8 s leaves margin for a slow handshake.
+  const SCHEMA_TIMEOUT_MS  = 8000;
 
   const DTYPE_I8 = 0, DTYPE_U8 = 1, DTYPE_I16 = 2, DTYPE_U16 = 3,
         DTYPE_I32 = 4, DTYPE_U32 = 5, DTYPE_I64 = 6, DTYPE_U64 = 7,
@@ -658,6 +670,11 @@
     watchIp();
     watchStall();
     installConnectivityHooks();
+    // Start the stream PAUSED. ide.js's reconnect() resumes us once the
+    // initial status probe has succeeded — see the matching comment in
+    // console.js. Eliminates the 3-handshake parallel race on page load.
+    paused = true;
+    setState('paused', '');
     streamLoop();
 
     window.Conduit = window.Conduit || {};

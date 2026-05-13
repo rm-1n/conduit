@@ -31,9 +31,12 @@
 //   deviceUrl(ip, uniqueId, path)      — URL builder used by the rest of the IDE
 //   dispatch event 'conduit:devices-updated' whenever the cache changes
 
-// Per-probe timeout. 5 s is plenty: a reachable LAN device replies in
-// tens of ms; an empty IP fails fast.
-const PROBE_TIMEOUT_MS = 5000;
+// Per-probe timeout. Generous because the HTTPS path (per-device LE
+// cert) costs ~3 s on a fresh handshake on Cortex-M33; 5 s used to
+// time out borderline-slow handshakes on a busy device. 10 s is plenty
+// over either transport — a reachable LAN device on plain HTTP still
+// replies in tens of ms; an empty IP fails fast either way.
+const PROBE_TIMEOUT_MS = 10000;
 
 // Default DNS zone for per-device wildcard certs. Only used when the
 // caller passes a uniqueId — otherwise we don't construct an HTTPS URL

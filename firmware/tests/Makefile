@@ -19,7 +19,7 @@ CFLAGS  ?= -O2 -g -std=c11 -Wall -Wextra -Werror -Wno-unused-parameter
 APP     := ../app
 BUILD   := build
 
-TESTS := $(BUILD)/test_identity
+TESTS := $(BUILD)/test_identity $(BUILD)/test_ota_ring
 
 .PHONY: all test clean
 all: $(TESTS)
@@ -30,6 +30,11 @@ $(BUILD):
 $(BUILD)/test_identity: test_identity.c $(APP)/identity.c $(APP)/sha256.c $(APP)/identity.h $(APP)/sha256.h | $(BUILD)
 	$(CC) $(CFLAGS) -DCONDUIT_IDENTITY_HOSTTEST -I$(APP) \
 	    test_identity.c $(APP)/identity.c $(APP)/sha256.c \
+	    -o $@
+
+$(BUILD)/test_ota_ring: test_ota_ring.c $(APP)/ota_ring.c $(APP)/ota_ring.h | $(BUILD)
+	$(CC) $(CFLAGS) -DOTA_RING_HOSTTEST -I$(APP) \
+	    test_ota_ring.c $(APP)/ota_ring.c \
 	    -o $@
 
 test: $(TESTS)

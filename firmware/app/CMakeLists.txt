@@ -104,6 +104,17 @@ option(CONDUIT_SIMULATE_HANG "Hang after init to exercise the TBYB watchdog roll
 # for the full rationale.
 option(CONDUIT_DEV_LOGS "Enable verbose firmware status prints over USB CDC" OFF)
 
+# ---- Binary version --------------------------------------------------------
+# Bump MINOR per OTA test cycle. The RP2350 bootrom compares versions across
+# A/B partitions and boots whichever is newer. Both pico_set_binary_version
+# AND a compile-time define use these values, so /api/status can surface the
+# binary version the bootrom actually picked — necessary for verifying that
+# a TBYB rollback truly flipped back to the previous partition (the
+# CONDUIT_VERSION_STRING in /api/status is a separate semver and stays "1.2.0"
+# across rollbacks; only this MAJOR.MINOR pair changes).
+set(CONDUIT_BINARY_VERSION_MAJOR 10)
+set(CONDUIT_BINARY_VERSION_MINOR 40)
+
 # ---- App executable helper --------------------------------------------------
 #
 # The app ships as two UF2s built from the same source:
@@ -130,6 +141,7 @@ function(conduit_define_app TARGET)
         network.c
         http_server.c
         ota.c
+        ota_ring.c
         log_buffer.c
         data_buffer.c
         commands.c
@@ -190,10 +202,15 @@ function(conduit_define_app TARGET)
     pico_enable_stdio_usb(${TARGET} 1)
     pico_enable_stdio_uart(${TARGET} 0)
 
-    # Binary version for A/B partition selection — bump MINOR per OTA test
-    # cycle. The RP2350 bootrom compares versions across partitions and
-    # boots the newer.
-    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 19)
+    # Binary version for A/B partition selection. Single source of truth for
+    # both the ROM-side picobin metadata AND the JSON we expose from
+    # /api/status — see the CONDUIT_BINARY_VERSION_* set() block above.
+    pico_set_binary_version(${TARGET}
+        MAJOR ${CONDUIT_BINARY_VERSION_MAJOR}
+        MINOR ${CONDUIT_BINARY_VERSION_MINOR})
+    target_compile_definitions(${TARGET} PRIVATE
+        CONDUIT_BINARY_VERSION_MAJOR=${CONDUIT_BINARY_VERSION_MAJOR}
+        CONDUIT_BINARY_VERSION_MINOR=${CONDUIT_BINARY_VERSION_MINOR})
 
     # Embed the A/B partition table so the bootrom can discover the layout
     # and pick between A and B based on binary version.

@@ -15,6 +15,7 @@
 #include "http_server.h"
 #include "network.h"
 #include "ota.h"
+#include "ota_ring.h"
 #include "conduit_config.h"
 #include "dev_log.h"
 #include "log_buffer.h"
@@ -47,6 +48,8 @@
 typedef enum {
     CONN_STATE_HEADER,     // Accumulating headers
     CONN_STATE_BODY,       // Receiving POST body
+    CONN_STATE_DRAINING,   // OTA body fully received; waiting for Core 0 to flush
+                           // ring and run the last flash write before responding
     CONN_STATE_WAITING,    // /api/log long-poll: holding until data or deadline
     CONN_STATE_STREAMING,  // /api/log?stream=1: persistent push of new bytes
     CONN_STATE_DONE,       // Response sent, waiting for close
@@ -78,8 +81,18 @@ typedef struct {
     bool authenticated;
     bool ota_start;    // X-OTA-Start: 1 — call ota_begin before streaming
     bool ota_finish;   // X-OTA-Finish: 1 — call ota_finish after body
+    bool keep_alive;   // Send "Connection: keep-alive"; reset conn for the
+                       // next request on the same TCP/TLS pcb instead of
+                       // closing. Only ever set by the OTA intermediate-
+                       // chunk path; closing is the safe default for
+                       // every other endpoint.
     uint32_t content_length;
     uint32_t body_received;
+    // OTA upload ack pacing — snapshot of ota_ring_total_drained() at the
+    // last altcp_recved call for upload-body bytes. Each tick of http_poll
+    // (and each recv cb) computes the delta and acks it, throttling the
+    // peer's TCP window to Core 0's drain rate. See ota_pump_ack().
+    uint32_t last_acked_drained;
     char header_buf[HTTP_MAX_HEADER];
     uint16_t header_len;
     bool headers_complete;
@@ -210,6 +223,8 @@ static void unregister_streaming(struct altcp_pcb *pcb, http_conn_t *conn) {
 // Response builders
 // --------------------------------------------------------------------------
 
+// Send a response with `Connection: close`. Default for every endpoint
+// except the OTA intermediate-chunk path (see send_response_keepalive).
 static err_t send_response(struct altcp_pcb *pcb, const char *status,
                            const char *content_type, const char *body, size_t body_len) {
     char hdr[512];
@@ -218,6 +233,32 @@ static err_t send_response(struct altcp_pcb *pcb, const char *status,
         "Content-Type: %s\r\n"
         "Content-Length: %u\r\n"
         "Connection: close\r\n"
+        "%s"
+        "\r\n",
+        status, content_type, (unsigned)body_len, cors_headers);
+
+    altcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
+    if (body && body_len > 0) {
+        altcp_write(pcb, body, body_len, TCP_WRITE_FLAG_COPY);
+    }
+    altcp_output(pcb);
+    return ERR_OK;
+}
+
+// Same as send_response, but advertises Connection: keep-alive so the
+// client can reuse this TCP/TLS connection for the next request. Used
+// for OTA intermediate chunks where 47 sequential POSTs would otherwise
+// each pay a fresh TLS handshake (~1 s) and burn a PCB; with keep-alive
+// the whole upload runs over one connection.
+static err_t send_response_keepalive(struct altcp_pcb *pcb, const char *status,
+                                     const char *content_type,
+                                     const char *body, size_t body_len) {
+    char hdr[512];
+    int hdr_len = snprintf(hdr, sizeof(hdr),
+        "HTTP/1.1 %s\r\n"
+        "Content-Type: %s\r\n"
+        "Content-Length: %u\r\n"
+        "Connection: keep-alive\r\n"
         "%s"
         "\r\n",
         status, content_type, (unsigned)body_len, cors_headers);
@@ -269,6 +310,12 @@ static void handle_status(struct altcp_pcb *pcb) {
     int len = snprintf(json, sizeof(json),
         "{"
         "\"version\":\"%s\","
+        // binary_version is the picobin MAJOR.MINOR baked in by
+        // pico_set_binary_version — what the RP2350 bootrom actually
+        // compares for A/B selection. Use this (NOT `version` above,
+        // which is a fixed semver from CONDUIT_VERSION_STRING) when
+        // verifying that a TBYB rollback flipped to the previous image.
+        "\"binary_version\":\"%d.%d\","
         "\"ip\":\"%s\","
         "\"mac\":\"%s\","
         "\"uptime\":%u,"
@@ -284,6 +331,7 @@ static void handle_status(struct altcp_pcb *pcb) {
         "\"device\":\"conduit\""
         "}",
         CONDUIT_VERSION_STRING,
+        CONDUIT_BINARY_VERSION_MAJOR, CONDUIT_BINARY_VERSION_MINOR,
         network_get_ip_str(),
         network_get_mac_str(),
         network_get_uptime_s(),
@@ -328,36 +376,87 @@ static void handle_upload_begin(struct altcp_pcb *pcb, http_conn_t *conn) {
     }
 
     conn->state = CONN_STATE_BODY;
+    // Snapshot the ring's drain counter so ota_pump_ack only credits
+    // bytes Core 0 drains AFTER this upload started.
+    conn->last_acked_drained = ota_ring_total_drained();
+    // Register periodic poll. lwIP's TCP slow timer fires every ~500 ms;
+    // with peer's window closed (we defer all upload-body acks), normal
+    // recv callbacks stop firing — http_poll is what wakes us up to
+    // credit drained bytes back into the window.
+    altcp_poll(pcb, http_poll, 1);
+    DEV_LOG("[ota] upload begin: state→BODY, content_length=%u, poll registered\n",
+            (unsigned)conn->content_length);
 }
 
-static void handle_upload_data(struct altcp_pcb *pcb, http_conn_t *conn,
-                               const uint8_t *data, size_t len) {
-    ota_err_t err = ota_write_chunk(data, len);
-    if (err != OTA_OK) {
-        send_error(pcb, "422 Unprocessable Entity", ota_error_string(err));
-        conn->state = CONN_STATE_DONE;
-        return;
+// Credit any bytes Core 0 has drained since the last call back into the
+// TCP receive window. Called from both http_recv (catch-up on each new
+// pbuf) and http_poll (drives forward progress while peer's window is
+// closed). Safe to call any time on the upload conn — caps to u16_t
+// chunks if Core 0 got way ahead between calls.
+//
+// altcp_output() is called AFTER altcp_recved so the window-update
+// packet is flushed onto the wire NOW instead of waiting for lwIP's
+// silly-window threshold to be met by accumulating credits. Without
+// this, small per-poll credits (e.g. 1.5–3 KB per 100 ms) can sit
+// in pcb->rcv_wnd unannounced for seconds while the peer is stuck
+// in zero-window persist.
+static void ota_pump_ack(struct altcp_pcb *pcb, http_conn_t *conn) {
+    uint32_t drained_now = ota_ring_total_drained();
+    uint32_t newly = drained_now - conn->last_acked_drained;
+    if (newly == 0) return;
+    while (newly > 0) {
+        u16_t chunk = (newly > 0xFFFF) ? 0xFFFF : (u16_t)newly;
+        altcp_recved(pcb, chunk);
+        newly -= chunk;
+        conn->last_acked_drained += chunk;
     }
+    // Force the window update onto the wire immediately. Without this,
+    // lwIP's silly-window-avoidance can sit on small credits until they
+    // accumulate past TCP_WND_UPDATE_THRESHOLD — which never happens
+    // for a stalled peer in zero-window persist.
+    altcp_output(pcb);
+}
 
-    conn->body_received += len;
+// Producer side. Always expects to fully accept `len` into the ring
+// because TCP_WND < OTA_RING_SIZE and the peer's window is held closed
+// (via deferred altcp_recved) until Core 0 drains. If the ring DOES
+// overflow somehow, we've lost bytes (lwIP already TCP-acked them) and
+// must abort — the in-flight image would be corrupt.
+static size_t handle_upload_data(struct altcp_pcb *pcb, http_conn_t *conn,
+                                 const uint8_t *data, size_t len) {
+    size_t accepted = ota_write_chunk_ex(data, len);
+    if (accepted < len) {
+        DEV_LOG("[ota] ring overflow: accepted=%u/%u — TCP_WND vs ring sizing bug\n",
+                (unsigned)accepted, (unsigned)len);
+        send_error(pcb, "500 Internal Server Error", "ring overflow");
+        ota_abort();
+        conn->state = CONN_STATE_DONE;
+        return accepted;
+    }
+    conn->body_received += accepted;
 
     if (conn->content_length > 0 && conn->body_received >= conn->content_length) {
         if (conn->ota_finish) {
-            err = ota_finish();
-            if (err != OTA_OK) {
-                send_error(pcb, "422 Unprocessable Entity", ota_error_string(err));
-            } else {
-                send_json(pcb, "200 OK", "{\"ok\":true,\"message\":\"update complete, rebooting\"}");
-            }
+            // All body bytes are in the ring (or already flashed). Hand
+            // off to the Core-0 pump to drain and finalize. http_poll
+            // (registered at handle_upload_begin) wakes on each TCP slow
+            // tick to check ota_drain_complete and send the response.
+            conn->state = CONN_STATE_DRAINING;
+            ota_begin_drain();
         } else {
             // Intermediate chunk — ack with current progress, keep OTA open.
+            // Advertise Connection: keep-alive so the client reuses this
+            // TCP/TLS pcb for the next chunk. http_recv resets the conn
+            // for the next request based on conn->keep_alive.
             char body[96];
             int n = snprintf(body, sizeof(body),
                 "{\"ok\":true,\"bytes_written\":%u}", (unsigned)ota_bytes_written());
-            send_response(pcb, "200 OK", "application/json", body, (size_t)n);
+            conn->keep_alive = true;
+            send_response_keepalive(pcb, "200 OK", "application/json", body, (size_t)n);
+            conn->state = CONN_STATE_DONE;
         }
-        conn->state = CONN_STATE_DONE;
     }
+    return accepted;
 }
 
 static void handle_reboot(struct altcp_pcb *pcb, http_conn_t *conn) {
@@ -904,8 +1003,10 @@ void http_server_on_link_down(void) {
 static void conn_close(struct altcp_pcb *pcb, http_conn_t *conn) {
     unregister_streaming(pcb, conn);
     if (conn) {
-        // If OTA was started but connection dropped mid-body, abort it.
-        if (conn->state == CONN_STATE_BODY && ota_in_progress()) {
+        // If OTA was started but connection dropped mid-body or while
+        // the ring was still draining, abort it.
+        if ((conn->state == CONN_STATE_BODY || conn->state == CONN_STATE_DRAINING)
+            && ota_in_progress()) {
             ota_abort();
         }
         free(conn);
@@ -929,6 +1030,42 @@ static void conn_close(struct altcp_pcb *pcb, http_conn_t *conn) {
 static err_t http_poll(void *arg, struct altcp_pcb *pcb) {
     http_conn_t *conn = (http_conn_t *)arg;
     if (!conn) return ERR_OK;
+
+    if (conn->state == CONN_STATE_BODY) {
+        // Upload in progress. Peer's window stays closed (we defer all
+        // body-byte acks until Core 0 drains) — this is the heartbeat
+        // that reopens it. Credit any bytes drained since the last
+        // visit so the peer can keep sending at Core 0's rate.
+        ota_pump_ack(pcb, conn);
+        return ERR_OK;
+    }
+
+    if (conn->state == CONN_STATE_DRAINING) {
+        // OTA body fully received; Core 0 is draining the ring. Catch
+        // up any straggling acks (mostly harmless — peer won't send
+        // more — but keeps lwIP's bookkeeping clean), then wait for
+        // ota_drain_complete to flip true and finalize.
+        ota_pump_ack(pcb, conn);
+        if (!ota_drain_complete()) return ERR_OK;
+        ota_err_t pump_err = ota_last_pump_error();
+        if (pump_err != OTA_OK) {
+            send_error(pcb, "422 Unprocessable Entity", ota_error_string(pump_err));
+            ota_abort();
+            conn->state = CONN_STATE_DONE;
+            return ERR_OK;
+        }
+        ota_err_t fin = ota_finalize_after_drain();
+        if (fin != OTA_OK) {
+            send_error(pcb, "422 Unprocessable Entity", ota_error_string(fin));
+            conn->state = CONN_STATE_DONE;
+            return ERR_OK;
+        }
+        // ota_finalize_after_drain does not return on success — the
+        // 200 OK response below is unreachable, but kept defensively.
+        send_json(pcb, "200 OK", "{\"ok\":true,\"message\":\"update complete, rebooting\"}");
+        conn->state = CONN_STATE_DONE;
+        return ERR_OK;
+    }
 
     if (conn->state == CONN_STATE_WAITING) {
         bool has_data = (log_buffer_total_written() != conn->log_since);
@@ -995,12 +1132,20 @@ static err_t http_poll(void *arg, struct altcp_pcb *pcb) {
 
         // No real data. Emit a tiny keepalive when the connection has
         // been silent for STREAM_KEEPALIVE_MS so the browser stall
-        // watchdog (1 s) sees bytes from a quiet-but-healthy device.
+        // watchdog (1 s HTTP, 4 s HTTPS) sees bytes from a
+        // quiet-but-healthy device.
         // For data streams: a 16-byte zero-payload record with a
         // reserved msg_id (CONDUIT_DATA_KEEPALIVE_MSG_ID) — the browser
         // parser skips it before chart/store push.
         // For log streams: a single newline — browser drops empty
         // lines at the top of processLine().
+        //
+        // Tried a per-conn HTTPS variant (3000 ms over TLS to reduce
+        // per-record framing/AEAD CPU on the M33). Caused a hard wedge
+        // when combined with the four concurrent conns the IDE opens
+        // (telemetry, console, status, upload). Reverted to the
+        // unconditional 500 ms — the v10.29 known-good cadence.
+        // Revisit only with a real load test of the IDE startup path.
         #define STREAM_KEEPALIVE_MS  500
         if (!time_reached(delayed_by_ms(conn->last_tx_at, STREAM_KEEPALIVE_MS))) {
             return ERR_OK;
@@ -1050,17 +1195,44 @@ static err_t http_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t e
         return ERR_OK;
     }
 
-    altcp_recved(pcb, p->tot_len);
-
     if (conn->state == CONN_STATE_DONE
         || conn->state == CONN_STATE_WAITING
         || conn->state == CONN_STATE_STREAMING) {
         // DONE: response already sent, just waiting for FIN.
         // WAITING / STREAMING: /api/log connections are server-driven;
         // discard any extra bytes the client pushes (no pipelined requests).
+        altcp_recved(pcb, p->tot_len);
         pbuf_free(p);
         return ERR_OK;
     }
+
+    if (conn->state == CONN_STATE_DRAINING) {
+        // Body fully received; trailing bytes (FIN piggybacks, peer-side
+        // retransmits) ack immediately. ota_pump_ack continues to credit
+        // newly drained ring bytes — without it the connection's window
+        // would never reopen if the peer sends one more probe.
+        ota_pump_ack(pcb, conn);
+        altcp_recved(pcb, p->tot_len);
+        pbuf_free(p);
+        return ERR_OK;
+    }
+
+    // For active-upload conns, credit any bytes Core 0 has drained since
+    // the last visit. This is the catch-up path on top of http_poll —
+    // each new recv (e.g. a window probe from the peer) is also a chance
+    // to advance the advertised window.
+    if (conn->state == CONN_STATE_BODY) {
+        ota_pump_ack(pcb, conn);
+    }
+
+    // `immediate_ack` is the bytes whose receipt is unconditional
+    // (headers, non-upload routes' bodies). Upload body bytes do NOT
+    // accumulate here — they're acked exclusively via ota_pump_ack,
+    // paced to Core 0's drain rate. That's the throttle: peer's window
+    // shrinks as it sends, only reopens as Core 0 catches up. Sizing
+    // invariant: TCP_WND < OTA_RING_SIZE guarantees the ring can always
+    // accept whatever the peer can have in flight.
+    size_t immediate_ack = 0;
 
     // Process data from all pbufs in the chain
     for (struct pbuf *q = p; q != NULL; q = q->next) {
@@ -1081,9 +1253,16 @@ static err_t http_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t e
                 conn->headers_complete = true;
                 parse_request_line(conn);
 
-                // Calculate any body data that arrived with the headers
+                // Bytes in THIS pbuf consumed as headers vs trailing body.
+                // header_total counts from the start of header_buf, but
+                // earlier pbufs may have contributed some of those bytes;
+                // what matters here is how many of THIS pbuf's bytes were
+                // header (immediate ack) vs body (deferred via pump_ack).
                 uint32_t header_total = (hdr_end - conn->header_buf) + 4;
                 uint32_t body_in_header = conn->header_len - header_total;
+                uint32_t body_in_pbuf = body_in_header < len ? body_in_header : len;
+                uint32_t header_in_pbuf = len - body_in_pbuf;
+                immediate_ack += header_in_pbuf;
 
                 // Handle the request
                 if (conn->method == METHOD_OPTIONS) {
@@ -1094,41 +1273,84 @@ static err_t http_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t e
                     conn->state = CONN_STATE_DONE;
                 } else if (conn->method == METHOD_POST && conn->route == ROUTE_UPLOAD) {
                     handle_upload_begin(pcb, conn);
-                    // If still in BODY state, feed leftover data
-                    if (conn->state == CONN_STATE_BODY && body_in_header > 0) {
+                    // If still in BODY state, feed leftover data — NOT
+                    // counted into immediate_ack (handled by pump_ack).
+                    if (conn->state == CONN_STATE_BODY && body_in_pbuf > 0) {
                         handle_upload_data(pcb, conn,
-                            (uint8_t *)(hdr_end + 4), body_in_header);
+                            (uint8_t *)(hdr_end + 4), body_in_pbuf);
+                    } else {
+                        // upload_begin failed (403/409/500): body bytes
+                        // that piggybacked were consumed into the header
+                        // buf and discarded — ack so the window reopens.
+                        immediate_ack += body_in_pbuf;
                     }
                 } else if (conn->method == METHOD_POST && conn->route == ROUTE_REBOOT) {
                     handle_reboot(pcb, conn);
+                    immediate_ack += body_in_pbuf;
                 } else if (conn->method == METHOD_POST && conn->route == ROUTE_COMMIT) {
                     handle_commit(pcb, conn);
+                    immediate_ack += body_in_pbuf;
                 } else if (conn->method == METHOD_GET && conn->route == ROUTE_LOG) {
                     // handle_log sets state to WAITING (long-poll parked) or
                     // DONE (immediate response) — don't force either here.
                     handle_log(pcb, conn);
+                    immediate_ack += body_in_pbuf;
                 } else if (conn->method == METHOD_GET && conn->route == ROUTE_DATA) {
                     // handle_data may go to STREAMING or DONE.
                     handle_data(pcb, conn);
+                    immediate_ack += body_in_pbuf;
                 } else if (conn->method == METHOD_GET && conn->route == ROUTE_DATA_SCHEMA) {
                     handle_data_schema(pcb, conn);
+                    immediate_ack += body_in_pbuf;
                 } else if (conn->method == METHOD_POST && conn->route == ROUTE_CMD) {
                     handle_cmd(pcb, conn);
+                    immediate_ack += body_in_pbuf;
                 } else {
                     send_error(pcb, "404 Not Found", "not found");
                     conn->state = CONN_STATE_DONE;
+                    immediate_ack += body_in_pbuf;
                 }
+            } else {
+                // headers not yet complete — entire pbuf is header bytes
+                immediate_ack += len;
             }
         } else if (conn->state == CONN_STATE_BODY) {
-            // Streaming body data to OTA engine
+            // Stream body data into the OTA ring. NOT counted into
+            // immediate_ack — paced via ota_pump_ack.
             handle_upload_data(pcb, conn, data, len);
+        } else {
+            // State changed mid-loop (e.g. handler set DONE / DRAINING /
+            // WAITING / STREAMING). Remaining bytes are not part of an
+            // active body stream — ack so the window stays open.
+            immediate_ack += len;
         }
     }
 
+    if (immediate_ack > 0) {
+        altcp_recved(pcb, (u16_t)immediate_ack);
+    }
     pbuf_free(p);
 
     if (conn->state == CONN_STATE_DONE) {
-        conn_close(pcb, conn);
+        if (conn->keep_alive) {
+            // Reset for the next request on the same TCP/TLS pcb. Wipe
+            // every per-request field; preserve the pcb-level callbacks
+            // (already registered) and the auth-pass, since on a single
+            // long upload the same client is doing all chunks.
+            conn->state           = CONN_STATE_HEADER;
+            conn->method          = METHOD_UNKNOWN;
+            conn->route           = ROUTE_UNKNOWN;
+            conn->ota_start       = false;
+            conn->ota_finish      = false;
+            conn->keep_alive      = false;
+            conn->content_length  = 0;
+            conn->body_received   = 0;
+            conn->header_len      = 0;
+            conn->headers_complete = false;
+            conn->authenticated   = false;
+        } else {
+            conn_close(pcb, conn);
+        }
     }
 
     return ERR_OK;
@@ -1147,7 +1369,8 @@ static void http_err(void *arg, err_t err) {
         // active OTA simply because its err callback fired. Mirror the
         // same check `conn_close` already has. Keep the DEV_LOG so a
         // genuine mid-upload abort still leaves a breadcrumb.
-        if (conn->state == CONN_STATE_BODY && ota_in_progress()) {
+        if ((conn->state == CONN_STATE_BODY || conn->state == CONN_STATE_DRAINING)
+            && ota_in_progress()) {
             DEV_LOG("[http] mid-upload conn err=%d → ota_abort\n", err);
             ota_abort();
         }
