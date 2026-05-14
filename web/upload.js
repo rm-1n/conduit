@@ -34,6 +34,51 @@
 (function () {
   'use strict';
 
+  // ---- Stage descriptor table -----------------------------------------------
+  //
+  // Single source of truth for what the OTA progress UI shows during each
+  // phase. The IDE (ide.js onStage handler) looks up entries here via
+  // stageDescriptor() — adding a new stage to updateFirmware below means
+  // adding a row HERE, not in ide.js. The unit test in
+  // tests/unit/upload_stages.test.mjs parses this file and asserts every
+  // stage(...) emission has a matching STAGES entry, so the "added an
+  // emission but forgot the renderer" bug class fails CI loudly.
+  //
+  // pct values are the OVERALL bar position (0..100). ide.js owns 0..50
+  // (Building phase); updateFirmware owns 50..100 (upload + verify + commit).
+  const STAGES = {
+    precheck:  { pct: 50, label: 'Checking device…' },
+    uploading: { pct: 55, label: 'Uploading firmware…' },
+    waiting:   { pct: 95, label: 'Waiting for reboot…' },
+    verifying: { pct: 97, label: 'Verifying…' },
+    commit:    { pct: 99, label: 'Committing (TBYB)…' },
+  };
+
+  // Format a stage's human label, splicing in the `detail` argument where
+  // a stage uses it. Most stages ignore `detail`; only `waiting` formats
+  // it (as "N/M" attempt counts from the post-OTA poll loop). Keeping
+  // this as code rather than a per-row template lets each stage decide
+  // independently and stays readable as the table grows.
+  function formatStageLabel(stage, detail) {
+    const base = STAGES[stage];
+    if (!base) return null;
+    if (stage === 'waiting' && typeof detail === 'string' && detail) {
+      return `${base.label} ${detail}`;
+    }
+    return base.label;
+  }
+
+  // Lookup a stage by name. Returns { stage, pct, label, detail } or null
+  // if the stage isn't in the table. The IDE's onStage handler renders
+  // null as a neutral spinner-style label rather than leaving the
+  // previous stage's text in place — keeps the UI honest when an
+  // emitter ships a name without updating STAGES.
+  function stageDescriptor(stage, detail) {
+    const base = STAGES[stage];
+    if (!base) return null;
+    return { stage, pct: base.pct, label: formatStageLabel(stage, detail), detail };
+  }
+
   // Convert any accepted payload type to a Blob so we can pass it to fetch.
   async function toBlob(data) {
     if (data instanceof Blob) return data;
@@ -83,10 +128,10 @@
       if (aborted) return;
 
       const total = blob.size;
-      // Auto-pick HTTP or HTTPS based on whether the user registered a
-      // uniqueId in Hardware Manager. With single-POST + the device's
-      // 16 KB MBEDTLS_SSL_IN_CONTENT_LEN matching what browsers send,
-      // HTTPS uploads sustain a long stream without RECORD_OVERFLOW.
+      // Single source of truth: deviceUrlForIp picks HTTPS when a
+      // uniqueId is registered for this device (rm1n hostname +
+      // per-device LE cert), HTTP otherwise. The MVP is HTTPS-based,
+      // so the user's device picker entries will have uniqueIds.
       const url = window.Conduit.deviceUrlForIp(ip, '/api/upload');
 
       // Use XMLHttpRequest instead of fetch() solely for upload-side
@@ -97,6 +142,14 @@
       // of the actual flash write (TCP buffers absorb a few KB).
       xhr = new XMLHttpRequest();
       xhr.open('POST', url, true);
+      // Fail-fast timeout. Without this, a wedged device leaves the
+      // browser's XHR pending indefinitely (the default xhr.timeout
+      // is 0 = no timeout). Measured: a healthy HTTPS OTA completes
+      // in ~20 s for a 384 KB image; the worst slow-but-progressing
+      // run we've observed was ~90 s. 180 s = 2× that worst case so
+      // a network blip doesn't false-timeout, but a truly wedged
+      // device still surfaces an actionable error in under 3 minutes.
+      xhr.timeout = 180000;
       xhr.setRequestHeader('Content-Type', 'application/octet-stream');
       xhr.setRequestHeader('X-Auth-Token', token);
       xhr.setRequestHeader('X-OTA-Start', '1');
@@ -104,34 +157,59 @@
 
       // Track whether the request body was fully sent, so xhr.onerror
       // can distinguish "device rebooted mid-response" (success) from
-      // "upload stalled / TLS RST mid-stream" (real failure).
+      // "upload stalled / TLS RST mid-stream" (real failure). bytesSent
+      // here is OS-TCP-send-buffer-fill, NOT on-the-wire bytes — modern
+      // OS socket buffers absorb the first ~100-200 KB instantly. So
+      // the displayed % jumps to ~30 % within ms, sits flat for ~15 s
+      // while TCP drains the OS buffer onto the wire and the device
+      // flashes blocks, then climbs to 100 % as the buffer empties.
+      //
+      // Reported anyway because the user explicitly asked for a number
+      // over a generic spinner. The label is annotated "(client-side
+      // bytes-sent)" so users understand it's not device-truth — the
+      // honest device-truth source (polling /api/status ota_bytes_written)
+      // was tried in v=130-v=132 and caused wedges, since each poll
+      // is an HTTPS request that competes with the upload's mbedtls
+      // cycles. The OS-buffer number is at least free and monotonic.
       let bytesSent = 0;
       let allBytesSent = false;
-
-      if (onProgress) {
-        xhr.upload.onprogress = (ev) => {
-          if (!ev.lengthComputable) return;
-          bytesSent = ev.loaded;
+      xhr.upload.onload = () => {
+        allBytesSent = true;
+        bytesSent = total;
+        if (onProgress) onProgress({ loaded: total, total, pct: 100 });
+      };
+      xhr.upload.onprogress = (ev) => {
+        if (!ev.lengthComputable) return;
+        bytesSent = ev.loaded;
+        if (onProgress) {
           onProgress({
             loaded: ev.loaded,
             total: ev.total || total,
-            pct: ((ev.loaded / (ev.total || total)) * 100),
+            pct: (ev.loaded / (ev.total || total)) * 100,
           });
-        };
-        // Some browsers don't fire a final 100% event when the request
-        // succeeds — guarantee one when load completes.
-        xhr.upload.onload = () => {
-          allBytesSent = true;
-          bytesSent = total;
-          onProgress({ loaded: total, total, pct: 100 });
-        };
-      } else {
-        xhr.upload.onload = () => { allBytesSent = true; bytesSent = total; };
-        xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) bytesSent = ev.loaded; };
-      }
+        }
+      };
+
+      // Treat "bytes reached total" the same as "upload.onload fired".
+      // Over HTTPS the device's RST arrives before the browser dispatches
+      // upload.onload in some races — bytesSent === total at that point
+      // means the body was fully on the wire even if onload never ran.
+      const fullySent = () => allBytesSent || bytesSent >= total;
+
+      // Snap displayed progress to 100% on success-detected terminal
+      // paths. The IDE's onProgress callback maps pct=100 to a fixed
+      // 95 % position with a "Uploading 100%" label, then the
+      // updateFirmware orchestrator transitions stage() through
+      // waiting / verifying / commit. Without the explicit pct=100
+      // snap, the bar would sit at whatever fixed "Uploading…" value
+      // the caller set before invoking us.
+      const snapDone = () => {
+        if (onProgress) onProgress({ loaded: total, total, pct: 100 });
+      };
 
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
+          snapDone();
           onComplete && onComplete({});
         } else {
           let msg = `HTTP ${xhr.status}`;
@@ -142,11 +220,6 @@
           onError && onError({ status: xhr.status, message: msg });
         }
       };
-      // Treat "bytes reached total" the same as "upload.onload fired".
-      // Over HTTPS the device's RST arrives before the browser dispatches
-      // upload.onload in some races — bytesSent === total at that point
-      // means the body was fully on the wire even if onload never ran.
-      const fullySent = () => allBytesSent || bytesSent >= total;
 
       xhr.onerror = () => {
         // Two cases collapse into XHR's `error` event, distinguished
@@ -159,6 +232,7 @@
         //     fall through to an "unreachable" misdiagnosis when the
         //     device never even rebooted.
         if (fullySent()) {
+          snapDone();
           onComplete && onComplete({});
         } else {
           const pct = ((bytesSent / total) * 100).toFixed(1);
@@ -168,9 +242,27 @@
           });
         }
       };
-      xhr.onabort = () => {
-        if (aborted) return;  // user-initiated abort, no callback expected
+      xhr.ontimeout = () => {
+        // xhr.timeout fired. Like onerror: if all bytes were on the
+        // wire, the device almost certainly received them and rebooted
+        // (RST just didn't surface); treat as success. Otherwise the
+        // upload genuinely stalled — surface the byte count so the
+        // user knows where it stopped.
         if (fullySent()) {
+          snapDone();
+          onComplete && onComplete({});
+        } else {
+          const pct = ((bytesSent / total) * 100).toFixed(1);
+          onError && onError({
+            status: 0,
+            message: `upload timed out at ${bytesSent}/${total} bytes (${pct}%) after ${xhr.timeout / 1000}s — device may be wedged`,
+          });
+        }
+      };
+      xhr.onabort = () => {
+        if (aborted) return;        // user-initiated abort
+        if (fullySent()) {
+          snapDone();
           onComplete && onComplete({});
         } else {
           onError && onError({
@@ -222,7 +314,15 @@
   // behavior is to trust the status once the device is clearly responsive.
   async function waitForDevice(ip, opts) {
     const { interval = 2000, maxAttempts = 30, onAttempt, preUptime = null } = opts || {};
-    await new Promise((r) => setTimeout(r, 1500));
+    // Pre-sleep before the first status poll. Was 1500 ms (chosen
+    // when the firmware's send-then-reboot delay was the main risk
+    // of catching pre-reboot state). With STRICT_ATTEMPTS=3 below
+    // guarding correctness — any status with uptime ≥ preUptime
+    // within 8 s of preUptime is rejected — the pre-sleep just
+    // determines how soon the first poll fires. 800 ms is well over
+    // the firmware's 100 ms send-then-reboot pause and cuts dead
+    // time off the post-OTA LED transition.
+    await new Promise((r) => setTimeout(r, 800));
     const STRICT_ATTEMPTS = 3;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -234,6 +334,11 @@
           // Almost certainly pre-reboot (uptime is within a few seconds
           // of the pre value). Keep polling to catch the real reboot.
         } else {
+          // Reachable post-reboot status — telemetry/console streams
+          // will reconnect on their own watchdog cadence and the LED
+          // (mirrored from telemetry state) will flip green when the
+          // first record arrives. See index.html note on the disabled
+          // health.js for why we don't probe-and-notify here anymore.
           return status;
         }
       } catch (_) {}
@@ -253,6 +358,42 @@
     });
     if (!res.ok) throw new Error(`POST /api/commit → HTTP ${res.status}`);
     return res.json();
+  }
+
+  // POST /api/reboot — soft-reboot the device. Used when an OTA times
+  // out and the device looks wedged: a network reboot is faster and
+  // less intrusive than yanking the cable and BOOTSEL-recovering.
+  //
+  // HTTPS only. We used to try plain HTTP first as a mbedtls-bypass
+  // safety net, but the IDE-wide HTTP fallback is now disabled (see
+  // app.js deviceUrl) so we don't quietly mask HTTPS bugs by reaching
+  // the device over plaintext. If mbedtls is the wedge, this throws
+  // and the caller suggests BOOTSEL recovery as the next step.
+  //
+  // Returns { ok: true } on success. Throws on failure.
+  async function rebootDevice(ip, token) {
+    const headers = { 'X-Auth-Token': token, 'Content-Length': '0' };
+    try {
+      const url = window.Conduit.deviceUrlForIp(ip, '/api/reboot');
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 8000);
+      const res = await fetch(url, {
+        method: 'POST', mode: 'cors', headers, signal: ctrl.signal,
+      });
+      clearTimeout(to);
+      // Device usually RSTs the response as it reboots; any 2xx OR a
+      // connection-reset-after-headers counts as success here.
+      if (res.ok) return { ok: true, via: 'https' };
+    } catch (e) {
+      // Connection-reset / abort can fire AFTER the server queued the
+      // 200 OK but BEFORE it transmitted the body, because rom_reboot
+      // tears down the TCP connection from inside the response handler.
+      if (/abort|aborted|reset|network|load failed|fetch/i.test(String(e))) {
+        return { ok: true, via: 'https-reset' };
+      }
+      throw e;
+    }
+    throw new Error('reboot request returned non-2xx');
   }
 
   // Full OTA orchestration matching firmware/OTA.md "End-to-end integration
@@ -329,7 +470,12 @@
   window.Conduit = window.Conduit || {};
   window.Conduit.uploadFirmware = uploadFirmware;
   window.Conduit.commitFirmware = commitFirmware;
+  window.Conduit.rebootDevice = rebootDevice;
   window.Conduit.getStatus = getStatus;
   window.Conduit.waitForDevice = waitForDevice;
   window.Conduit.updateFirmware = updateFirmware;
+  // Stage descriptors exported so ide.js (and tests) can render the
+  // OTA progress UI without duplicating the stage→{pct,label} mapping.
+  window.Conduit.uploadStages = STAGES;
+  window.Conduit.stageDescriptor = stageDescriptor;
 })();

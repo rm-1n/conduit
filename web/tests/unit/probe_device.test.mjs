@@ -1,11 +1,15 @@
 // Unit tests for app.js — the device-URL builder + probe + cache flow.
 //
 // app.js is the entry point every other web module uses to talk to a
-// CONDUIT board, and the URL it emits decides whether the IDE goes
-// over plain HTTP (uncommissioned / self-host story) or HTTPS via
-// the per-device wildcard (rm1n-commissioned). The two shapes are the
-// reason this file exists; if either drifts, the IDE silently breaks
-// for one half of users.
+// CONDUIT board. As of the HTTPS-only switch the URL builder ONLY
+// emits HTTPS hostnames (https://<dash-ip>.<uniqueId>.<tlsZone>) and
+// hard-fails (throws) when a uniqueId is missing rather than quietly
+// falling back to http://. Letting the IDE fall back to HTTP had been
+// masking real HTTPS regressions — a cleared cookie or a fresh-tab
+// re-add would drop the cached uniqueId and the IDE would just "look
+// fine" on plaintext, hiding mbedtls saturation bugs that only show
+// up at the TLS layer. The escape hatch is window.Conduit.allowHttp-
+// Fallback = true, for local dev only.
 
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
@@ -30,12 +34,33 @@ async function withFetch(fakeFetch, fn) {
   }
 }
 
-// ---- deviceUrl: HTTP vs HTTPS shapes -------------------------------
+// ---- deviceUrl: HTTPS-only, throws without uniqueId -----------------
 
-test('deviceUrl: http when uniqueId is missing', () => {
+test('deviceUrl: throws when uniqueId is missing (HTTP fallback disabled)', () => {
   const win = loadApp();
-  const url = win.Conduit.deviceUrl('192.168.178.200', null, '/api/status');
-  assert.equal(url, 'http://192.168.178.200/api/status');
+  assert.throws(
+    () => win.Conduit.deviceUrl('192.168.178.200', null, '/api/status'),
+    /no uniqueId.*HTTP fallback is disabled/i,
+  );
+});
+
+test('deviceUrl: also throws when uniqueId is missing and path is omitted', () => {
+  const win = loadApp();
+  assert.throws(
+    () => win.Conduit.deviceUrl('10.0.0.5', null),
+    /no uniqueId/i,
+  );
+});
+
+test('deviceUrl: opt-in escape hatch — allowHttpFallback=true restores HTTP', () => {
+  // The hatch exists for local-only dev (e.g. running the IDE from
+  // file://). Don't ship code that flips it.
+  const win = loadApp();
+  win.Conduit.allowHttpFallback = true;
+  assert.equal(
+    win.Conduit.deviceUrl('10.0.0.5', null, '/api/status'),
+    'http://10.0.0.5/api/status',
+  );
 });
 
 test('deviceUrl: https + dash-encoded ip when uniqueId is set', () => {
@@ -57,18 +82,13 @@ test('deviceUrl: respects custom Conduit.deviceTlsZone for self-host', () => {
     'https://10-0-0-5.abcdef0123456789.lan.example.test/api/status');
 });
 
-test('deviceUrl: defaults path to "/" when omitted', () => {
-  const win = loadApp();
-  assert.equal(win.Conduit.deviceUrl('10.0.0.5', null), 'http://10.0.0.5/');
-});
-
 // ---- deviceUrlForIp: pulls uniqueId from the cache ------------------
 
-test('deviceUrlForIp: HTTP for unknown / un-cached IPs', () => {
+test('deviceUrlForIp: throws for unknown / un-cached IPs', () => {
   const win = loadApp();
-  assert.equal(
-    win.Conduit.deviceUrlForIp('10.0.0.5', '/api/status'),
-    'http://10.0.0.5/api/status',
+  assert.throws(
+    () => win.Conduit.deviceUrlForIp('10.0.0.5', '/api/status'),
+    /no uniqueId/i,
   );
 });
 
@@ -85,22 +105,26 @@ test('deviceUrlForIp: HTTPS when the cached entry has a uniqueId', () => {
 
 // ---- probeDevice: passes the right URL to fetch ---------------------
 
-test('probeDevice: HTTP fetch when uniqueId is missing', async () => {
+test('probeDevice: returns null + logs warning when uniqueId is missing', async () => {
   const win = loadApp();
-  const calls = [];
-  await withFetch(async (url) => {
-    calls.push(url);
-    return {
-      ok: true,
-      json: async () => ({ device: 'conduit', version: '1.0.0', partition: 'A', _ip: '10.0.0.5' }),
-    };
-  }, async () => {
-    const data = await win.Conduit.probeDevice({ ip: '10.0.0.5' });
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0], 'http://10.0.0.5/api/status');
-    assert.equal(data._ip, '10.0.0.5');
-    assert.equal(data._uniqueId, undefined);
-  });
+  // Capture console.warn so the test doesn't pollute output, and so we
+  // can assert the deviceUrl error message reached the operator.
+  const warned = [];
+  const origWarn = console.warn;
+  console.warn = (...args) => { warned.push(args.map(String).join(' ')); };
+  try {
+    await withFetch(async () => {
+      throw new Error('fetch should never be called — deviceUrl throws first');
+    }, async () => {
+      const data = await win.Conduit.probeDevice({ ip: '10.0.0.5' });
+      assert.equal(data, null,
+        'probeDevice must return null when deviceUrl throws (no uniqueId)');
+      assert.ok(warned.some((s) => /no uniqueId|HTTP fallback is disabled/i.test(s)),
+        `expected a [probeDevice] warning about missing uniqueId; got: ${warned.join(' | ')}`);
+    });
+  } finally {
+    console.warn = origWarn;
+  }
 });
 
 test('probeDevice: HTTPS fetch + _uniqueId when uniqueId is provided', async () => {
@@ -197,25 +221,30 @@ test('probeAndRemember: re-probe by IP picks up the cached uniqueId', async () =
   });
 });
 
-test('probeAndRemember: legacy entry (no uniqueId) probes over HTTP', async () => {
-  // Migration path: old localStorage shape lacks uniqueId; we shouldn't
-  // pretend it has one and try HTTPS — that would 404 every cached row
-  // for users upgrading from the previous web build.
+test('probeAndRemember: legacy entry (no uniqueId) returns null + warns', async () => {
+  // Migration path: old localStorage shape lacks uniqueId. Pre-HTTPS-
+  // only, we transparently re-probed over HTTP. Now that HTTP fallback
+  // is disabled we surface the failure so the operator re-registers
+  // the device with its uniqueId, rather than the IDE silently working
+  // over plaintext.
   const win = loadApp();
   win.localStorage.setItem('conduit', JSON.stringify({
     knownDevices: [{ ip: '10.0.0.5', version: '1.0.0', partition: 'A' }],
   }));
-  const calls = [];
-  await withFetch(async (url) => {
-    calls.push(url);
-    return {
-      ok: true,
-      json: async () => ({ device: 'conduit', version: '1.1.0', partition: 'B' }),
-    };
-  }, async () => {
-    await win.Conduit.probeAndRemember('10.0.0.5');
-    assert.equal(calls[0], 'http://10.0.0.5/api/status');
-  });
+  const warned = [];
+  const origWarn = console.warn;
+  console.warn = (...args) => { warned.push(args.map(String).join(' ')); };
+  try {
+    await withFetch(async () => {
+      throw new Error('fetch should never be called');
+    }, async () => {
+      const result = await win.Conduit.probeAndRemember('10.0.0.5');
+      assert.equal(result, null);
+      assert.ok(warned.some((s) => /no uniqueId/i.test(s)));
+    });
+  } finally {
+    console.warn = origWarn;
+  }
 });
 
 // ---- removeKnownDevice ----------------------------------------------

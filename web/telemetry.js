@@ -19,12 +19,19 @@
 (function () {
   'use strict';
 
-  const RECONNECT_OK_MS    = 100;
-  // Sleep between failed reconnect attempts. Browser cost of polling
-  // more often is a few extra failed fetches while the cable is
-  // genuinely out — not a bottleneck. 150 ms means we land within
-  // ~150 ms of the upstream port re-opening.
-  const RECONNECT_ERR_MS   = 150;
+  // RECONNECT_OK_MS / RECONNECT_ERR_MS — back-off between stream
+  // reconnect attempts. Bumped from 100 / 150 ms after observing that
+  // the IDE's startup load (telemetry + console + status + any cached
+  // /api/log polls all opening fresh TLS sessions at the same time)
+  // saturates Cortex-M33 mbedtls on HTTPS: each handshake takes
+  // ~1.5–2 s, but if we slam a second handshake on top before the
+  // first one even finishes, the device wedges. >1 Hz reconnect cadence
+  // on HTTPS is a known-good way to brick the device — see memory
+  // project_https_keepalive_cadence_wedge.md. 2 s / 5 s gives the
+  // device room to actually serve the stream once it's connected,
+  // instead of getting hammered by another handshake every 100 ms.
+  const RECONNECT_OK_MS    = 2000;
+  const RECONNECT_ERR_MS   = 5000;
   const IP_CHECK_MS        = 1000;
   const SCHEMA_REFRESH_MIN_MS = 1000;
   const PERSIST_BATCH_MAX  = 64;
@@ -39,30 +46,45 @@
   // separate HTTPS threshold of 4 s coupled to a 3000 ms firmware-
   // side keepalive cadence — combo wedged the device on the IDE's
   // multi-conn startup. Revert and rely on the v10.29 cadence.
-  const STALL_MS           = 1000;
-  const STALL_CHECK_MS     = 150;
+  // STALL_MS — bumped 1000 → 10000 because the firmware keepalive byte
+  // (every ~500 ms) doesn't always reach us under HTTPS load: when the
+  // device is busy serving another concurrent TLS session, mbedtls can
+  // stall the write for several seconds. Aborting the stream at 1 s and
+  // reconnecting just adds another handshake to the pile, making the
+  // wedge worse. 10 s tolerates a noisy multi-stream window without
+  // false-tripping; a genuinely dead connection still gets caught in
+  // bounded time.
+  const STALL_MS           = 10000;
+  const STALL_CHECK_MS     = 500;
   // Connect-phase timeout — between issuing fetch() and the first byte
   // landing. Without this, a device that's just rebooted (TCP accepts
   // but firmware isn't ready to serve) leaves runStream blocked
   // indefinitely on `await fetch(...)` or `await reader.read()`. The
   // stall watchdog can't help here because it skips when lastByteMs is
   // still 0. Firmware emits a 16-byte keepalive every ~500 ms.
-  // 8 s covers a fresh HTTPS handshake (~3 s on Cortex-M33) plus
-  // headroom; the original 750 ms aborted every HTTPS stream open
-  // before the TLS handshake even finished, producing a NS_BINDING_ABORTED
-  // reconnect storm at 150 ms intervals. Plain HTTP still gets a
-  // first byte in <50 ms so the abort is still useful for that path.
-  const CONNECT_TIMEOUT_MS = 8000;
+  //
+  // 4 s — was 8 s, sized for the pre-ChaCha20 era when the ECDHE-ECDSA
+  // handshake took ~3 s on Cortex-M33. With ChaCha20-Poly1305 negotiated
+  // (firmware v10.41+) the handshake completes in ~1.5-2 s, so 4 s leaves
+  // ~2 s of comfortable margin. The shorter timeout cuts the worst-case
+  // red→green LED latency in half after a device reboot. If a stress run
+  // ever exceeds 4 s the stream auto-retries on a 150 ms cadence, so a
+  // single timed-out connect costs at most one extra round-trip.
+  // CONNECT_TIMEOUT_MS — bumped 4000 → 15000. On HTTPS the first cold
+  // handshake to a fresh device commonly takes 5–8 s (PNA preflight +
+  // full TLS handshake on Cortex-M33 software ChaCha20). 4 s aborted
+  // the handshake before it ever finished, the stream reconnected,
+  // started a new handshake, repeat — infinite-loop wedge.
+  // 15 s lets the handshake actually complete on a slow first connect.
+  const CONNECT_TIMEOUT_MS = 15000;
   // Schema fetch timeout. Sized to match CONNECT_TIMEOUT_MS so an
   // unreachable device doesn't hold runStream's awaited refreshSchema
   // for several seconds while the data path retries every 750 ms.
   // /api/data_schema is ~200 bytes; a healthy LAN delivers it in <10 ms
   // over plain HTTP. With HTTPS via the device's per-device LE cert,
-  // the TLS handshake on Cortex-M33 dominates at ~3 s on a fresh
-  // connection. 750 ms always aborts the fetch over HTTPS, the
-  // telemetry stream init never completes, and the IDE shows a
-  // NS_BINDING_ABORTED storm. 8 s leaves margin for a slow handshake.
-  const SCHEMA_TIMEOUT_MS  = 8000;
+  // ChaCha20-Poly1305 handshake on Cortex-M33 lands in ~1.5-2 s on a
+  // fresh connection. 4 s leaves margin for a slow handshake.
+  const SCHEMA_TIMEOUT_MS  = 15000;
 
   const DTYPE_I8 = 0, DTYPE_U8 = 1, DTYPE_I16 = 2, DTYPE_U16 = 3,
         DTYPE_I32 = 4, DTYPE_U32 = 5, DTYPE_I64 = 6, DTYPE_U64 = 7,

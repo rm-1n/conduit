@@ -253,14 +253,50 @@ int main() {
         }
         watchdog_update();
 #ifndef CONDUIT_MINIMAL
-        // Drain one UF2 block from the OTA ring per loop iteration
-        // (~1 kHz). Decouples the lwIP recv callback (Core 1) from
-        // synchronous flash erase/program — recv stays non-blocking,
-        // window slides, HTTPS upload doesn't wedge in TCP zero-window
-        // persist. See firmware/app/ota_ring.h for the contract.
-        if (ota_in_progress()) ota_pump();
-#endif
+        // OTA-in-progress fast path: SUSPEND conduit_loop() completely
+        // and hand Core 0 entirely to ota_pump.
+        //
+        // This is a HARD pause, not a yield. We don't try to interleave
+        // user code with ota_pump (e.g. "run conduit_loop only if the
+        // ring has slack") because that risks violating real-time
+        // constraints the user's loop may rely on — e.g. ADC sampling
+        // pacing, GPIO toggle timing, sensor polling deadlines. Once
+        // OTA starts we tear the loop down cleanly and don't bring it
+        // back until the device reboots into the new image. Old code
+        // is about to be replaced anyway, so this is harmless.
+        //
+        // Why the pause is necessary (load-bearing comment, do not
+        // remove): without it, a heavy conduit_loop() (e.g. 50 ms/iter
+        // for float math + transmit() + log()) drops the main loop
+        // from ~1 kHz to ~20 Hz. ota_pump drains one 512-B UF2 block
+        // per iter, so effective drain rate falls to ~10 KB/s. The
+        // 32 KB ota_ring fills in ~3 s, http_recv stops calling
+        // altcp_recved, the device's TCP recv window collapses to 0,
+        // and the browser stalls at ~130 KB sent (OS TCP send buffer
+        // ≈ 100 KB + ota_ring 32 KB). Symptom matches the original
+        // "upload timed out at 130475/436736 bytes (29.9%)" report.
+        //
+        // With the pause, the main loop runs at near-CPU speed
+        // (microseconds/iter), so ota_pump throughput is bounded only
+        // by hardware flash erase/program (~5 ms per 512-B UF2 block
+        // ⇒ ~100 KB/s), comfortably above the worst observed HTTPS
+        // receive rate (~25 KB/s on software ChaCha20).
+        //
+        // If a user ever needs to know they're paused (e.g. to NOT
+        // arm a deadline-sensitive timer that would miss its trigger),
+        // ota_in_progress() is the public API for that — same one
+        // used here. It reads a single atomic flag; safe from any
+        // context.
+        if (ota_in_progress()) {
+            // Loop is PAUSED — Core 0 is reserved for the OTA pump.
+            ota_pump();
+        } else {
+            // Loop is RUNNING normally.
+            conduit_loop();
+        }
+#else
         conduit_loop();
+#endif
 
         // Health check — once per diag print interval (≈ 1 s) is plenty
         // of resolution for a 60-second grace window.

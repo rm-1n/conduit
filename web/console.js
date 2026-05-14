@@ -26,11 +26,13 @@
 (function () {
   'use strict';
 
-  const RECONNECT_OK_MS    = 100;
-  // Sleep between failed reconnect attempts. Matched to telemetry.js.
-  // Tight enough that we land within ~150 ms of the upstream port
-  // re-opening; the failed fetch itself dominates the cycle anyway.
-  const RECONNECT_ERR_MS   = 150;
+  // RECONNECT_OK_MS / RECONNECT_ERR_MS — see telemetry.js for the full
+  // rationale. tl;dr: aggressive reconnect cadence on HTTPS wedges the
+  // Cortex-M33 mbedtls stack by piling fresh handshakes on top of an
+  // in-flight one. 2 s / 5 s gives the device time to actually serve
+  // a stream instead of getting hammered.
+  const RECONNECT_OK_MS    = 2000;
+  const RECONNECT_ERR_MS   = 5000;
   const IP_CHECK_MS        = 1000;
   const MAX_BUFFER_CHARS   = 200_000;
   const PENDING_MAX_CHARS  = 100_000;
@@ -38,18 +40,17 @@
   const PERSIST_BATCH_MS   = 250;    // …after M ms idle, whichever hits first.
   // Connect-phase timeout — same pattern as telemetry.js. Firmware emits
   // a `\n` keepalive every ~500 ms when the log ring is empty (see
-  // http_poll). 8 s covers a fresh HTTPS handshake (~3 s on Cortex-M33)
-  // plus a keepalive + jitter; the original 750 ms aborted every HTTPS
-  // log-stream open before the TLS handshake completed, producing a
-  // NS_BINDING_ABORTED reconnect storm at 150 ms intervals.
-  const CONNECT_TIMEOUT_MS = 8000;
-  // Stall watchdog — applies AFTER the connect phase, so this stays
-  // tight. Firmware emits `\n` keepalives every ~500 ms even when the
-  // log is silent. 1 s covers one missed keepalive plus jitter. The
-  // HTTPS-specific 4 s threshold tested briefly with a 3000 ms
-  // firmware-side keepalive cadence wedged the device — reverted.
-  const STALL_MS           = 1000;
-  const STALL_CHECK_MS     = 150;
+  // http_poll). 4 s covers a fresh ChaCha20-Poly1305 handshake (~1.5-2 s
+  // on Cortex-M33 in firmware v10.41+) plus a keepalive + jitter. Was
+  // 8 s when ECDHE-ECDSA-AES-GCM was the negotiated cipher.
+  // CONNECT_TIMEOUT_MS — see telemetry.js. 15 s covers the cold first
+  // HTTPS handshake on Cortex-M33 (PNA preflight + full TLS, ~5–8 s).
+  // STALL_MS — bumped 1 s → 10 s; under HTTPS load a 1 s silent window
+  // can mean "device is busy serving the OTHER stream", not "stream is
+  // dead". Aborting and reconnecting just makes it worse.
+  const CONNECT_TIMEOUT_MS = 15000;
+  const STALL_MS           = 10000;
+  const STALL_CHECK_MS     = 500;
   // Prefix regex: "[<digits>]\t<msg>". The greedy `(.*)$` captures the entire
   // rest of the line, including any literal "[...]\t" the user may have
   // written inside their format string.

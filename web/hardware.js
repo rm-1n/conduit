@@ -120,6 +120,21 @@
       const submit = $('hardware-add-btn');
       submit.disabled = true;
       setStatus(`Probing ${ip}${uid ? ' over HTTPS' : ' over HTTP'}…`, 'pending');
+      // Pause the live streams BEFORE probing. ide.js's reconnect()
+      // does this for its own probe path; without it here, the probe's
+      // TLS handshake races telemetry's + console's handshakes, all
+      // three pile onto Cortex-M33 mbedtls at once, and the device
+      // wedges hard (`Host is down` even for HTTP fallback). On a fresh
+      // page load this is the single biggest cause of "No response
+      // from <ip>" in Hardware Manager. See memory
+      // project_https_keepalive_cadence_wedge.md.
+      const tlm = window.Conduit && window.Conduit.telemetry;
+      const con = window.Conduit && window.Conduit.console;
+      if (tlm && tlm.pause)       tlm.pause();
+      if (con && con.pauseStream) con.pauseStream();
+      // Give the browser a tick to actually send FIN on the aborted
+      // stream fetches before we open a fresh connection.
+      await new Promise((r) => setTimeout(r, 300));
       try {
         const result = await window.Conduit.probeAndRemember({
           ip, uniqueId: uid || undefined, name: name || undefined,
@@ -128,17 +143,34 @@
           setStatus(`Added ${name || uid || ip} (v${result.version}, ${result.partition}).`, 'ok');
           form.reset();
         } else {
-          setStatus(
-            `No response from ${ip}. ` +
-            (uid ? 'Check the unique-id and that DNS for the wildcard zone resolves.' :
-                   'Check the IP and that the IDE can reach the device (mixed-content blocks https→http).'),
-            'err',
-          );
+          // probeDevice writes the real cause to window.Conduit._lastProbeError
+          // before returning null — surface it directly so the user doesn't
+          // have to open DevTools to find out whether this was a CORS reject,
+          // a PNA preflight failure, a TLS handshake timeout, or a wrong-device
+          // response. Falls back to the old generic message if the field is
+          // missing (e.g. legacy app.js cached).
+          const last = (window.Conduit && window.Conduit._lastProbeError) || null;
+          const reason = last
+            ? `${last.kind}: ${last.message}`
+            : (uid ? 'Check the unique-id and that DNS for the wildcard zone resolves.' :
+                     'Check the IP and that the IDE can reach the device (mixed-content blocks https→http).');
+          setStatus(`No response from ${ip}. ${reason}`, 'err');
         }
       } catch (e) {
         setStatus(`Probe error: ${e && e.message ? e.message : e}`, 'err');
       } finally {
         submit.disabled = false;
+        // Streams stay paused by default after the probe — matching
+        // ide.js reconnect()'s new behavior. Auto-resuming them here
+        // would re-create the wedge: two HTTPS streams + any next
+        // action (another probe, an OTA, etc.) saturates Cortex-M33
+        // mbedtls. Users opt in via window.Conduit.streamsAutoResume.
+        if (window.Conduit && window.Conduit.streamsAutoResume) {
+          if (tlm && tlm.resume) tlm.resume();
+          setTimeout(() => {
+            if (con && con.resumeStream) con.resumeStream();
+          }, 1500);
+        }
       }
     });
 

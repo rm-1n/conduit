@@ -320,9 +320,18 @@ def flash_and_test(device, firmware_dir, sdk, toolchain, picotool, serial, seria
 @click.option("-d", "--device", default=dev.DEFAULT_DEVICE_IP, help="Device IP address")
 @click.option("-t", "--token", default="changeme", help="Auth token")
 @click.option("-f", "--file", "filepath", required=True, type=click.Path(exists=True), help="Path to .uf2 file")
-def ota_upload(device, token, filepath):
-    """Upload a UF2 file over the network (OTA update)."""
-    success = dev.ota_upload(device, token, filepath)
+@click.option("--https/--http", "use_https", default=False,
+              help="POST over HTTPS via <dash-ip>.<board-id>.devices.rm1n.com (default: HTTP). "
+                   "Useful for benchmarking the TLS-stack throughput; requires the per-device "
+                   "rm1n cert (loaded from the IDENTITY partition) and conduit-dns resolving the "
+                   "hostname to the LAN IP.")
+def ota_upload(device, token, filepath, use_https):
+    """Upload a UF2 file over the network (OTA update).
+
+    Prints upload duration + averaged throughput so we can compare
+    cipher / mbedtls-config experiments side by side.
+    """
+    success = dev.ota_upload(device, token, filepath, use_https=use_https)
     sys.exit(0 if success else 1)
 
 

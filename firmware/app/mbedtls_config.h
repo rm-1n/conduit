@@ -25,6 +25,17 @@
 #define MBEDTLS_PLATFORM_C
 #define MBEDTLS_PLATFORM_MS_TIME_ALT          // pico_mbedtls.c plugs in a millisecond clock
 
+// Allow mbedtls_platform_set_calloc_free() to swap the calloc/free
+// backend at runtime. mbedtls_slab.c uses this to install a static-slab
+// allocator for the 16 KB IN + 8 KB OUT per-session buffers, so those
+// don't fragment the newlib (or lwIP, depending on which path is
+// active) heap across repeated TLS handshakes. Without this, the heap
+// reliably ran out of contiguous 16 KB blocks after ~5 OTA cycles and
+// `mbedtls_ssl_setup` started returning ERR_MEM — the symptom users
+// hit as "Device did not respond — wedged or slow reboot" on the 6th
+// upload. See firmware/app/mbedtls_slab.h for the full rationale.
+#define MBEDTLS_PLATFORM_MEMORY
+
 // ---- Buffers --------------------------------------------------------------
 
 // Keep mbedtls's default 16 KB buffer for INCOMING TLS records. The TLS
@@ -40,11 +51,36 @@
 #define MBEDTLS_SSL_IN_CONTENT_LEN     16384
 #define MBEDTLS_SSL_OUT_CONTENT_LEN    8192
 
-// Smaller AES tables save flash — TLS handshakes aren't throughput-bound.
-#define MBEDTLS_AES_FEWER_TABLES
-#define MBEDTLS_SHA256_SMALLER
+// Speed > size. We have 4 MB of flash and software AES throughput
+// (no HW AES on RP2350) is the dominant ceiling on HTTPS-OTA + stream
+// rates. The previously-set MBEDTLS_AES_FEWER_TABLES / MBEDTLS_SHA256_SMALLER
+// traded ~10-20 % CPU for a few KB ROM; not worth it.
+// #define MBEDTLS_AES_FEWER_TABLES        — disabled, see above
+// #define MBEDTLS_SHA256_SMALLER          — disabled, see above
 
-// ---- Cipher suites: ECDHE-ECDSA + AES-128-GCM + SHA-256 -------------------
+// ---- Hardware acceleration ------------------------------------------------
+//
+// RP2350 has a dedicated SHA-256 block (`hardware_sha256` + `pico_sha256`)
+// that mbedtls can use via MBEDTLS_SHA256_ALT. Tried enabling it; pico-sdk
+// 2.2.0's ALT implementation in pico_mbedtls.c provides
+// init/free/starts/update/finish but NOT mbedtls_sha256_clone(), which
+// mbedtls's md.c and psa_crypto_hash.c reference unconditionally. Link
+// fails with `undefined reference to mbedtls_sha256_clone`. A real fix
+// would require checkpointing the hardware block's partial-message state
+// and restarting on the clone target — pico_sha256's blocking API doesn't
+// expose that, so the clone path is genuinely hard.
+//
+// Skipping HW SHA for now — the bulk-throughput bottleneck is the cipher
+// (AES-GCM in software), not SHA. ChaCha20-Poly1305 below is the real win:
+// it doesn't use SHA in the bulk encrypt/decrypt path at all, so HW SHA
+// would only have helped handshake latency (~3 s on cold connect).
+//
+// To revisit: implement mbedtls_sha256_clone() locally by replaying the
+// source context's buffered input on the destination — or wait for
+// pico-sdk to ship a complete ALT.
+// #define MBEDTLS_SHA256_ALT
+
+// ---- Cipher suites: ECDHE-ECDSA + AES-{128,256}-GCM / ChaCha20 + SHA-{256,384}
 
 #define MBEDTLS_SSL_TLS_C
 #define MBEDTLS_SSL_SRV_C
@@ -60,6 +96,19 @@
 #define MBEDTLS_GCM_C
 #define MBEDTLS_CIPHER_C
 #define MBEDTLS_CIPHER_MODE_CBC               // Some mbedtls TLS internals reach for CBC paths
+
+// ChaCha20-Poly1305 (RFC 7905) — software AEAD that's substantially
+// faster than AES-GCM on Cortex-M33 without hardware AES (RP2350 has
+// no AES engine; only SHA-256 is HW-accelerated). 32-bit ARX design
+// maps well to ARMv8-M registers; mbedtls's portable implementation
+// hits ~4-5× the bulk throughput of software AES-GCM here. Both cipher
+// suites are advertised — clients that prefer ChaCha20 (curl,
+// Chrome/Firefox/Safari all do by default on platforms without AES-NI)
+// negotiate it and we get the speedup automatically; clients that
+// prefer AES (older Safari, some embedded clients) still work.
+#define MBEDTLS_CHACHA20_C
+#define MBEDTLS_POLY1305_C
+#define MBEDTLS_CHACHAPOLY_C
 
 #define MBEDTLS_MD_C
 #define MBEDTLS_MD5_C                         // Pulled in by mbedtls TLS internals

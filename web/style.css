@@ -210,6 +210,14 @@ input::placeholder { color: var(--text3); }
   box-shadow: 0 0 6px var(--status-live);
   animation: pulse-live 2.4s ease-in-out infinite;
 }
+/* Transitional state from health.js — last 200 was within ~15 s but
+   the freshness window expired or a probe is in flight. Amber so the
+   user can tell "we're checking" apart from a confident "alive" or
+   "dead". */
+.device-picker__led[data-state="warn"] {
+  background: var(--status-warn);
+  box-shadow: 0 0 6px var(--status-warn);
+}
 .device-picker__led[data-state="err"] {
   background: var(--status-fault);
   box-shadow: 0 0 6px var(--status-fault);

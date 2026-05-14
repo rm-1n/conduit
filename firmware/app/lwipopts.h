@@ -129,16 +129,24 @@
 // per call).
 #define TCP_TMR_INTERVAL                50
 
-// Memory pool — bumped 8 KB → 48 KB after observing heap exhaustion
-// during OTA. lwIP's global heap backs short-lived per-conn allocations
-// (tcp segment data not in MEMP, altcp_tls handshake state, mbedtls
-// session bookkeeping). At 8 KB and 24 PCBs + 2 listeners, the heap
-// fills within a few seconds of upload activity, lwIP starts aborting
-// connections (err=-13 ERR_ABRT cascade in diag), and OTA chunk 1
-// eventually times out without ever completing. 48 KB leaves headroom
-// for many concurrent TLS handshakes plus an OTA stream. SRAM cost is
-// 40 KB more; trivial against RP2350's 520 KB total.
-#define MEM_SIZE                        49152
+// Memory pool. Backs lwIP-internal allocations: pbufs (PBUF_RAM),
+// TCP segments not in the MEMP pool, altcp per-pcb state.
+//
+// Historical note: this was bumped 48 → 192 KB to fix "TLS handshake
+// returns ERR_MEM after ~5 OTA cycles". That diagnosis was wrong —
+// mbedtls without MBEDTLS_PLATFORM_MEMORY uses libc calloc, which
+// goes to the newlib heap (NOT this pool). The 192 KB bump still
+// "fixed" the symptom because dragging up MEM_SIZE happened to shift
+// BSS, which shrank the newlib heap and rearranged where its
+// fragmenting allocations landed — a coincidence.
+//
+// The real fix is mbedtls_slab.c: a static slab allocator that takes
+// the two big per-session buffers (16 KB IN + 8 KB OUT) off ANY heap
+// and into dedicated fixed slots. With that in place, neither this
+// heap nor the newlib heap fragments cycle-over-cycle, so we can
+// drop MEM_SIZE back near its pre-bump level. 96 KB is comfortable
+// for the remaining (small) lwIP-internal allocations.
+#define MEM_SIZE                        98304
 
 // Stats — explicit so the firmware-side diag.c heartbeat can read
 // real numbers for heap, MEMP pools, and link layer. Defaults are

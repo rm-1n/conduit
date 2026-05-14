@@ -119,6 +119,15 @@ void conduit_loop(void) {
 
   let editorMounted = false;
 
+  // Cancellable post-OTA stream-resume handles. The OTA finally schedules
+  // two timeouts (telemetry first, console 1.5 s later) — if the user
+  // starts ANOTHER OTA in the meantime, pause-at-top cancels these so
+  // resume never fires mid-flight of the next OTA. Without this, two
+  // back-to-back OTAs race: the second one's precheck handshake collides
+  // with the first one's pending stream-resume handshakes at mbedtls.
+  let postOtaResumeT1 = null;  // initial settle → probe → tlm.resume
+  let postOtaResumeT2 = null;  // 1.5 s after T1 → con.resumeStream
+
   function loadSavedSource() {
     try {
       const raw = localStorage.getItem(SOURCE_STORAGE_KEY);
@@ -761,6 +770,14 @@ void conduit_loop(void) {
     // telemetry pane already maintains a `.status-dot[data-state]` span;
     // rather than re-deriving the connection state here, we just copy
     // its data-state attribute whenever it changes.
+    //
+    // A separate web/health.js was tried (independent /api/status
+    // probe driving the LED for faster red→green), but the extra
+    // HTTPS handshakes it generated competed with OTA uploads and
+    // wedged the device across sessions. Reverted — the slower
+    // stream-mirrored LED is reliable and the CONNECT_TIMEOUT_MS
+    // halving in telemetry.js/console.js already cuts the worst-case
+    // latency from 8 s to 4 s without adding probe traffic.
     const telState = document.getElementById('ide-telemetry-state');
     if (telState && deviceLed) {
       const syncLed = () => deviceLed.setAttribute('data-state',
@@ -837,31 +854,54 @@ void conduit_loop(void) {
         const result = await window.Conduit.probeAndRemember(ip);
         if (!result) {
           connStatus(`no response from ${ip}`, 'err');
-          // Even on failure, resume so we don't leave the panes stuck
-          // in 'paused' indefinitely — the streams' own retry loops
-          // will surface unreachability.
-          if (tel && tel.resume)        tel.resume();
-          if (con && con.resumeStream)  con.resumeStream();
+          // Leave streams paused on probe failure — auto-resuming a
+          // dead device just produces a flood of failed handshakes
+          // that wedge the device for the next probe. See the
+          // auto-resume gate below.
+          if (window.Conduit && window.Conduit.streamsAutoResume) {
+            if (tel && tel.resume)        tel.resume();
+            if (con && con.resumeStream)  con.resumeStream();
+          }
           return;
         }
         connStatus(`Reconnected (v${result.version}, ${result.partition})`, 'ok');
       } catch (e) {
         connStatus(`reconnect error: ${e.message || e}`, 'err');
-        if (tel && tel.resume)        tel.resume();
-        if (con && con.resumeStream)  con.resumeStream();
+        if (window.Conduit && window.Conduit.streamsAutoResume) {
+          if (tel && tel.resume)        tel.resume();
+          if (con && con.resumeStream)  con.resumeStream();
+        }
         return;
       } finally {
         refreshDeviceList();
       }
 
-      // Probe succeeded. Resume streams one at a time so each handshake
-      // runs alone. 1500 ms covers the ~3 s budget for the previous
-      // handshake to complete + a margin (handshake usually finishes
-      // before the gap is up; this is just insurance against burst).
-      if (tel && tel.resume) tel.resume();
-      setTimeout(() => {
-        if (con && con.resumeStream) con.resumeStream();
-      }, 1500);
+      // Probe succeeded. Streams stay PAUSED by default on page load.
+      //
+      // Rationale: on HTTPS the device's Cortex-M33 mbedtls saturates
+      // when both /api/data and /api/log streams run concurrently —
+      // each fresh-cache handshake costs ~2 s and the second one piles
+      // on while the first is mid-handshake. The previous design
+      // (auto-resume tel immediately, auto-resume con 1500 ms later)
+      // looked safe but in practice wedged the device under realistic
+      // load: every page reload with a saved-device entry would
+      // re-establish two TLS streams, then a Hardware Manager probe
+      // (or any other HTTPS request) would race the in-progress
+      // handshakes and the device would brick. See memory
+      // project_https_keepalive_cadence_wedge.md.
+      //
+      // The opt-in is via window.Conduit.streamsAutoResume = true —
+      // set it BEFORE page load (or in a localStorage-driven flag if
+      // we later want a Settings toggle). For MVP HTTPS we leave it
+      // off; users can still manually flip the stream pane "play"
+      // buttons (or call tel.resume() / con.resumeStream() from
+      // DevTools) to bring up streams when they want them.
+      if (window.Conduit && window.Conduit.streamsAutoResume) {
+        if (tel && tel.resume) tel.resume();
+        setTimeout(() => {
+          if (con && con.resumeStream) con.resumeStream();
+        }, 1500);
+      }
     }
     // Auto-kick reconnect once on boot. Deferred slightly so the rest
     // of init (telemetry's streamLoop, console's poll loop) has wired
@@ -1007,6 +1047,40 @@ void conduit_loop(void) {
     resetBuildBar();
     setProgressBar({ pct: 0, label: 'Building…', title: null });
 
+    // Shut down the telemetry + console TLS streams BEFORE any other
+    // HTTPS request fires. Cortex-M33 mbedtls (software ChaCha20) cannot
+    // service more than ~1 concurrent TLS session reliably; each stream
+    // reconnects at >1 Hz under the device's keepalive cadence, so if we
+    // precheck while they're live, the new /api/status handshake races
+    // their handshakes at the device's mbedtls layer and stalls —
+    // updateFirmware then returns 'unreachable' before we've sent a
+    // byte. The 300 ms post-pause settle gives the browser time to
+    // actually send FIN on the aborted fetches and the device's mbedtls
+    // a tick to free the per-session state (~30 KB each) back to the
+    // lwIP heap before the precheck handshake opens a new session.
+    // See memory project_https_keepalive_cadence_wedge.md.
+    const tlm = window.Conduit && window.Conduit.telemetry;
+    const con = window.Conduit && window.Conduit.console;
+    // Cancel any pending post-OTA resume from a prior cycle — they
+    // would otherwise fire mid-flight of THIS OTA and race the device's
+    // mbedtls with a stream handshake. See the matching scheduling
+    // further down (in the post-OTA tear-down).
+    if (postOtaResumeT1) { clearTimeout(postOtaResumeT1); postOtaResumeT1 = null; }
+    if (postOtaResumeT2) { clearTimeout(postOtaResumeT2); postOtaResumeT2 = null; }
+    if (tlm && tlm.pause) tlm.pause();
+    if (con && con.pauseStream) con.pauseStream();
+    await new Promise((r) => setTimeout(r, 300));
+
+    // Handle for the elapsed-time ticker that runs during the
+    // 'uploading' stage (was a dots-spinner before xhr.upload.onprogress
+    // gave us a real percentage). Declared at function scope so the
+    // outer `finally` can clear it regardless of which error path the
+    // upload took. See the onStage 'uploading' branch below for the
+    // ticker setup.
+    let uploadSpinHandle = null;
+    let result;
+    try {
+
     const stampVer = nextStampedVersion();
     try {
       const pre = await window.Conduit.getStatus(ip);
@@ -1038,54 +1112,81 @@ void conduit_loop(void) {
     // bar stays neutral until we have a concrete final outcome.
     setProgressBar({ pct: 50, label: 'Uploading…' });
 
-    // Pause the telemetry stream for the OTA window. Reasons:
-    //  1. The /api/upload POST and our /api/data?stream=1 GET compete for
-    //     the device's single lwIP HTTP slot — concurrent traffic causes
-    //     half-dead TCP states and chart jitter.
-    //  2. Across the reboot the stream's TCP connection sits in a long
-    //     "half-closed" state in the browser; without an explicit abort
-    //     the next reconnect can take 10+ s.
-    // Wrapping in try/finally guarantees we resume even on upload errors.
-    const tlm = window.Conduit && window.Conduit.telemetry;
-    if (tlm && tlm.pause) tlm.pause();
-    // Same treatment for the runtime console — without this, its
-    // /api/log fetch sits half-open through the reboot and the LED
-    // stays misleadingly green for ~10 s after the device drops off
-    // the network. pauseStream flips it to 'updating…' immediately;
-    // resumeStream after commit drops cursor + reconnects.
-    const con = window.Conduit && window.Conduit.console;
-    if (con && con.pauseStream) con.pauseStream();
+    // The 'uploading' stage is long (15-90 s on HTTPS) and the
+    // displayed % is OS-TCP-send-buffer-fill, not on-the-wire bytes
+    // (see upload.js:159-173). Effect: % jumps to ~30 instantly, sits
+    // flat for ~15 s while TCP drains and the device flashes, then
+    // climbs to 100. Flat-but-progressing looks like a hang to the
+    // user. So while the bytes-progress is honest enough, we ALSO
+    // show an elapsed-time counter so motion is always visible.
+    //
+    // The previous dots-spinner setInterval (uploadSpinHandle) was
+    // added back when there was no real progress source — it now
+    // just stomps onProgress's "Uploading · 42% (...)" label every
+    // 500 ms with "Uploading...". Removed; xhr.upload.onprogress is
+    // the honest signal.
+    let uploadStartMs = 0;
+    let lastProgressLabel = 'Uploading…';
 
-    let result;
-    try {
-      result = await window.Conduit.updateFirmware({
+    result = await window.Conduit.updateFirmware({
         ip, token, data: uf2,
         onProgress: ({ pct, loaded, total }) => {
           // Upload covers 50..95% of the overall bar; the last 5% is
           // reserved for verify/commit so the user never sees 100%
           // until the device actually reports the new image running.
           const overall = 50 + (pct / 100) * 45;
-          setProgressBar({
-            pct: overall,
-            label: `Uploading · ${Math.round(pct)}% (${loaded}/${total} B)`,
-          });
+          const kb = (n) => (n / 1024).toFixed(0);
+          const elapsed = uploadStartMs ? Math.round((performance.now() - uploadStartMs) / 1000) : 0;
+          lastProgressLabel =
+            `Uploading · ${Math.round(pct)}% (${kb(loaded)}/${kb(total)} KB, ${elapsed}s)`;
+          setProgressBar({ pct: overall, label: lastProgressLabel });
         },
         onStage: (stage, detail) => {
+          // Build log always reflects the raw stage event. The progress
+          // bar gets a structured render via the stage descriptor table
+          // in upload.js — adding a new stage there is a one-row edit
+          // and the unit test (web/tests/unit/upload_stages.test.mjs)
+          // fails CI if a name is emitted without a matching table entry.
           logLine(detail && typeof detail === 'string' ? `[${stage}] ${detail}` : `[${stage}]`);
-          if      (stage === 'precheck')  setProgressBar({ pct: 50, label: 'Checking device…' });
-          else if (stage === 'waiting')   setProgressBar({ pct: 95, label: `Waiting for reboot… ${typeof detail === 'string' ? detail : ''}` });
-          else if (stage === 'verifying') setProgressBar({ pct: 97, label: 'Verifying…' });
-          else if (stage === 'commit')    setProgressBar({ pct: 99, label: 'Committing (TBYB)…' });
+          const d = window.Conduit && window.Conduit.stageDescriptor
+            ? window.Conduit.stageDescriptor(stage, detail) : null;
+
+          // Any stage transition clears the upload-elapsed ticker; the
+          // ticker only exists during the 'uploading' window.
+          if (uploadSpinHandle) {
+            clearInterval(uploadSpinHandle);
+            uploadSpinHandle = null;
+          }
+
+          if (d) {
+            setProgressBar({ pct: d.pct, label: d.label });
+            if (stage === 'uploading') {
+              // Start the elapsed-time ticker. It re-renders the most
+              // recent onProgress label every 1 s with the updated
+              // "Xs" suffix, so even when % is flat (OS buffer
+              // draining), the user sees the seconds counter advance.
+              // If no onProgress has fired yet, the ticker fills in a
+              // synthetic label showing only elapsed time.
+              uploadStartMs = performance.now();
+              uploadSpinHandle = setInterval(() => {
+                const elapsed = Math.round((performance.now() - uploadStartMs) / 1000);
+                // If we have a real progress label, splice the new
+                // elapsed time in. Otherwise render a fallback so the
+                // bar shows motion even before the first progress event.
+                if (lastProgressLabel.includes('% (')) {
+                  setProgressBar({
+                    label: lastProgressLabel.replace(/,\s*\d+s\)$/, `, ${elapsed}s)`),
+                  });
+                } else {
+                  setProgressBar({ label: `Uploading… (${elapsed}s)` });
+                }
+              }, 1000);
+            }
+          } else {
+            setProgressBar({ label: `${stage}…` });
+          }
         },
-      });
-    } finally {
-      // Resume both streams now that the device is committed and
-      // (re)online. resume() / resumeStream() also reset cursor/run
-      // state so we tail from the new firmware's fresh ring counter —
-      // no stale-cursor wedge, no diagonal across the OTA in the chart.
-      if (tlm && tlm.resume) tlm.resume();
-      if (con && con.resumeStream) con.resumeStream();
-    }
+    });
 
     // Refresh the device dropdown's cached entry with whatever post-OTA
     // status we got back. Without this the dropdown keeps showing the
@@ -1130,14 +1231,90 @@ void conduit_loop(void) {
         break;
       case 'unreachable':
         setProgressBar({ kind: 'warn',
-          label: 'Device did not respond; power-cycle to roll back.' });
+          label: 'Device did not respond — wedged or slow reboot.' });
         logLine('device did not come back — wedged or slow reboot');
         break;
-      case 'error':
-        setProgressBar({ kind: 'err',
-          label: `Error: ${result.error.message || result.error}` });
-        logLine(`error: ${result.error.message || result.error}`);
+      case 'error': {
+        const msg = result.error.message || result.error;
+        setProgressBar({ kind: 'err', label: `Error: ${msg}` });
+        logLine(`error: ${msg}`);
         break;
+      }
+    }
+    } finally {
+      if (uploadSpinHandle) {
+        clearInterval(uploadSpinHandle);
+        uploadSpinHandle = null;
+      }
+      // Post-OTA stream resume — gated on:
+      //   1. result.outcome ∈ {committed, rebooted}: the new firmware
+      //      actually booted. On rollback/unreachable/error we leave
+      //      streams paused so the user investigates without adding
+      //      handshake pressure to an already-stressed device.
+      //   2. A real stability probe: waitForDevice's first-success
+      //      criterion is generous (one /api/status with uptime past
+      //      pre-reboot uptime). The device is reachable but mbedtls /
+      //      lwIP may still be mid-init in the seconds immediately
+      //      after boot. Wait 2 s, then do ONE more probe; only if
+      //      THAT succeeds do we open the floodgates.
+      //
+      // Streams resume staggered (telemetry first, console 1.5 s
+      // later) — same pattern as hardware.js, gives the device's
+      // single-threaded mbedtls a moment to land one full handshake
+      // before the next.
+      //
+      // CRITICAL: schedule via setTimeout (NOT await-IIFE) so a
+      // subsequent OTA's pause-at-top can cancel the pending resume.
+      // Without cancellation, the resume fires mid-flight of the next
+      // OTA and the two stream handshakes race the precheck handshake
+      // at the device's mbedtls — wedges the 2nd OTA at ~130 KB. The
+      // postOtaResumeT1 / T2 handles are cleared at the top of
+      // onBuildUpload before the new pause-at-top.
+      //
+      // Settle bumped to 15 s. Two reasons stacking:
+      //
+      //   1. Just-rebooted device's mbedtls + lwIP take ~3-5 s to stop
+      //      being slow after boot.
+      //
+      //   2. If the user immediately clicks Build & Upload again, the
+      //      WASM build alone takes ~10 s. With a 15 s settle, the
+      //      build window finishes BEFORE the resume timer fires, and
+      //      the new pause-at-top cancels it (so streams never come
+      //      back between rapid OTAs — exactly what we want, since
+      //      stream-handshake-then-close churn fragments the device's
+      //      mbedtls heap and breaks the next OTA at ~130 KB).
+      //
+      //      Empirically: with 5 s settle, the resume fired ~5 s after
+      //      "Committed ✓", streams opened TLS handshakes, then run 2
+      //      cancelled them 8 s later (mid-handshake) — device wedged.
+      //      With 15 s, the postOtaResumeT1 timer is still pending
+      //      when run 2's pause-at-top clears it. Streams never run
+      //      between rapid OTAs, which matches the CLI 5-in-a-row
+      //      pattern that empirically passes.
+      //
+      //   3. For a single-OTA-then-watch-telemetry user flow, the
+      //      15 s delay before the chart lights up is the price of
+      //      reliability on this software-ChaCha20 chip.
+      const deviceLikelyBack = result && (
+        result.outcome === 'committed' || result.outcome === 'rebooted'
+      );
+      if (deviceLikelyBack) {
+        postOtaResumeT1 = setTimeout(async () => {
+          postOtaResumeT1 = null;
+          try {
+            const probe = await window.Conduit.getStatus(ip, 4000);
+            if (!probe || probe.device !== 'conduit') return;
+            if (tlm && tlm.resume) tlm.resume();
+            postOtaResumeT2 = setTimeout(() => {
+              postOtaResumeT2 = null;
+              if (con && con.resumeStream) con.resumeStream();
+            }, 1500);
+          } catch (_) {
+            // Stability check failed — leave streams paused; the
+            // user sees empty panes and clicks around to investigate.
+          }
+        }, 15000);
+      }
     }
   }
 
