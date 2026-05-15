@@ -312,8 +312,41 @@
   // second-guessing — the device's uptime counter has been observed to
   // jump forward oddly across reboots (non-monotonic), so the correct
   // behavior is to trust the status once the device is clearly responsive.
+  //
+  // `fastReady` is an optional Promise — if it resolves before the poll
+  // loop finds the device, we short-circuit with a single /api/status
+  // fetch instead of waiting for the next 2 s tick. The stream modules
+  // (telemetry/console) feed this from their onNextConnect listeners,
+  // so a post-OTA reboot is detected the moment the auto-reconnecting
+  // stream lands its first response — typically several seconds before
+  // the next scheduled poll would have. If `fastReady` rejects or never
+  // resolves, the loop falls back to plain polling.
   async function waitForDevice(ip, opts) {
-    const { interval = 2000, maxAttempts = 30, onAttempt, preUptime = null } = opts || {};
+    const { interval = 2000, maxAttempts = 30, onAttempt, preUptime = null,
+            fastReady = null } = opts || {};
+
+    // Race the poll loop against fastReady. Whichever flags "device is
+    // back" first wins. Both paths converge on a single getStatus() so
+    // the returned shape is the same.
+    let resolved = false;
+    let fastWinner = null;
+    const fastPromise = (fastReady && typeof fastReady.then === 'function')
+      ? fastReady.then(async () => {
+          if (resolved) return null;
+          // The stream told us a transport is alive — confirm with one
+          // /api/status fetch so we get the post-reboot uptime + partition
+          // that the caller needs (and that lets the strict-uptime branch
+          // below stay coherent).
+          try {
+            const s = await getStatus(ip);
+            if (resolved) return null;
+            fastWinner = s;
+            return s;
+          } catch (_) {
+            return null;
+          }
+        }).catch(() => null)
+      : new Promise(() => {});  // never resolves
     // Pre-sleep before the first status poll. Was 1500 ms (chosen
     // when the firmware's send-then-reboot delay was the main risk
     // of catching pre-reboot state). With STRICT_ATTEMPTS=3 below
@@ -322,9 +355,17 @@
     // determines how soon the first poll fires. 800 ms is well over
     // the firmware's 100 ms send-then-reboot pause and cuts dead
     // time off the post-OTA LED transition.
-    await new Promise((r) => setTimeout(r, 800));
+    // Allow fastReady to short-circuit during the initial 800 ms head
+    // start. Promise.race resolves as soon as either side fires; the
+    // poll loop continues if it lost.
+    const headStart = new Promise((r) => setTimeout(r, 800));
+    const headStartWinner = await Promise.race([headStart, fastPromise]);
+    if (fastWinner) { resolved = true; return fastWinner; }
+
     const STRICT_ATTEMPTS = 3;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Did the stream signal land between the previous tick and now?
+      if (fastWinner) { resolved = true; return fastWinner; }
       try {
         const status = await getStatus(ip);
         if (attempt <= STRICT_ATTEMPTS && preUptime != null
@@ -334,17 +375,24 @@
           // Almost certainly pre-reboot (uptime is within a few seconds
           // of the pre value). Keep polling to catch the real reboot.
         } else {
-          // Reachable post-reboot status — telemetry/console streams
-          // will reconnect on their own watchdog cadence and the LED
-          // (mirrored from telemetry state) will flip green when the
-          // first record arrives. See index.html note on the disabled
-          // health.js for why we don't probe-and-notify here anymore.
+          // Reachable post-reboot status.
+          resolved = true;
           return status;
         }
       } catch (_) {}
+      if (fastWinner) { resolved = true; return fastWinner; }
       if (onAttempt) onAttempt(attempt, maxAttempts);
-      if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, interval));
+      if (attempt < maxAttempts) {
+        // Race the wait against fastReady so a mid-interval stream
+        // reconnect doesn't have to wait the full 2 s before we
+        // return.
+        await Promise.race([
+          new Promise((r) => setTimeout(r, interval)),
+          fastPromise,
+        ]);
+      }
     }
+    resolved = true;
     return null;
   }
 
@@ -410,7 +458,8 @@
   //                                      'waiting' | 'verifying' | 'commit'
   //   opts.onProgress (see uploadFirmware)
   async function updateFirmware(opts) {
-    const { ip, token, data, chunkSize, onStage, onProgress } = opts;
+    const { ip, token, data, chunkSize, onStage, onProgress,
+            fastReady = null } = opts;
     const stage = (s, d) => onStage && onStage(s, d);
 
     stage('precheck');
@@ -445,6 +494,7 @@
       maxAttempts: 30,
       preUptime: typeof pre.uptime === 'number' ? pre.uptime : null,
       onAttempt: (a, m) => stage('waiting', `${a}/${m}`),
+      fastReady,
     });
     if (!post) return { outcome: 'unreachable', pre };
 

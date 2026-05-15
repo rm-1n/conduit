@@ -119,15 +119,6 @@ void conduit_loop(void) {
 
   let editorMounted = false;
 
-  // Cancellable post-OTA stream-resume handles. The OTA finally schedules
-  // two timeouts (telemetry first, console 1.5 s later) — if the user
-  // starts ANOTHER OTA in the meantime, pause-at-top cancels these so
-  // resume never fires mid-flight of the next OTA. Without this, two
-  // back-to-back OTAs race: the second one's precheck handshake collides
-  // with the first one's pending stream-resume handshakes at mbedtls.
-  let postOtaResumeT1 = null;  // initial settle → probe → tlm.resume
-  let postOtaResumeT2 = null;  // 1.5 s after T1 → con.resumeStream
-
   function loadSavedSource() {
     try {
       const raw = localStorage.getItem(SOURCE_STORAGE_KEY);
@@ -831,76 +822,32 @@ void conduit_loop(void) {
               || (document.getElementById('ide-quick-ip').value || '').trim();
       if (!ip) { connStatus('no device — Add an IP first', 'err'); return; }
 
-      // Pause both streams BEFORE the probe. Two reasons:
-      //
-      //  1. On page reload, telemetry.js + console.js auto-start their
-      //     streamLoops (each opens a TLS connection). If we then run
-      //     a status probe in parallel, the device's mbedtls (single-
-      //     threaded on Core 1, ~3 s per handshake on Cortex-M33) has
-      //     to serialize 3 handshakes — the last one is still in
-      //     CONNECT_TIMEOUT_MS jeopardy. Aborting the in-flight
-      //     stream fetches first frees the queue for our single probe.
-      //
-      //  2. Even after probe success, resuming the streams back-to-back
-      //     would re-create two parallel handshakes. Stagger them with a
-      //     small gap so each handshake runs alone.
-      const tel = window.Conduit && window.Conduit.telemetry;
-      const con = window.Conduit && window.Conduit.console;
-      if (tel && tel.pause)        tel.pause();
-      if (con && con.pauseStream)  con.pauseStream();
-
+      // Don't pause streams during the probe. The previous design did
+      // — to avoid 3 simultaneous TLS handshakes on a single-threaded
+      // mbedtls — but the firmware-side slab + 128 KB MEM_SIZE handle
+      // that load fine now, and the pause/resume choreography was
+      // load-bearing for a subtle bug: if the probe failed for ANY
+      // reason (transient network glitch, brief device reboot,
+      // browser-side quirk), the resume branch was skipped via the
+      // early return, leaving both streams paused with no path back
+      // online without a manual page reload. Streams running through
+      // the probe is now the cleaner default — the streamLoop's own
+      // retry logic handles their lifecycle, the probe is just an
+      // out-of-band reachability check that updates the connStatus
+      // banner.
       try {
         connStatus(`Reconnecting ${ip}…`);
         const result = await window.Conduit.probeAndRemember(ip);
         if (!result) {
           connStatus(`no response from ${ip}`, 'err');
-          // Leave streams paused on probe failure — auto-resuming a
-          // dead device just produces a flood of failed handshakes
-          // that wedge the device for the next probe. See the
-          // auto-resume gate below.
-          if (window.Conduit && window.Conduit.streamsAutoResume) {
-            if (tel && tel.resume)        tel.resume();
-            if (con && con.resumeStream)  con.resumeStream();
-          }
           return;
         }
         connStatus(`Reconnected (v${result.version}, ${result.partition})`, 'ok');
       } catch (e) {
         connStatus(`reconnect error: ${e.message || e}`, 'err');
-        if (window.Conduit && window.Conduit.streamsAutoResume) {
-          if (tel && tel.resume)        tel.resume();
-          if (con && con.resumeStream)  con.resumeStream();
-        }
         return;
       } finally {
         refreshDeviceList();
-      }
-
-      // Probe succeeded. Streams stay PAUSED by default on page load.
-      //
-      // Rationale: on HTTPS the device's Cortex-M33 mbedtls saturates
-      // when both /api/data and /api/log streams run concurrently —
-      // each fresh-cache handshake costs ~2 s and the second one piles
-      // on while the first is mid-handshake. The previous design
-      // (auto-resume tel immediately, auto-resume con 1500 ms later)
-      // looked safe but in practice wedged the device under realistic
-      // load: every page reload with a saved-device entry would
-      // re-establish two TLS streams, then a Hardware Manager probe
-      // (or any other HTTPS request) would race the in-progress
-      // handshakes and the device would brick. See memory
-      // project_https_keepalive_cadence_wedge.md.
-      //
-      // The opt-in is via window.Conduit.streamsAutoResume = true —
-      // set it BEFORE page load (or in a localStorage-driven flag if
-      // we later want a Settings toggle). For MVP HTTPS we leave it
-      // off; users can still manually flip the stream pane "play"
-      // buttons (or call tel.resume() / con.resumeStream() from
-      // DevTools) to bring up streams when they want them.
-      if (window.Conduit && window.Conduit.streamsAutoResume) {
-        if (tel && tel.resume) tel.resume();
-        setTimeout(() => {
-          if (con && con.resumeStream) con.resumeStream();
-        }, 1500);
       }
     }
     // Auto-kick reconnect once on boot. Deferred slightly so the rest
@@ -1047,29 +994,22 @@ void conduit_loop(void) {
     resetBuildBar();
     setProgressBar({ pct: 0, label: 'Building…', title: null });
 
-    // Shut down the telemetry + console TLS streams BEFORE any other
-    // HTTPS request fires. Cortex-M33 mbedtls (software ChaCha20) cannot
-    // service more than ~1 concurrent TLS session reliably; each stream
-    // reconnects at >1 Hz under the device's keepalive cadence, so if we
-    // precheck while they're live, the new /api/status handshake races
-    // their handshakes at the device's mbedtls layer and stalls —
-    // updateFirmware then returns 'unreachable' before we've sent a
-    // byte. The 300 ms post-pause settle gives the browser time to
-    // actually send FIN on the aborted fetches and the device's mbedtls
-    // a tick to free the per-session state (~30 KB each) back to the
-    // lwIP heap before the precheck handshake opens a new session.
-    // See memory project_https_keepalive_cadence_wedge.md.
+    // Streams are paused at the start of the upload phase (see below,
+    // just after buildUf2 returns) and resumed in the outer finally.
+    // The build phase is pure CPU (WASM compile, no device traffic) so
+    // it runs with streams still live. Once we start uploading, every
+    // mbedtls cycle the device spends encrypting a 16-byte stream
+    // keepalive is a cycle it isn't spending decrypting upload bytes —
+    // and the device's slab/lwIP heap headroom is tighter when three
+    // TLS sessions (upload + 2 streams) all need state at once. Pause
+    // → upload → resume gives mbedtls undivided focus on the upload.
+    // The resume in finally fires on every exit path (build error,
+    // updateFirmware throw, success), so a stream that was running on
+    // entry is running on exit. The stream's own retry loop then
+    // reconnects against the post-reboot device — same path that page
+    // reload uses, which the user has confirmed works reliably.
     const tlm = window.Conduit && window.Conduit.telemetry;
     const con = window.Conduit && window.Conduit.console;
-    // Cancel any pending post-OTA resume from a prior cycle — they
-    // would otherwise fire mid-flight of THIS OTA and race the device's
-    // mbedtls with a stream handshake. See the matching scheduling
-    // further down (in the post-OTA tear-down).
-    if (postOtaResumeT1) { clearTimeout(postOtaResumeT1); postOtaResumeT1 = null; }
-    if (postOtaResumeT2) { clearTimeout(postOtaResumeT2); postOtaResumeT2 = null; }
-    if (tlm && tlm.pause) tlm.pause();
-    if (con && con.pauseStream) con.pauseStream();
-    await new Promise((r) => setTimeout(r, 300));
 
     // Handle for the elapsed-time ticker that runs during the
     // 'uploading' stage (was a dots-spinner before xhr.upload.onprogress
@@ -1111,6 +1051,14 @@ void conduit_loop(void) {
     // tops it up to 100%. We keep the colour/kind clean here so the
     // bar stays neutral until we have a concrete final outcome.
     setProgressBar({ pct: 50, label: 'Uploading…' });
+
+    // Pause both streams before kicking the upload. Aborts the active
+    // fetches, flushes any persistence, drops the chart series, and
+    // flips both panes' status lights to "paused". The outer finally
+    // resumes them after the OTA — regardless of outcome — and their
+    // own retry loops reconnect against the post-reboot device.
+    if (tlm && tlm.pause)       tlm.pause();
+    if (con && con.pauseStream) con.pauseStream();
 
     // The 'uploading' stage is long (15-90 s on HTTPS) and the
     // displayed % is OS-TCP-send-buffer-fill, not on-the-wire bytes
@@ -1246,75 +1194,18 @@ void conduit_loop(void) {
         clearInterval(uploadSpinHandle);
         uploadSpinHandle = null;
       }
-      // Post-OTA stream resume — gated on:
-      //   1. result.outcome ∈ {committed, rebooted}: the new firmware
-      //      actually booted. On rollback/unreachable/error we leave
-      //      streams paused so the user investigates without adding
-      //      handshake pressure to an already-stressed device.
-      //   2. A real stability probe: waitForDevice's first-success
-      //      criterion is generous (one /api/status with uptime past
-      //      pre-reboot uptime). The device is reachable but mbedtls /
-      //      lwIP may still be mid-init in the seconds immediately
-      //      after boot. Wait 2 s, then do ONE more probe; only if
-      //      THAT succeeds do we open the floodgates.
-      //
-      // Streams resume staggered (telemetry first, console 1.5 s
-      // later) — same pattern as hardware.js, gives the device's
-      // single-threaded mbedtls a moment to land one full handshake
-      // before the next.
-      //
-      // CRITICAL: schedule via setTimeout (NOT await-IIFE) so a
-      // subsequent OTA's pause-at-top can cancel the pending resume.
-      // Without cancellation, the resume fires mid-flight of the next
-      // OTA and the two stream handshakes race the precheck handshake
-      // at the device's mbedtls — wedges the 2nd OTA at ~130 KB. The
-      // postOtaResumeT1 / T2 handles are cleared at the top of
-      // onBuildUpload before the new pause-at-top.
-      //
-      // Settle bumped to 15 s. Two reasons stacking:
-      //
-      //   1. Just-rebooted device's mbedtls + lwIP take ~3-5 s to stop
-      //      being slow after boot.
-      //
-      //   2. If the user immediately clicks Build & Upload again, the
-      //      WASM build alone takes ~10 s. With a 15 s settle, the
-      //      build window finishes BEFORE the resume timer fires, and
-      //      the new pause-at-top cancels it (so streams never come
-      //      back between rapid OTAs — exactly what we want, since
-      //      stream-handshake-then-close churn fragments the device's
-      //      mbedtls heap and breaks the next OTA at ~130 KB).
-      //
-      //      Empirically: with 5 s settle, the resume fired ~5 s after
-      //      "Committed ✓", streams opened TLS handshakes, then run 2
-      //      cancelled them 8 s later (mid-handshake) — device wedged.
-      //      With 15 s, the postOtaResumeT1 timer is still pending
-      //      when run 2's pause-at-top clears it. Streams never run
-      //      between rapid OTAs, which matches the CLI 5-in-a-row
-      //      pattern that empirically passes.
-      //
-      //   3. For a single-OTA-then-watch-telemetry user flow, the
-      //      15 s delay before the chart lights up is the price of
-      //      reliability on this software-ChaCha20 chip.
-      const deviceLikelyBack = result && (
-        result.outcome === 'committed' || result.outcome === 'rebooted'
-      );
-      if (deviceLikelyBack) {
-        postOtaResumeT1 = setTimeout(async () => {
-          postOtaResumeT1 = null;
-          try {
-            const probe = await window.Conduit.getStatus(ip, 4000);
-            if (!probe || probe.device !== 'conduit') return;
-            if (tlm && tlm.resume) tlm.resume();
-            postOtaResumeT2 = setTimeout(() => {
-              postOtaResumeT2 = null;
-              if (con && con.resumeStream) con.resumeStream();
-            }, 1500);
-          } catch (_) {
-            // Stability check failed — leave streams paused; the
-            // user sees empty panes and clicks around to investigate.
-          }
-        }, 15000);
-      }
+      // Resume both streams. Mirrors the pause-at-upload-start above.
+      // Runs on every exit path — build failure (early return), an
+      // updateFirmware throw, or a clean outcome. resume() on an
+      // already-running stream is a no-op (the early-return path
+      // before the pause hits this), so the unconditional call is
+      // safe. Order matters: console first so its streamLoop kicks
+      // off; telemetry's resume re-arms its console-handoff gate, so
+      // its first runStream open blocks until console reports a live
+      // connection. The user prefers log lines surfacing first, then
+      // the chart picking up.
+      if (con && con.resumeStream) con.resumeStream();
+      if (tlm && tlm.resume)       tlm.resume();
     }
   }
 

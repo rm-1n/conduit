@@ -1,27 +1,27 @@
-// streams_gate.test.mjs — regression fence for the HTTPS-saturation
-// fixes that took multiple debugging cycles to get right:
+// streams_gate.test.mjs — regression fence for the stream / OTA wiring.
 //
-// 1. hardware.js's Add-device form must PAUSE telemetry + console
-//    streams BEFORE calling probeAndRemember. Without this, the probe
-//    races the in-flight stream handshakes at the Cortex-M33 mbedtls
-//    layer and the device wedges hard (port 443 + 80 both go
-//    unreachable) — matches the "No response from <ip>. Check the
-//    unique-id…" symptom users hit on fresh page-load with a saved
-//    device.
+// Two contracts are checked here:
 //
-// 2. ide.js's reconnect() must gate stream auto-resume behind an
-//    opt-in flag (window.Conduit.streamsAutoResume). Even one probe
-//    + one auto-resumed stream is too much steady-state HTTPS load
-//    for this chip. Streams stay paused by default; users opt in by
-//    setting the flag or clicking the pane play buttons.
+// 1. hardware.js's Add-device submit must PAUSE telemetry + console
+//    before calling probeAndRemember, and resume them on every exit
+//    path. The probe is a one-off HTTPS handshake; running it while
+//    the streams' own reconnect loop is hammering the device used to
+//    wedge the precheck.
 //
-// 3. ide.js's onBuildUpload outer finally must NOT resume streams
-//    unconditionally after an OTA. Doing so fires two parallel TLS
-//    handshakes against the freshly-rebooted device while mbedtls is
-//    still warming up, fragmenting the heap for the NEXT OTA. The
-//    correct pattern: gate on result.outcome ∈ {committed,rebooted},
-//    do a stability probe (Conduit.getStatus) AFTER a 2 s settle, and
-//    only resume streams if that probe succeeds.
+// 2. ide.js's onBuildUpload must PAUSE both streams at the start of
+//    the upload phase and RESUME them in the outer finally on every
+//    exit path. The build phase (pure CPU WASM compile) runs with
+//    streams live; the upload + verify + commit phase runs with them
+//    paused so mbedtls focuses its slab + lwIP heap on the OTA TLS
+//    session alone. The stream's own retry loop reconnects against
+//    the post-reboot device after resume().
+//
+// 3. ide.js's reconnect() (page-load path) must NOT pause or resume
+//    streams. Streams stay running through the probe; their own
+//    retry loop is the lifecycle owner. The previous design's
+//    pause/resume choreography had a fatal bug: any probe failure
+//    skipped the resume branch via early return, leaving streams
+//    paused with no path back online except a full page reload.
 
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
@@ -48,7 +48,6 @@ function extractFunctionBody(src, name) {
 // Strip // line-comments AND /* block-comments */ so regex searches
 // only match the real code, not header/docstring mentions.
 function stripComments(src) {
-  // Block comments first (greedy until */), then line comments.
   return src
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/[^\n]*$/gm, '');
@@ -90,89 +89,101 @@ test('hardware: streams resume on every exit path (success, failure, error)', ()
   assert.ok(resumeStreamIdx > finallyIdx, 'con.resumeStream() must live in the finally block');
 });
 
-test('ide: onBuildUpload post-OTA resume is outcome-gated, not unconditional', () => {
-  // After the 1st OTA succeeds, the OUTER finally used to call
-  // tlm.resume() / con.resumeStream() unconditionally — which fired
-  // two parallel TLS handshakes immediately against the just-rebooted
-  // device. By the 2nd OTA the mbedtls heap had fragmented and the
-  // 2nd waitForDevice timed out with "Device did not respond".
-  //
-  // The fix: gate the resume on result.outcome (only on 'committed'
-  // or 'rebooted' — the cases where the device actually came back),
-  // AND do a stability probe before opening the floodgates. This
-  // test fences that pattern.
+test('ide: onBuildUpload pauses streams before the upload + resumes in finally', () => {
+  // Pause-at-upload-start frees mbedtls slab + lwIP heap for the
+  // upload's TLS session, and stops the keepalive traffic the device
+  // would otherwise be encrypting between OTA blocks. The resume must
+  // live in the outer finally so every exit path (build error early
+  // return, updateFirmware throw, clean outcome) restores the streams
+  // — otherwise a failed OTA leaves them paused with no recovery path.
   const src = readFileSync(join(webRoot, 'ide.js'), 'utf8');
   const body = extractFunctionBody(src, 'onBuildUpload');
-  // We're looking at the OUTER finally — the one wrapping the entire
-  // post-pause flow. Both `result.outcome` and the resume calls are
-  // inside it. lastIndexOf picks the right finally because the inner
-  // updateFirmware try block has no resume in its (now-collapsed)
-  // finally — only the outer one does.
-  const lastFinallyIdx = body.lastIndexOf('finally');
-  assert.ok(lastFinallyIdx >= 0, 'onBuildUpload must have a finally block');
 
-  const tail = body.slice(lastFinallyIdx);
-  const outcomeIdx  = tail.search(/\bresult\.outcome\b/);
-  const resumeIdx   = tail.search(/\btlm\.resume\s*\(/);
-  const conResumeIdx = tail.search(/\bcon\.resumeStream\s*\(/);
+  const pauseTlmIdx   = body.search(/\btlm\.pause\s*\(/);
+  const pauseConIdx   = body.search(/\bcon\.pauseStream\s*\(/);
+  const updateFwIdx   = body.search(/Conduit\.updateFirmware\s*\(/);
+  const finallyIdx    = body.lastIndexOf('finally');
+  const resumeTlmIdx  = body.search(/\btlm\.resume\s*\(/);
+  const resumeConIdx  = body.search(/\bcon\.resumeStream\s*\(/);
 
-  assert.ok(outcomeIdx >= 0,
-    'onBuildUpload finally must reference result.outcome to gate the resume — ' +
-    'an unconditional resume re-fragments mbedtls between OTAs and breaks the 2nd one.');
-  assert.ok(resumeIdx >= 0,
-    'onBuildUpload finally should still resume telemetry on the happy outcomes');
-  assert.ok(conResumeIdx >= 0,
-    'onBuildUpload finally should still resume console on the happy outcomes');
-  assert.ok(outcomeIdx < resumeIdx,
-    'result.outcome check must come BEFORE tlm.resume() — otherwise the gate is dead code.');
-  assert.ok(outcomeIdx < conResumeIdx,
-    'result.outcome check must come BEFORE con.resumeStream() — same reason.');
+  assert.ok(pauseTlmIdx >= 0,
+    'onBuildUpload must call tlm.pause() before the upload — frees mbedtls slab + lwIP heap.');
+  assert.ok(pauseConIdx >= 0,
+    'onBuildUpload must call con.pauseStream() before the upload — same reason.');
+  assert.ok(updateFwIdx >= 0, 'onBuildUpload must call Conduit.updateFirmware');
+  assert.ok(pauseTlmIdx < updateFwIdx,
+    'tlm.pause() must come BEFORE the updateFirmware call so the upload runs with streams paused.');
+  assert.ok(pauseConIdx < updateFwIdx,
+    'con.pauseStream() must come BEFORE the updateFirmware call — same reason.');
+
+  assert.ok(finallyIdx >= 0, 'onBuildUpload must wrap the OTA in a try/finally so streams resume on every exit path');
+  assert.ok(resumeTlmIdx > finallyIdx,
+    'tlm.resume() must live in the finally block so build errors and OTA throws still resume streams.');
+  assert.ok(resumeConIdx > finallyIdx,
+    'con.resumeStream() must live in the finally block — same reason.');
 });
 
-test('ide: onBuildUpload runs a stability probe before resuming streams', () => {
-  // The waitForDevice that runs inside updateFirmware returns on the
-  // first /api/status that comes back with a fresh uptime. The device
-  // is reachable at that point but mbedtls / lwIP may still be mid-
-  // init for several seconds. Resuming streams immediately fires two
-  // parallel handshakes against a device that can't service them.
-  //
-  // The stability probe: wait ~2 s, do ONE more getStatus call, and
-  // only open the floodgates if that succeeds.
-  const src = readFileSync(join(webRoot, 'ide.js'), 'utf8');
-  const body = extractFunctionBody(src, 'onBuildUpload');
-  const lastFinallyIdx = body.lastIndexOf('finally');
-  const tail = body.slice(lastFinallyIdx);
-
-  const probeIdx  = tail.search(/Conduit\.getStatus\s*\(/);
-  const resumeIdx = tail.search(/\btlm\.resume\s*\(/);
-
-  assert.ok(probeIdx >= 0,
-    'onBuildUpload finally must call Conduit.getStatus() as a stability probe ' +
-    'before resuming streams — waitForDevice alone isn\'t a strong enough signal ' +
-    'because mbedtls warms up several seconds after the first /api/status responds.');
-  assert.ok(probeIdx < resumeIdx,
-    'The stability probe must come BEFORE tlm.resume() — otherwise it isn\'t guarding anything.');
-});
-
-test('ide: reconnect() gates stream auto-resume behind streamsAutoResume flag', () => {
-  // The previous design called tel.resume() + con.resumeStream() on
-  // every successful reconnect, which created TWO concurrent HTTPS
-  // streams against a device that can only service one at a time.
-  // Auto-resume must be opt-in via window.Conduit.streamsAutoResume,
-  // off by default for HTTPS reliability.
+test('ide: reconnect() does NOT pause or resume streams', () => {
+  // The probe is a one-off /api/status handshake. The pause/resume
+  // choreography around it used to make sense back when 3 concurrent
+  // HTTPS handshakes wedged the device, but the slab + 128 KB MEM_SIZE
+  // make that load fine now. The choreography was load-bearing for a
+  // subtle bug: if the probe failed for ANY reason (transient network
+  // glitch, brief device reboot, browser-side quirk), the resume
+  // branch was skipped via the early return, leaving both streams
+  // paused with no path back online without a manual page reload.
+  // The streamLoop's own retry logic handles stream lifecycle through
+  // the probe.
   const src = readFileSync(join(webRoot, 'ide.js'), 'utf8');
   const body = extractFunctionBody(src, 'reconnect');
 
-  const resumeIdx       = body.search(/\btel\.resume\s*\(/);
-  const resumeStreamIdx = body.search(/\bcon\.resumeStream\s*\(/);
-  const gateIdx         = body.search(/streamsAutoResume/);
+  assert.ok(!/\btel\.pause\s*\(/.test(body),
+    'reconnect() must not call tel.pause() — streams stay running through the probe. ' +
+    'See the comment in reconnect() for the failure mode this guards against.');
+  assert.ok(!/\bcon\.pauseStream\s*\(/.test(body),
+    'reconnect() must not call con.pauseStream() — same reason.');
+  assert.ok(!/\btel\.resume\s*\(/.test(body),
+    'reconnect() must not call tel.resume() — they were never paused, there is nothing to resume.');
+  assert.ok(!/\bcon\.resumeStream\s*\(/.test(body),
+    'reconnect() must not call con.resumeStream() — same reason.');
+});
 
-  assert.ok(resumeIdx       >= 0, 'reconnect() should still know how to call tel.resume()');
-  assert.ok(resumeStreamIdx >= 0, 'reconnect() should still know how to call con.resumeStream()');
-  assert.ok(gateIdx         >= 0,
-    'reconnect() must gate the resume calls behind a streamsAutoResume flag — ' +
-    'unconditional auto-resume bricks the device under realistic HTTPS load.');
-  assert.ok(gateIdx < resumeIdx,
-    'streamsAutoResume gate must appear before the first tel.resume() call ' +
-    'so it actually guards it.');
+test('telemetry: exposes onNextConnect that fires once and is removable', () => {
+  // Source-level smoke check: telemetry.js exports onNextConnect on
+  // the public API and fires it from the runStream success path. The
+  // exact semantics (one-shot, returns unsubscribe) are documented in
+  // the function comment.
+  const src = readFileSync(join(webRoot, 'telemetry.js'), 'utf8');
+  assert.ok(/onNextConnect\s*\(/.test(src),
+    'telemetry.js must export onNextConnect on Conduit.telemetry');
+  assert.ok(/fireConnect\s*\(/.test(src),
+    'telemetry.js must call fireConnect() (or equivalent) from runStream so the listener fires post-reboot');
+});
+
+test('console: exposes onNextConnect that fires once and is removable', () => {
+  const src = readFileSync(join(webRoot, 'console.js'), 'utf8');
+  assert.ok(/onNextConnect\s*\(/.test(src),
+    'console.js must export onNextConnect on Conduit.console');
+  assert.ok(/fireConnect\s*\(/.test(src),
+    'console.js must call fireConnect() (or equivalent) from runStream so the listener fires post-reboot');
+});
+
+test('upload: waitForDevice accepts fastReady and races it against the poll', () => {
+  const src = readFileSync(join(webRoot, 'upload.js'), 'utf8');
+  // The function destructures fastReady from opts. We accept either
+  // `fastReady = null` (with a default) or a bare `fastReady`.
+  const wfdSrc = src.slice(src.indexOf('function waitForDevice'),
+                          src.indexOf('function commitFirmware'));
+  assert.ok(/\bfastReady\b/.test(wfdSrc),
+    'waitForDevice must accept a fastReady promise from opts so OTA flows can short-circuit the poll on stream reconnect.');
+  assert.ok(/Promise\.race/.test(wfdSrc),
+    'waitForDevice must race fastReady against its own poll/interval.');
+});
+
+test('upload: updateFirmware threads fastReady through to waitForDevice', () => {
+  const src = readFileSync(join(webRoot, 'upload.js'), 'utf8');
+  const ufSrc = src.slice(src.indexOf('async function updateFirmware'),
+                          src.length);
+  assert.ok(/\bfastReady\b/.test(ufSrc),
+    'updateFirmware must accept fastReady and pass it through to waitForDevice — otherwise the IDE has no way to wire the stream signal in.');
 });

@@ -675,7 +675,7 @@
   // Account view's sidebar footer. CONDUIT_COMMIT is an 8-char prefix
   // of the git SHA the assets were built from; the deploy workflow
   // sed-replaces 'dev' with the real value at publish time.
-  window.CONDUIT_ASSET_VERSION = '2026-05-14-mbedtls-slab';
+  window.CONDUIT_ASSET_VERSION = '2026-05-15-browser-side-drop';
   window.CONDUIT_COMMIT        = 'dev';
 </script>
 <!-- uPlot — high-performance time-series plotting via CDN. Pinned for
@@ -685,24 +685,24 @@
 <!-- Inline SVG icon helper. Loaded early so other scripts can call
      Conduit.icons.set(buttonEl, 'pause') without races. -->
 <script src="icons.js?v=127"></script>
-<script src="upload.js?v=139"></script>
+<script src="upload.js?v=140"></script>
 <script src="elf.js?v=121"></script>
 <script src="uf2.js?v=121"></script>
 <script src="finalize.js?v=121"></script>
 <script src="editor.js?v=121"></script>
 <script src="compiler.js?v=122"></script>
-<script src="app.js?v=151"></script>
+<script src="app.js?v=153"></script>
 <script src="hardware.js?v=4"></script>
-<script src="ide.js?v=161"></script>
+<script src="ide.js?v=167"></script>
 <script src="log_store.js?v=121"></script>
 <script src="log_export.js?v=121"></script>
-<script src="console.js?v=128"></script>
+<script src="console.js?v=133"></script>
 <script src="chart.js?v=143"></script>
 <!-- data_store.js: in-memory time-series store. Loaded before
      telemetry.js so the append target exists by the time the first
      record arrives. -->
 <script src="data_store.js?v=121"></script>
-<script src="telemetry.js?v=138"></script>
+<script src="telemetry.js?v=145"></script>
 <!-- health.js was a periodic /api/status probe driving the device LED
      independently of the telemetry stream. Disabled: each extra HTTPS
      probe competes with the OTA upload's mbedtls cycles, and the

@@ -26,28 +26,16 @@
 (function () {
   'use strict';
 
-  // RECONNECT_OK_MS / RECONNECT_ERR_MS — see telemetry.js for the full
-  // rationale. tl;dr: aggressive reconnect cadence on HTTPS wedges the
-  // Cortex-M33 mbedtls stack by piling fresh handshakes on top of an
-  // in-flight one. 2 s / 5 s gives the device time to actually serve
-  // a stream instead of getting hammered.
-  const RECONNECT_OK_MS    = 2000;
-  const RECONNECT_ERR_MS   = 5000;
+  // RECONNECT_OK_MS / RECONNECT_ERR_MS / CONNECT_TIMEOUT_MS / STALL_MS
+  // — see telemetry.js for rationale. Tightened now that the firmware-
+  // side malloc-panic deadlock is fixed.
+  const RECONNECT_OK_MS    = 500;
+  const RECONNECT_ERR_MS   = 1500;
   const IP_CHECK_MS        = 1000;
   const MAX_BUFFER_CHARS   = 200_000;
   const PENDING_MAX_CHARS  = 100_000;
   const PERSIST_BATCH_MAX  = 50;     // flush to IndexedDB after N records or…
   const PERSIST_BATCH_MS   = 250;    // …after M ms idle, whichever hits first.
-  // Connect-phase timeout — same pattern as telemetry.js. Firmware emits
-  // a `\n` keepalive every ~500 ms when the log ring is empty (see
-  // http_poll). 4 s covers a fresh ChaCha20-Poly1305 handshake (~1.5-2 s
-  // on Cortex-M33 in firmware v10.41+) plus a keepalive + jitter. Was
-  // 8 s when ECDHE-ECDSA-AES-GCM was the negotiated cipher.
-  // CONNECT_TIMEOUT_MS — see telemetry.js. 15 s covers the cold first
-  // HTTPS handshake on Cortex-M33 (PNA preflight + full TLS, ~5–8 s).
-  // STALL_MS — bumped 1 s → 10 s; under HTTPS load a 1 s silent window
-  // can mean "device is busy serving the OTHER stream", not "stream is
-  // dead". Aborting and reconnecting just makes it worse.
   const CONNECT_TIMEOUT_MS = 15000;
   const STALL_MS           = 10000;
   const STALL_CHECK_MS     = 500;
@@ -70,6 +58,13 @@
   let paused = false;           // user "Pause output" toggle — display-only
   let streamPaused = false;     // external OTA pause — stops the fetch entirely
   let streamPauseWaiter = null; // promise resolver to wake streamLoop on resume
+  // Tracks "we're inside an active runStream past the headers" — set
+  // when setStage('connected') fires, cleared on stream end or pause.
+  // Exposed via isStreamConnected() so telemetry.js can stagger its
+  // own connect attempts behind a confirmed console connect (user
+  // pref: console first, then chart, so log lines surface before the
+  // chart pane fights for mbedtls slab time).
+  let streamConnected = false;
   let pendingBuf = '';          // incoming display text while paused
   let lastStateText = '';
   let lastStateCls = '';
@@ -82,6 +77,20 @@
   // fetch() hasn't surfaced an error.
   let lastByteMs = 0;
   let stallHandle = null;
+
+  // One-shot "next successful runStream open" listeners. Used by
+  // ide.js's onBuildUpload to detect "device is back" the instant the
+  // stream's auto-reconnect lands a fresh response post-reboot — no
+  // /api/status polling required. Each listener fires AT MOST ONCE
+  // and is removed; this is intentionally not a sticky event since
+  // every consumer we have just wants the next post-trigger connect.
+  let connectListeners = [];
+  function fireConnect() {
+    if (!connectListeners.length) return;
+    const pending = connectListeners;
+    connectListeners = [];
+    for (const cb of pending) { try { cb(); } catch (_) {} }
+  }
 
   let showTimestamps = false;
 
@@ -132,6 +141,7 @@
   function setStage(stage) {
     currentStage = stage;
     stageEnteredAt = performance.now();
+    streamConnected = (stage === 'connected');
     renderStage();
   }
   function renderStage() {
@@ -384,6 +394,11 @@
     firstByteSeen = true;
     clearTimeout(connectTimer);
     lastByteMs = performance.now();
+    // Notify any one-shot onNextConnect waiters that the stream just
+    // landed a fresh response from the device. ide.js's onBuildUpload
+    // races this against /api/status polling so the post-OTA console
+    // pane lights up the moment the device is reachable.
+    fireConnect();
 
     const reader = res.body.getReader();
     const dec = new TextDecoder('utf-8', { fatal: false });
@@ -457,8 +472,10 @@
       activeAbort = new AbortController();
       // Fresh "reconnecting" stage on every attempt so the elapsed
       // counter resets and the user can see we're actively retrying.
-      if (currentStage !== 'connected' && currentStage !== 'updating…' &&
-          currentStage !== 'no device') {
+      // Transition out of 'updating…' (if any prior pause left it
+      // there) — the user's mental model is "reconnecting" once we're
+      // actively trying handshakes.
+      if (currentStage !== 'connected' && currentStage !== 'no device') {
         setStage('reconnecting');
       }
       try {
@@ -545,13 +562,12 @@
 
     watchIp();
     watchStall();
-    // Start the stream PAUSED. ide.js's reconnect() resumes us once the
-    // initial status probe has succeeded — this prevents 2 streams +
-    // probe from doing 3 simultaneous TLS handshakes against a single-
-    // threaded mbedtls (~3 s per handshake) on page load. Without this
-    // gate, the third handshake never fits in CONNECT_TIMEOUT_MS and
-    // the panes get stuck in NS_BINDING_ABORTED retry loops.
-    streamPaused = true;
+    // Start the stream UNPAUSED. The slab allocator + 128 KB MEM_SIZE
+    // means concurrent handshakes (probe + telemetry + console) no
+    // longer wedge the device, so the previous "stay paused until
+    // probe succeeds" choreography is unnecessary latency. If the
+    // device is unreachable, streamLoop's existing connect-timeout +
+    // backoff handles it gracefully.
     streamLoop();
 
     window.Conduit = window.Conduit || {};
@@ -617,6 +633,23 @@
       },
       setPaused,
       isPaused() { return paused; },
+      // True when the most recent setStage call moved us into 'connected'
+      // and nothing since has moved us out. Telemetry waits on this before
+      // opening its own stream so the two TLS handshakes serialize cleanly
+      // — console (text, small) lands first, then telemetry (binary frames).
+      isStreamConnected() { return streamConnected; },
+      // Register a one-shot listener that fires the next time runStream
+      // successfully opens — i.e. the next "device is reachable" signal
+      // from this transport. Returns an unsubscribe function. Used by
+      // the OTA flow to detect post-reboot reachability without a
+      // separate /api/status poll. Fires once and is removed.
+      onNextConnect(cb) {
+        if (typeof cb !== 'function') return () => {};
+        connectListeners.push(cb);
+        return () => {
+          connectListeners = connectListeners.filter((x) => x !== cb);
+        };
+      },
       setShowTimestamps(v) {
         showTimestamps = !!v;
         if (tsToggleBtn) {

@@ -140,13 +140,19 @@
 // BSS, which shrank the newlib heap and rearranged where its
 // fragmenting allocations landed — a coincidence.
 //
-// The real fix is mbedtls_slab.c: a static slab allocator that takes
-// the two big per-session buffers (16 KB IN + 8 KB OUT) off ANY heap
-// and into dedicated fixed slots. With that in place, neither this
-// heap nor the newlib heap fragments cycle-over-cycle, so we can
-// drop MEM_SIZE back near its pre-bump level. 96 KB is comfortable
-// for the remaining (small) lwIP-internal allocations.
-#define MEM_SIZE                        98304
+// 128 KB. Per-session lwIP heap demand under active streaming is
+// ~17 KB (small mbedtls handshake/session bookkeeping that the slab
+// doesn't intercept, plus pbuf chains and altcp per-pcb state). With
+// 3 concurrent sessions that's ~51 KB on top of ~32 KB of static
+// lwIP allocations, totalling ~84 KB under load. At 96 KB MEM_SIZE
+// that left only ~14 KB headroom — a fresh HTTPS handshake's
+// allocations exceeded it and the device RST'd. 128 KB gives a
+// comfortable ~45 KB of free heap under realistic streaming load.
+//
+// BSS budget recovered by dropping mbedtls_slab.c from 4 → 3 slots
+// (-25 KB) and HTTP_CONN_POOL from 8 → 5 (where the firmware really
+// needs at most 2 streams + 1 OTA + 1 control + 1 transient = 5).
+#define MEM_SIZE                        131072
 
 // Stats — explicit so the firmware-side diag.c heartbeat can read
 // real numbers for heap, MEMP pools, and link layer. Defaults are

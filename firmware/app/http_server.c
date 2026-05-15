@@ -24,6 +24,7 @@
 #include "commands.h"
 #include "identity.h"
 #include "mbedtls_slab.h"
+#include "incident_log.h"
 #include "rmii_ethernet/netif.h"
 
 #include "mbedtls/platform.h"
@@ -76,6 +77,7 @@ typedef enum {
     ROUTE_DATA,         // /api/data — binary record stream
     ROUTE_DATA_SCHEMA,  // /api/data_schema — id→name JSON
     ROUTE_CMD,          // /api/cmd — POST command dispatch (auth)
+    ROUTE_INCIDENTS,    // /api/incidents — GET list / POST clear (auth)
 } route_t;
 
 typedef struct {
@@ -189,6 +191,45 @@ typedef struct {
 
 #define STREAM_REG_SIZE  MEMP_NUM_TCP_PCB
 static stream_reg_entry_t stream_registry[STREAM_REG_SIZE];
+
+// ---- http_conn_t static pool ----------------------------------------------
+//
+// Each accepted connection used to allocate sizeof(http_conn_t) (~2 KB)
+// via libc calloc, putting load on the newlib heap. Under stream-reconnect
+// churn (every TLS retry is a fresh accept) the heap fragmented and
+// eventually a single calloc returned NULL — pico_malloc's PICO_MALLOC_PANIC
+// kicked in, panic()'d Core 1, and the firmware froze until the Core 1
+// watchdog rebooted it. Fix: a fixed-size static pool. One slot per
+// MEMP_NUM_TCP_PCB; same peak usage as the malloc path but no
+// fragmentation, no allocation failure, no panic.
+// 5 covers the realistic worst case for one IDE session: 2 long-lived
+// streams (telemetry + console) + 1 OTA upload + 1 control request
+// (status/commit/cmd) + 1 transient handshake-overlap. Going larger
+// overflows BSS now that MEM_SIZE is back at 128 KB. Pool exhaustion
+// surfaces as ERR_MEM on the new accept, which lwIP handles by
+// RSTing the new SYN — peer retries cleanly.
+#define HTTP_CONN_POOL_SIZE  5
+static http_conn_t http_conn_pool[HTTP_CONN_POOL_SIZE];
+static bool        http_conn_in_use[HTTP_CONN_POOL_SIZE];
+
+static http_conn_t *http_conn_alloc(void) {
+    for (int i = 0; i < HTTP_CONN_POOL_SIZE; i++) {
+        if (!http_conn_in_use[i]) {
+            http_conn_in_use[i] = true;
+            memset(&http_conn_pool[i], 0, sizeof http_conn_pool[i]);
+            return &http_conn_pool[i];
+        }
+    }
+    return NULL;
+}
+
+static void http_conn_free(http_conn_t *conn) {
+    if (!conn) return;
+    ptrdiff_t i = conn - http_conn_pool;
+    if (i >= 0 && i < HTTP_CONN_POOL_SIZE) {
+        http_conn_in_use[i] = false;
+    }
+}
 
 // HTTP-server-specific diagnostic counters surfaced via diag.c. See the
 // header for what each tracks and how to interpret deltas across a
@@ -350,6 +391,90 @@ static void handle_status(struct altcp_pcb *pcb) {
         ota_commit_pending() ? "true" : "false");
 
     send_json(pcb, "200 OK", json);
+}
+
+// GET /api/incidents — JSON array of records persisted across reboots
+// (Core 1 wedges, hardware watchdog resets, OTA rollbacks, manual test
+// inserts). Read-only; the POST variant clears them.
+static void handle_incidents_get(struct altcp_pcb *pcb) {
+    static char buf[3072];
+    int off = 0;
+    off += snprintf(buf + off, sizeof buf - off, "[");
+    unsigned n = incident_log_count();
+    for (unsigned i = 0; i < n && off < (int)sizeof buf - 256; i++) {
+        const incident_record_t *r = incident_log_get(i);
+        if (!r) break;
+        // Cause name kept terse; the web renderer can map further.
+        const char *cause;
+        switch (r->cause) {
+            case INCIDENT_BOOT:              cause = "boot";         break;
+            case INCIDENT_CORE1_WEDGE:       cause = "core1-wedge";  break;
+            case INCIDENT_HW_WATCHDOG_RESET: cause = "hw-watchdog";  break;
+            case INCIDENT_OTA_ROLLBACK:      cause = "ota-rollback"; break;
+            case INCIDENT_MANUAL:            cause = "manual";       break;
+            default:                         cause = "?";            break;
+        }
+        // Defensive escape: msg can contain " or \ if a future caller
+        // forwards an arbitrary string. Replace those with '?'. We
+        // don't bother with proper JSON escaping for a forensic field.
+        char safe_msg[sizeof r->msg];
+        size_t mlen = strnlen(r->msg, sizeof r->msg);
+        for (size_t k = 0; k < mlen; k++) {
+            char c = r->msg[k];
+            safe_msg[k] = (c == '"' || c == '\\' || c < 0x20) ? '?' : c;
+        }
+        safe_msg[mlen] = '\0';
+        off += snprintf(buf + off, sizeof buf - off,
+            "%s{\"i\":%u,\"cause\":\"%s\",\"uptime_ms\":%u,"
+            "\"c1\":%u,\"heap_used\":%u,\"pcb_active\":%u,"
+            "\"binary_version\":\"%u.%u\",\"msg\":\"%s\"}",
+            i == 0 ? "" : ",",
+            i, cause,
+            (unsigned)r->uptime_ms,
+            (unsigned)r->c1_value,
+            (unsigned)r->heap_used,
+            (unsigned)r->pcb_active,
+            (unsigned)(r->binary_version >> 16),
+            (unsigned)(r->binary_version & 0xFFFFu),
+            safe_msg);
+    }
+    snprintf(buf + off, sizeof buf - off, "]");
+    send_json(pcb, "200 OK", buf);
+}
+
+// POST /api/incidents
+//   ?action=clear → erase the log sector (auth required)
+//   ?action=test  → append an INCIDENT_MANUAL record (auth required) —
+//                   useful for verifying the flash path end-to-end
+//                   without having to actually wedge the device.
+static void handle_incidents_post(struct altcp_pcb *pcb, http_conn_t *conn) {
+    if (!conn->authenticated) {
+        send_error(pcb, "403 Forbidden", "invalid or missing auth token");
+        return;
+    }
+    const char *q = strchr(conn->header_buf, '?');
+    bool clear = false, test = false;
+    if (q) {
+        if (strstr(q, "action=clear")) clear = true;
+        else if (strstr(q, "action=test")) test = true;
+    }
+    if (clear) {
+        if (incident_log_clear() == 0) {
+            send_json(pcb, "200 OK", "{\"ok\":true,\"action\":\"clear\"}");
+        } else {
+            send_error(pcb, "500 Internal Server Error", "flash clear failed");
+        }
+        return;
+    }
+    if (test) {
+        if (incident_log_append(INCIDENT_MANUAL, "manual test entry") == 0) {
+            send_json(pcb, "200 OK", "{\"ok\":true,\"action\":\"test\"}");
+        } else {
+            send_error(pcb, "500 Internal Server Error", "flash append failed");
+        }
+        return;
+    }
+    send_error(pcb, "400 Bad Request", "specify ?action=clear or ?action=test");
 }
 
 static void handle_upload_begin(struct altcp_pcb *pcb, http_conn_t *conn) {
@@ -902,6 +1027,8 @@ static void parse_request_line(http_conn_t *conn) {
             // char: "cmd" vs "com"), so ordering relative to ROUTE_COMMIT
             // doesn't matter.
             conn->route = ROUTE_CMD;
+        } else if (strncmp(path, "/api/incidents", 14) == 0) {
+            conn->route = ROUTE_INCIDENTS;
         }
     }
 
@@ -993,7 +1120,7 @@ void http_server_on_link_down(void) {
         altcp_err (pcb, NULL);
         altcp_poll(pcb, NULL, 0);
         altcp_abort(pcb);
-        if (conn) free(conn);
+        if (conn) http_conn_free(conn);
         stream_registry[i].pcb  = NULL;
         stream_registry[i].conn = NULL;
         aborted++;
@@ -1013,7 +1140,7 @@ static void conn_close(struct altcp_pcb *pcb, http_conn_t *conn) {
             && ota_in_progress()) {
             ota_abort();
         }
-        free(conn);
+        http_conn_free(conn);
     }
     altcp_arg(pcb, NULL);
     altcp_recv(pcb, NULL);
@@ -1309,6 +1436,14 @@ static err_t http_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t e
                 } else if (conn->method == METHOD_POST && conn->route == ROUTE_CMD) {
                     handle_cmd(pcb, conn);
                     immediate_ack += body_in_pbuf;
+                } else if (conn->method == METHOD_GET && conn->route == ROUTE_INCIDENTS) {
+                    handle_incidents_get(pcb);
+                    conn->state = CONN_STATE_DONE;
+                    immediate_ack += body_in_pbuf;
+                } else if (conn->method == METHOD_POST && conn->route == ROUTE_INCIDENTS) {
+                    handle_incidents_post(pcb, conn);
+                    conn->state = CONN_STATE_DONE;
+                    immediate_ack += body_in_pbuf;
                 } else {
                     send_error(pcb, "404 Not Found", "not found");
                     conn->state = CONN_STATE_DONE;
@@ -1378,7 +1513,7 @@ static void http_err(void *arg, err_t err) {
             DEV_LOG("[http] mid-upload conn err=%d → ota_abort\n", err);
             ota_abort();
         }
-        free(conn);
+        http_conn_free(conn);
     }
 }
 
@@ -1388,8 +1523,9 @@ static err_t http_accept(void *arg, struct altcp_pcb *pcb, err_t err) {
         return ERR_VAL;
     }
 
-    // Allocate connection state
-    http_conn_t *conn = calloc(1, sizeof(http_conn_t));
+    // Allocate connection state from the static pool (see
+    // http_conn_alloc declaration for why this isn't libc calloc).
+    http_conn_t *conn = http_conn_alloc();
     if (!conn) {
         altcp_abort(pcb);
         return ERR_MEM;

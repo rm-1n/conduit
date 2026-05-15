@@ -26,6 +26,7 @@
 #include "diag.h"
 #include "discovery.h"
 #include "identity.h"
+#include "incident_log.h"
 #endif
 
 // Symbol from the rmii_ethernet driver — the inner step of its loop.
@@ -209,10 +210,34 @@ int main() {
     // reset before rom_explicit_buy rolls back to the previous partition.
     watchdog_enable(WATCHDOG_TIMEOUT_MS, true);
 
+#ifndef CONDUIT_MINIMAL
+    incident_log_init();
+#endif
+
     // Run user-supplied one-shot setup before entering the periodic loop.
     // The web IDE ships a strong definition that overrides the weak stub
     // at the top of this file.
     conduit_setup();
+
+#ifndef CONDUIT_MINIMAL
+    // Core-1 watchdog state. Each main-loop iteration we sample
+    // g_core1_iter; if the value hasn't changed for CORE1_WEDGE_MS we
+    // assume the lwIP/RMII thread on Core 1 is stuck (deadlock,
+    // mbedtls hot loop, etc.) and self-heal: log a forensic incident
+    // record to flash and force a hardware-watchdog reboot. Without
+    // this safety net a Core-1 wedge bricks the device until physical
+    // power-cycle (Core 0 keeps patting the watchdog perfectly happy
+    // because the wedge is local to Core 1's stack).
+    //
+    // 3000 ms — generous enough to absorb a multi-record mbedtls send
+    // burst (worst observed ~700 ms), a slow PHY MDIO read, or a
+    // back-to-back TLS handshake pair (~2× 1.5 s on software ChaCha20),
+    // all of which advance g_core1_iter at low rates but DO advance.
+    // Anything that fails to advance for 3 s is genuinely wedged.
+    #define CORE1_WEDGE_MS 3000
+    uint32_t       last_c1 = __atomic_load_n(&g_core1_iter, __ATOMIC_RELAXED);
+    absolute_time_t last_c1_change = get_absolute_time();
+#endif
 
     // Main loop — Core 0 runs user's 1 kHz loop hook, pats the watchdog,
     // and prints a diagnostic line every ~1 s. No lwIP calls from here
@@ -252,6 +277,34 @@ int main() {
             continue;
         }
         watchdog_update();
+
+#ifndef CONDUIT_MINIMAL
+        // Core-1 wedge detector. If Core 1 stops ticking g_core1_iter
+        // for CORE1_WEDGE_MS, log a forensic record to flash and force
+        // a hardware-watchdog reboot. incident_log_append_emergency
+        // resets Core 1 first (it's dead, won't cooperate with
+        // flash_safe_execute) and writes the page directly with
+        // interrupts disabled.
+        {
+            uint32_t c1 = __atomic_load_n(&g_core1_iter, __ATOMIC_RELAXED);
+            if (c1 != last_c1) {
+                last_c1 = c1;
+                last_c1_change = get_absolute_time();
+            } else if (absolute_time_diff_us(last_c1_change, get_absolute_time())
+                       > (int64_t)CORE1_WEDGE_MS * 1000) {
+                char msg[64];
+                snprintf(msg, sizeof msg, "core1 stuck %llums (c1=%lu)",
+                         (unsigned long long)(absolute_time_diff_us(
+                             last_c1_change, get_absolute_time()) / 1000),
+                         (unsigned long)c1);
+                DEV_LOG("[watchdog] %s — rebooting\n", msg);
+                incident_log_append_emergency(INCIDENT_CORE1_WEDGE, msg);
+                __atomic_store_n(&g_reboot_pending, true, __ATOMIC_RELEASE);
+                watchdog_reboot(0, 0, 100);
+                while (1) tight_loop_contents();
+            }
+        }
+#endif
 #ifndef CONDUIT_MINIMAL
         // OTA-in-progress fast path: SUSPEND conduit_loop() completely
         // and hand Core 0 entirely to ota_pump.
@@ -296,6 +349,13 @@ int main() {
         }
 #else
         conduit_loop();
+#endif
+
+#ifndef CONDUIT_MINIMAL
+        // Write any pending boot-time incident record once both
+        // cores are alive — see incident_log.c for the deferred-
+        // write rationale.
+        incident_log_post_boot_tick();
 #endif
 
         // Health check — once per diag print interval (≈ 1 s) is plenty

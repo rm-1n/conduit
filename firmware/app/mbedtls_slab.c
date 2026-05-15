@@ -36,20 +36,20 @@
 #define OUT_MATCH(sz) ((sz) >  (size_t)MBEDTLS_SSL_OUT_CONTENT_LEN && \
                        (sz) <= (size_t)CONDUIT_SLAB_OUT_SIZE)
 
-// Slot counts — sized for the worst observed concurrency:
-//   1 OTA upload conn + 1 in-flight short control req
-//   (status/commit/probe) + 2 long-lived streams (telemetry, console).
-// = 4 concurrent TLS sessions. We do NOT need to size for the
-// post-OTA stream-reopen transient because the IDE's pause-before-OTA
-// sequence FINs both streams BEFORE the upload starts (see
-// streams_gate.test.mjs); by the time the post-OTA stability probe
-// fires and streams resume, the closed sessions have already had their
-// slabs freed in altcp_mbedtls_dealloc → conduit_mbedtls_free.
+// Slot counts — 3 covers the steady-state concurrent TLS session
+// count (2 long-lived streams + 1 short-lived control req).
 //
-// Each slot pair (16640 + 8448) = ~25 KB. 4 slots = ~100 KB static
-// SRAM; comfortable against the RP2350's 520 KB total once MEM_SIZE
-// is dropped back to 96 KB (see lwipopts.h).
-#define CONDUIT_SLAB_SLOTS 4
+// Transient overshoots (e.g. OTA precheck while streams are alive)
+// will return NULL from the slab; altcp_mbedtls_setup propagates
+// ERR_MEM and RSTs the new SYN, which the peer's retry layer handles.
+// That's GRACEFUL — vs. heap saturation which RSTs every concurrent
+// session at once. Trading off slab capacity for MEM_SIZE budget is
+// the right call: heap saturation = "stream pane goes dark", slab
+// exhaustion = "one retry needed".
+//
+// 3 slots × (16640 + 8448) ≈ 75 KB static SRAM. The extra 25 KB
+// (vs 4 slots) gets reinvested in MEM_SIZE (see lwipopts.h).
+#define CONDUIT_SLAB_SLOTS 3
 
 // Static slabs. Aligned(8) so each row starts on an 8-byte boundary —
 // mbedtls's internal buffer pointers are byte-addressed but downstream
@@ -97,6 +97,18 @@ void *conduit_mbedtls_calloc(size_t c, size_t len) {
         return NULL;
     }
 
+    // Fallback for small mbedtls allocations (handshake state,
+    // ciphersuite info, session scratch). Sized at < 1 KB each but
+    // ~10 KB total per active TLS session. Goes to lwIP heap — must
+    // stay symmetric with the SDK's own tls_malloc/tls_free path that
+    // wraps the first cert-chain allocations during boot (we install
+    // OUR hook AFTER altcp_tls_create_config*, so any pointer mbedtls
+    // hands us afterwards may have come from either allocator and the
+    // pointer arithmetic has to match).
+    //
+    // Heap pressure is addressed via MEM_SIZE bump in lwipopts.h
+    // rather than re-routing mbedtls's small allocs to libc — see
+    // commit message for the failed-boot diagnosis on the libc route.
     stats.passthrough++;
     void *p = mem_malloc((mem_size_t)total);
     if (p) memset(p, 0, total);
@@ -106,9 +118,8 @@ void *conduit_mbedtls_calloc(size_t c, size_t len) {
 void conduit_mbedtls_free(void *ptr) {
     if (!ptr) return;
 
-    // Pointer-equality match against slot bases. mbedtls only ever
-    // returns a pointer we handed it; non-slot pointers indicate the
-    // allocation came from mem_malloc and we hand it back to lwIP.
+    // Pointer-equality match against slot bases. Non-slot pointers
+    // came from the lwIP-heap fallback path.
     for (int i = 0; i < CONDUIT_SLAB_SLOTS; i++) {
         if (ptr == in_slab[i])  { in_used[i]  = false; return; }
         if (ptr == out_slab[i]) { out_used[i] = false; return; }

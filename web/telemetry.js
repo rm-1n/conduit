@@ -20,18 +20,14 @@
   'use strict';
 
   // RECONNECT_OK_MS / RECONNECT_ERR_MS — back-off between stream
-  // reconnect attempts. Bumped from 100 / 150 ms after observing that
-  // the IDE's startup load (telemetry + console + status + any cached
-  // /api/log polls all opening fresh TLS sessions at the same time)
-  // saturates Cortex-M33 mbedtls on HTTPS: each handshake takes
-  // ~1.5–2 s, but if we slam a second handshake on top before the
-  // first one even finishes, the device wedges. >1 Hz reconnect cadence
-  // on HTTPS is a known-good way to brick the device — see memory
-  // project_https_keepalive_cadence_wedge.md. 2 s / 5 s gives the
-  // device room to actually serve the stream once it's connected,
-  // instead of getting hammered by another handshake every 100 ms.
-  const RECONNECT_OK_MS    = 2000;
-  const RECONNECT_ERR_MS   = 5000;
+  // reconnect attempts. The original wedge that motivated 2 s / 5 s
+  // was the http_conn_t libc-calloc OOM panic — now fixed by the
+  // static pool. Tightened to 500 ms / 1500 ms: a real TLS handshake
+  // on Cortex-M33 software ChaCha20 takes ~1.5–2 s, so retrying every
+  // 1.5 s after a failure keeps the device handing handshakes one at
+  // a time without piling them up.
+  const RECONNECT_OK_MS    = 500;
+  const RECONNECT_ERR_MS   = 1500;
   const IP_CHECK_MS        = 1000;
   const SCHEMA_REFRESH_MIN_MS = 1000;
   const PERSIST_BATCH_MAX  = 64;
@@ -46,14 +42,11 @@
   // separate HTTPS threshold of 4 s coupled to a 3000 ms firmware-
   // side keepalive cadence — combo wedged the device on the IDE's
   // multi-conn startup. Revert and rely on the v10.29 cadence.
-  // STALL_MS — bumped 1000 → 10000 because the firmware keepalive byte
-  // (every ~500 ms) doesn't always reach us under HTTPS load: when the
-  // device is busy serving another concurrent TLS session, mbedtls can
-  // stall the write for several seconds. Aborting the stream at 1 s and
-  // reconnecting just adds another handshake to the pile, making the
-  // wedge worse. 10 s tolerates a noisy multi-stream window without
-  // false-tripping; a genuinely dead connection still gets caught in
-  // bounded time.
+  // STALL_MS — see RECONNECT_*_MS rationale. Conservative 10 s so a
+  // false-trip stall doesn't add a handshake to the reconnect-churn
+  // pile that triggers the firmware-side Core 1 deadlock. TCP +
+  // mbedtls + browser-layer batching can produce 2-5 s on-wire gaps
+  // even when the firmware emits a keepalive every 500 ms.
   const STALL_MS           = 10000;
   const STALL_CHECK_MS     = 500;
   // Connect-phase timeout — between issuing fetch() and the first byte
@@ -70,20 +63,14 @@
   // red→green LED latency in half after a device reboot. If a stress run
   // ever exceeds 4 s the stream auto-retries on a 150 ms cadence, so a
   // single timed-out connect costs at most one extra round-trip.
-  // CONNECT_TIMEOUT_MS — bumped 4000 → 15000. On HTTPS the first cold
-  // handshake to a fresh device commonly takes 5–8 s (PNA preflight +
-  // full TLS handshake on Cortex-M33 software ChaCha20). 4 s aborted
-  // the handshake before it ever finished, the stream reconnected,
-  // started a new handshake, repeat — infinite-loop wedge.
-  // 15 s lets the handshake actually complete on a slow first connect.
+  // CONNECT_TIMEOUT_MS — 15 s covers cold-handshake worst case (PNA
+  // preflight + full TLS, ~5–8 s on Cortex-M33). Tightening this
+  // adds handshake churn under any transient delay, which is what
+  // wedges Core 1 in the firmware.
   const CONNECT_TIMEOUT_MS = 15000;
-  // Schema fetch timeout. Sized to match CONNECT_TIMEOUT_MS so an
-  // unreachable device doesn't hold runStream's awaited refreshSchema
-  // for several seconds while the data path retries every 750 ms.
-  // /api/data_schema is ~200 bytes; a healthy LAN delivers it in <10 ms
-  // over plain HTTP. With HTTPS via the device's per-device LE cert,
-  // ChaCha20-Poly1305 handshake on Cortex-M33 lands in ~1.5-2 s on a
-  // fresh connection. 4 s leaves margin for a slow handshake.
+  // Schema fetch timeout. Matches CONNECT_TIMEOUT_MS so an unreachable
+  // device doesn't hold runStream's awaited refreshSchema for several
+  // seconds while the data path retries every RECONNECT_ERR_MS.
   const SCHEMA_TIMEOUT_MS  = 15000;
 
   const DTYPE_I8 = 0, DTYPE_U8 = 1, DTYPE_I16 = 2, DTYPE_U16 = 3,
@@ -179,6 +166,13 @@
   let firstStream = true;       // distinguish initial connect from reconnects
   let paused = false;           // external pause (e.g. during OTA upload)
   let pauseWaiter = null;       // promise resolver to wake streamLoop on resume()
+  // Set to true at init() and on resume() so the streamLoop blocks the
+  // next runStream() open until console reports a connected stream (or
+  // the timeout fires). Console is the lighter pane; landing it first
+  // gives the user fast feedback (log lines) and avoids two parallel
+  // TLS handshakes during the post-reboot mbedtls-warmup window.
+  let awaitingConsoleHandoff = true;
+  const CONSOLE_HANDOFF_MAX_MS = 5000;
   // Stall watchdog state — last time the active stream produced bytes,
   // and the interval that polls it. lastByteMs updates on every chunk
   // received in runStream(); an idle browser tab won't fire the
@@ -186,6 +180,20 @@
   // but that's fine — we re-check on visibilitychange too.
   let lastByteMs = 0;
   let stallHandle = null;
+
+  // One-shot "next successful runStream open" listeners. Used by
+  // ide.js's onBuildUpload to detect "device is back" the instant the
+  // stream's auto-reconnect lands a fresh response post-reboot — no
+  // /api/status polling required. Each listener fires AT MOST ONCE
+  // and is removed; this is intentionally not a sticky event since
+  // every consumer we have just wants the next post-trigger connect.
+  let connectListeners = [];
+  function fireConnect() {
+    if (!connectListeners.length) return;
+    const pending = connectListeners;
+    connectListeners = [];
+    for (const cb of pending) { try { cb(); } catch (_) {} }
+  }
 
   // Schema: id → name. Refreshed on connect, on reboot, and when an
   // unknown id appears (rate-limited).
@@ -274,9 +282,20 @@
 
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
+  let schemaFetchInFlight = false;
   async function refreshSchema(ip, force, parentSignal) {
+    // In-flight guard: drain() fires refreshSchema once per unknown-msgId
+    // record. On a post-reboot reconnect the schema cache is empty AND
+    // many records arrive in a burst (the device's pre-handshake backlog).
+    // Without this guard, the time-based rate limit isn't sufficient
+    // because each `lastSchemaFetchMs = now` write happens BEFORE the
+    // fetch starts — so a slow handshake on the schema request itself
+    // lets the rate-limit clock advance, and the next burst fires more
+    // requests. One in-flight fetch at a time is the right invariant.
+    if (schemaFetchInFlight) return;
     const now = Date.now();
     if (!force && now - lastSchemaFetchMs < SCHEMA_REFRESH_MIN_MS) return;
+    schemaFetchInFlight = true;
     lastSchemaFetchMs = now;
     // Bound the schema fetch — without a timeout, a freshly-rebooted
     // device that accepts the TCP but doesn't reply leaves runStream's
@@ -317,6 +336,7 @@
       diag('schema.error', { message: String(e && e.message || e) });
     }
     finally {
+      schemaFetchInFlight = false;
       clearTimeout(schemaTimer);
       if (parentSignal && onParentAbort) {
         parentSignal.removeEventListener('abort', onParentAbort);
@@ -541,10 +561,32 @@
     }
 
     setState('connected', 'ok');
-    lastByteMs = performance.now();
+    const openMs = performance.now();
+    lastByteMs = openMs;
     clearTimeout(connectTimer);
     drainSeenAnyRecord = false; drainResyncCount = 0;
     diag('runStream.streaming', { cursor });
+    // Steady-cadence drop: chunks that arrive sub-millisecond apart are
+    // the device's pre-handshake/post-reboot backlog being flushed at
+    // TCP wire speed. Live data arrives with TCP roundtrip gaps (tens
+    // of ms). Drop chunks until we see one that arrived ≥STEADY_GAP_MS
+    // after its predecessor — that's the first chunk the device had to
+    // wait for the next sample to generate, i.e. live cadence. Bytes
+    // continue to advance the cursor (so the device's log_since math
+    // stays correct on reconnect) but they don't reach the chart.
+    // Timeout cap of STEADY_TIMEOUT_MS for the pathological case of a
+    // user transmit loop that never naturally gaps.
+    const STEADY_GAP_MS     = 30;
+    const STEADY_TIMEOUT_MS = 3000;
+    let isSteady = false;
+    let prevChunkMs = 0;
+    // Notify any one-shot onNextConnect waiters that the stream just
+    // landed a fresh response from the device. Currently no remaining
+    // wiring uses this (ide.js's onBuildUpload pauses streams across
+    // the OTA, so the post-resume reconnect IS the next-connect event
+    // — but updateFirmware has already returned by then). Kept for the
+    // public-API contract documented in streams_gate.test.mjs.
+    fireConnect();
 
     const reader = res.body.getReader();
     try {
@@ -552,8 +594,22 @@
         const { done, value } = await reader.read();
         if (done) break;
         if (value && value.byteLength) {
-          lastByteMs = performance.now();
+          const now = performance.now();
+          lastByteMs = now;
           cursor += value.byteLength;
+          if (!isSteady) {
+            const gap = prevChunkMs ? (now - prevChunkMs) : 0;
+            if (gap >= STEADY_GAP_MS || (now - openMs) >= STEADY_TIMEOUT_MS) {
+              isSteady = true;
+              diag('runStream.steady', {
+                afterMs: Math.round(now - openMs),
+                bytes: cursor,
+                gap: Math.round(gap),
+              });
+            }
+          }
+          prevChunkMs = now;
+          if (!isSteady) continue;
           appendBuf(value);
           await drain(ip);
         }
@@ -563,6 +619,37 @@
       try { reader.cancel(); } catch (_) {}
       persistFlush();
     }
+  }
+
+  // Block until console reports an active connection, or until maxMs
+  // elapses — whichever comes first. Used to serialize the first
+  // post-init / post-resume runStream open so we don't fire two TLS
+  // handshakes against the device in parallel. Registers a one-shot
+  // onNextConnect listener AND checks isStreamConnected() under the
+  // same race, so a console that already connected before we got here
+  // resolves immediately instead of waiting for its next connect.
+  async function waitForConsoleConnected(maxMs) {
+    const con = window.Conduit && window.Conduit.console;
+    if (!con) return;
+    if (con.isStreamConnected && con.isStreamConnected()) return;
+    if (!con.onNextConnect) return;
+    await new Promise((resolve) => {
+      let done = false;
+      const settle = () => { if (!done) { done = true; resolve(); } };
+      const unsub = con.onNextConnect(settle);
+      const fallback = setTimeout(() => {
+        diag('handoff.timeout', { maxMs });
+        if (typeof unsub === 'function') unsub();
+        settle();
+      }, maxMs);
+      // Catch the race where console flipped to connected between the
+      // isStreamConnected() check above and the listener registration.
+      if (con.isStreamConnected && con.isStreamConnected()) {
+        clearTimeout(fallback);
+        if (typeof unsub === 'function') unsub();
+        settle();
+      }
+    });
   }
 
   async function streamLoop() {
@@ -608,6 +695,16 @@
       if (currentStage !== 'connected' && currentStage !== 'paused' &&
           currentStage !== 'no device') {
         setStage('reconnecting');
+      }
+      // First-attempt-after-resume gate: wait for console to land its
+      // own runStream before opening ours. Only fires once per resume/
+      // init — after we've opened at least one runStream, subsequent
+      // reconnects (network blip, brief device unreachability) don't
+      // wait, since by then the user has already seen the chart and an
+      // extra delay would just look like a hang.
+      if (awaitingConsoleHandoff) {
+        awaitingConsoleHandoff = false;
+        await waitForConsoleConnected(CONSOLE_HANDOFF_MAX_MS);
       }
       try {
         await runStream(ip, activeAbort.signal);
@@ -692,11 +789,13 @@
     watchIp();
     watchStall();
     installConnectivityHooks();
-    // Start the stream PAUSED. ide.js's reconnect() resumes us once the
-    // initial status probe has succeeded — see the matching comment in
-    // console.js. Eliminates the 3-handshake parallel race on page load.
-    paused = true;
-    setState('paused', '');
+    // Start the stream running. The previous design started paused and
+    // relied on ide.js's reconnect() to resume after a successful probe
+    // — but reconnect() no longer pauses/resumes streams (probe failure
+    // used to wedge them paused forever). The streamLoop's own catch-
+    // retry handles unreachable devices, same as console.js does. The
+    // chart-level steady-cadence drop (runStream.steady below) replaces
+    // the page-load "wait for probe" gate without the wedge mode.
     streamLoop();
 
     window.Conduit = window.Conduit || {};
@@ -727,6 +826,10 @@
       resume() {
         if (!paused) return;
         paused = false;
+        // Re-arm the console-handoff gate so the post-OTA resume serializes
+        // its first runStream open behind console's. Cleared again the
+        // first time streamLoop reaches the gate.
+        awaitingConsoleHandoff = true;
         // Reset cursor + run state so the post-reboot stream starts
         // cleanly at the device's new total. Also reset the in-memory
         // data store — OTA implies a fresh device session and the
@@ -771,6 +874,18 @@
         if (pauseWaiter) { pauseWaiter(); pauseWaiter = null; }
       },
       isPaused() { return paused; },
+      // Register a one-shot listener that fires the next time runStream
+      // successfully opens — i.e. the next "device is reachable" signal
+      // from this transport. Returns an unsubscribe function. Used by
+      // the OTA flow to detect post-reboot reachability without a
+      // separate /api/status poll. Fires once and is removed.
+      onNextConnect(cb) {
+        if (typeof cb !== 'function') return () => {};
+        connectListeners.push(cb);
+        return () => {
+          connectListeners = connectListeners.filter((x) => x !== cb);
+        };
+      },
       schemaSnapshot() { return new Map(schema); },
       // Force any pending persist batch to IndexedDB. Used by the
       // download flow so the on-disk file includes the most recent

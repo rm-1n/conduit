@@ -63,26 +63,22 @@ function deviceUrl(ip, uniqueId, path) {
     const dashIp = String(ip).replaceAll('.', '-');
     return `https://${dashIp}.${uniqueId}.${tlsZone()}${path}`;
   }
-  // HTTP fallback for devices without a uniqueId (uncommissioned /
-  // self-hosted / local-dev boards). Was disabled when mbedtls heap
-  // fragmentation made HTTPS unreliable and we needed the failures
-  // surfaced loudly — keeping plaintext available let "looks like it
-  // works" ship over HTTP while HTTPS quietly bricked the device.
-  // The mbedtls slab fix (firmware/app/mbedtls_slab.{c,h}) closed that
-  // gap, so HTTP is safe to re-enable as the natural fallback when no
-  // per-device TLS identity is registered.
-  //
-  // Opt back out at runtime with `window.Conduit.allowHttpFallback = false`
-  // before any module reads a URL — useful if you want to assert that
-  // every flow is using the per-device cert.
-  if (window.Conduit && window.Conduit.allowHttpFallback === false) {
-    throw new Error(
-      `deviceUrl: no uniqueId for ${ip} and HTTP fallback is disabled. ` +
-      `Re-add the device in Hardware Manager with its Board ID (see ` +
-      `\`conduit status -d ${ip}\`) as the uniqueId.`,
-    );
+  // HTTP fallback DISABLED. Letting the IDE quietly drop to HTTP when a
+  // uniqueId is missing has masked real HTTPS regressions (e.g. cookies
+  // cleared → cached uniqueId lost → fallback → "looks like it works"
+  // → ships broken). Force every caller down the HTTPS-only path so any
+  // mbedtls / TLS-load issue gets surfaced loudly and we have to fix it
+  // here rather than working around it via plaintext. To re-enable for
+  // local-only dev, set window.Conduit.allowHttpFallback = true BEFORE
+  // any module reads a URL — but never commit a setter for it.
+  if (window.Conduit && window.Conduit.allowHttpFallback) {
+    return `http://${ip}${path}`;
   }
-  return `http://${ip}${path}`;
+  throw new Error(
+    `deviceUrl: no uniqueId for ${ip} and HTTP fallback is disabled. ` +
+    `Re-add the device in Hardware Manager with its Board ID (see ` +
+    `\`conduit status -d ${ip}\`) as the uniqueId.`,
+  );
 }
 
 // Build a device URL given just an IP, looking up uniqueId from the
@@ -254,16 +250,22 @@ window.Conduit.probeAndRemember = probeAndRemember;
 window.Conduit.updateKnownDevice = updateKnownDevice;
 window.Conduit.removeKnownDevice = removeKnownDevice;
 
-// Persisted opt-in for telemetry/console stream auto-resume. Default
-// FALSE on HTTPS because two concurrent stream handshakes wedge the
-// Cortex-M33 mbedtls. Users who want live charts/console output can
-// flip this once from DevTools:
-//   localStorage.setItem('conduit_streams_auto', 'true'); location.reload();
-// and it sticks across reloads. Setting it back to 'false' (or
-// clearing site data) returns to the safe default.
+// Auto-resume telemetry + console streams once the page-load probe
+// confirms the device is reachable. Default TRUE: the firmware fixes
+// that motivated the opt-in (mbedtls slab off-heap, MEM_SIZE bump,
+// http_conn_t static pool, Core 1 watchdog with persistent incident
+// log) collectively closed the wedge-under-multi-handshake-load
+// failure mode. Streams are also kept open across OTA, so post-upload
+// resume is automatic via runStream's reconnect.
+//
+// Opt out from DevTools if you want streams paused at load (e.g. for
+// debugging another device on the same page):
+//   localStorage.setItem('conduit_streams_auto', 'false'); location.reload();
+// Clearing site data restores the auto-resume default.
 try {
-  window.Conduit.streamsAutoResume =
-    localStorage.getItem('conduit_streams_auto') === 'true';
+  const v = localStorage.getItem('conduit_streams_auto');
+  // Explicit 'false' opts out; anything else (including unset) defaults to true.
+  window.Conduit.streamsAutoResume = v !== 'false';
 } catch (_) {
-  window.Conduit.streamsAutoResume = false;
+  window.Conduit.streamsAutoResume = true;
 }
