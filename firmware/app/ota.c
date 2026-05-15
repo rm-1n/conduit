@@ -1,4 +1,5 @@
 #include "ota.h"
+#include "ota_ring.h"
 #include "conduit_config.h"
 #include "dev_log.h"
 
@@ -29,18 +30,21 @@ typedef struct {
 
 _Static_assert(sizeof(uf2_block_t) == 512, "UF2 block must be 512 bytes");
 
-// OTA state
+// OTA state. The legacy block_buf accumulator is gone — the SRAM ring
+// in ota_ring.c is now the accumulator. All flash work happens on
+// Core 0 via ota_pump(); the recv callback (Core 1) only feeds the
+// ring via ota_write_chunk_ex().
 static struct {
-    bool     active;
-    uint32_t partition_start;  // flash offset (not XIP address)
-    uint32_t partition_size;
-    int32_t  addr_delta;       // runtime addr delta: target_partition_base - uf2_target_base
-    uint32_t bytes_written;
-    uint32_t blocks_received;
-    uint32_t num_blocks_expected;
-    int32_t  last_erased_sector; // sector index of last erased sector
-    uint8_t  block_buf[UF2_BLOCK_SIZE];
-    uint16_t block_buf_pos;
+    bool          active;
+    volatile bool draining;     // ota_begin_drain set; reject further writes
+    uint32_t      partition_start;  // flash offset (not XIP address)
+    uint32_t      partition_size;
+    int32_t       addr_delta;       // runtime addr delta: target_partition_base - uf2_target_base
+    uint32_t      bytes_written;
+    uint32_t      blocks_received;
+    uint32_t      num_blocks_expected;
+    int32_t       last_erased_sector; // sector index of last erased sector
+    ota_err_t     pump_err;     // sticky; written by Core 0 pump, read by Core 1 http_poll
 } ota;
 
 static uint8_t workarea[4 * 1024] __attribute__((aligned(4)));
@@ -167,7 +171,10 @@ ota_err_t ota_begin(void) {
     ota.blocks_received = 0;
     ota.num_blocks_expected = 0;
     ota.last_erased_sector = -1;
-    ota.block_buf_pos = 0;
+    ota.pump_err = OTA_OK;
+    __atomic_store_n(&ota.draining, false, __ATOMIC_RELEASE);
+    ota_ring_init();
+    ota_ring_reset();
     ota.active = true;
 
         DEV_LOG("[ota] Target partition: offset 0x%x, size 0x%x\n",
@@ -258,39 +265,56 @@ static ota_err_t process_uf2_block(const uf2_block_t *block) {
     return OTA_OK;
 }
 
+size_t ota_write_chunk_ex(const uint8_t *data, size_t len) {
+    if (!ota.active) return 0;
+    if (__atomic_load_n(&ota.draining, __ATOMIC_ACQUIRE)) return 0;
+    return ota_ring_write(data, len);
+}
+
 ota_err_t ota_write_chunk(const uint8_t *data, size_t len) {
     if (!ota.active) {
         return OTA_ERR_NOT_STARTED;
     }
-
-    size_t offset = 0;
-    while (offset < len) {
-        // Fill the block buffer
-        size_t needed = UF2_BLOCK_SIZE - ota.block_buf_pos;
-        size_t available = len - offset;
-        size_t copy = (available < needed) ? available : needed;
-
-        memcpy(ota.block_buf + ota.block_buf_pos, data + offset, copy);
-        ota.block_buf_pos += copy;
-        offset += copy;
-
-        // Process complete block
-        if (ota.block_buf_pos == UF2_BLOCK_SIZE) {
-            ota_err_t err = process_uf2_block((const uf2_block_t *)ota.block_buf);
-            if (err != OTA_OK) {
-                ota_abort();
-                return err;
-            }
-            ota.block_buf_pos = 0;
-        }
-    }
-
+    (void)ota_write_chunk_ex(data, len);
     return OTA_OK;
 }
 
-ota_err_t ota_finish(void) {
+void ota_pump(void) {
+    if (!ota.active) return;
+    if (__atomic_load_n(&ota.pump_err, __ATOMIC_ACQUIRE) != OTA_OK) return;
+    uint8_t blk[UF2_BLOCK_SIZE];
+    if (ota_ring_drain_one_block(blk) != UF2_BLOCK_SIZE) return;
+    ota_err_t err = process_uf2_block((const uf2_block_t *)blk);
+    if (err != OTA_OK) {
+        DEV_LOG("[ota] pump block failed: %s\n", ota_error_string(err));
+        // Sticky — don't ota_abort here; http_poll needs to read the
+        // error and respond before the session is torn down.
+        __atomic_store_n(&ota.pump_err, err, __ATOMIC_RELEASE);
+    }
+}
+
+void ota_begin_drain(void) {
+    __atomic_store_n(&ota.draining, true, __ATOMIC_RELEASE);
+}
+
+bool ota_drain_complete(void) {
+    if (!ota.active) return true;
+    if (!__atomic_load_n(&ota.draining, __ATOMIC_ACQUIRE)) return false;
+    return ota_ring_used() == 0;
+}
+
+ota_err_t ota_last_pump_error(void) {
+    return __atomic_load_n(&ota.pump_err, __ATOMIC_ACQUIRE);
+}
+
+ota_err_t ota_finalize_after_drain(void) {
     if (!ota.active) {
         return OTA_ERR_NOT_STARTED;
+    }
+    if (ota.pump_err != OTA_OK) {
+        ota_err_t err = ota.pump_err;
+        ota_abort();
+        return err;
     }
 
     // Check all blocks received
@@ -335,6 +359,7 @@ void ota_abort(void) {
     }
     memset(&ota, 0, sizeof(ota));
     ota.last_erased_sector = -1;
+    ota_ring_reset();
 }
 
 bool ota_in_progress(void) {

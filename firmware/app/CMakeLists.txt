@@ -43,10 +43,27 @@ target_sources(conduit_lwip INTERFACE
 
 target_include_directories(conduit_lwip INTERFACE
     ${LWIP_PATH}/src/include
-    # Our lwipopts.h takes precedence (searched first)
+    # Our lwipopts.h takes precedence (searched first). Also where
+    # mbedtls_config.h lives — pico_mbedtls's trampoline header does
+    # `#include "mbedtls_config.h"` and expects to find ours via the
+    # consuming target's include path.
     ${CMAKE_CURRENT_LIST_DIR}
     # Fall through to RMII lib for arch/cc.h
     ${RMII_LIB_DIR}/src/lwip
+)
+
+# altcp_alloc.c (compiled into conduit_lwip above) includes lwip/altcp_tls.h
+# which pulls in mbedtls headers when LWIP_ALTCP_TLS_MBEDTLS=1. Linking
+# pico_mbedtls + pico_lwip_mbedtls into conduit_lwip propagates the
+# mbedtls include paths down to every consumer of conduit_lwip, so the
+# altcp source files compile cleanly. The actual TLS server config lives
+# in http_server.c's http_server_init_tls(); pico_lwip_mbedtls also
+# brings in altcp_tls_mbedtls.c which implements the TLS adapter the
+# server config plugs into. Mbedtls feature flags live in
+# firmware/app/mbedtls_config.h.
+target_link_libraries(conduit_lwip INTERFACE
+    pico_mbedtls
+    pico_lwip_mbedtls
 )
 
 # ---- RMII Ethernet driver ----
@@ -87,6 +104,31 @@ option(CONDUIT_SIMULATE_HANG "Hang after init to exercise the TBYB watchdog roll
 # for the full rationale.
 option(CONDUIT_DEV_LOGS "Enable verbose firmware status prints over USB CDC" OFF)
 
+# ---- Binary version --------------------------------------------------------
+# Bump MINOR per OTA test cycle. The RP2350 bootrom compares versions across
+# A/B partitions and boots whichever is newer. Two consumers downstream:
+#   1. pico_set_binary_version (below) — what the bootrom compares
+#   2. configure_file → conduit_version.h — what /api/status emits as
+#      `binary_version`, used to verify TBYB rollback actually flipped to
+#      the previous partition.
+# The CONDUIT_VERSION_STRING field in /api/status is a separate semver
+# that stays "1.2.0" across rollbacks; only the MAJOR.MINOR pair here
+# changes per build.
+set(CONDUIT_BINARY_VERSION_MAJOR 10)
+set(CONDUIT_BINARY_VERSION_MINOR 70)
+
+# Generate conduit_version.h from conduit_version.h.in so the version
+# constants reach C code through a real header. target_compile_definitions
+# was tried first but ninja's incremental dependency tracking didn't
+# reliably propagate -D flag changes — sed-bumping MINOR left ninja saying
+# "no work to do" and re-uploading the stale UF2. configure_file is the
+# robust path: when MAJOR or MINOR changes here, the generated header is
+# rewritten with a fresh mtime; ninja sees the .h is newer than any .o
+# that includes it and triggers a clean recompile of those TUs.
+configure_file(${CMAKE_CURRENT_LIST_DIR}/conduit_version.h.in
+               ${CMAKE_CURRENT_BINARY_DIR}/conduit_version.h
+               @ONLY)
+
 # ---- App executable helper --------------------------------------------------
 #
 # The app ships as two UF2s built from the same source:
@@ -113,16 +155,24 @@ function(conduit_define_app TARGET)
         network.c
         http_server.c
         ota.c
+        ota_ring.c
         log_buffer.c
         data_buffer.c
         commands.c
         diag.c
         discovery.c
+        identity.c
+        sha256.c
+        mbedtls_slab.c
+        incident_log.c
     )
 
     target_include_directories(${TARGET} PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_SOURCE_DIR}/include
+        # configure_file output (conduit_version.h) lives in the per-target
+        # binary dir so http_server.c can #include it.
+        ${CMAKE_CURRENT_BINARY_DIR}
     )
 
     # We export a printf-style log() helper (see log_buffer.h). The C
@@ -153,16 +203,34 @@ function(conduit_define_app TARGET)
         hardware_gpio
         hardware_adc
         conduit_rmii
+        # TLS (Phase 2) is staged in two parts. Part one: enable LWIP_ALTCP
+        # in lwipopts.h so http_server.c can be refactored from tcp_* to
+        # altcp_* without bringing in mbedtls — already done. Part two:
+        # link `pico_mbedtls` + `pico_lwip_mbedtls`, define
+        # `LWIP_ALTCP_TLS` / `LWIP_ALTCP_TLS_MBEDTLS`, point at a trimmed
+        # mbedtls user config, and call `altcp_tls_create_config_server_*`
+        # in `http_server_init_tls`. Part two requires the conduit_lwip
+        # INTERFACE library to inherit pico_mbedtls's include paths
+        # (target_link_libraries(conduit_lwip INTERFACE pico_mbedtls))
+        # and a check_config.h-clean MBEDTLS_USER_CONFIG_FILE — both
+        # land with the actual runtime change so uncommissioned boards
+        # stay byte-for-byte identical to today's HTTP-only firmware.
     )
 
     # Console output via USB
     pico_enable_stdio_usb(${TARGET} 1)
     pico_enable_stdio_uart(${TARGET} 0)
 
-    # Binary version for A/B partition selection — bump MINOR per OTA test
-    # cycle. The RP2350 bootrom compares versions across partitions and
-    # boots the newer.
-    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 2)
+    # Binary version for A/B partition selection. Single source of truth for
+    # both the ROM-side picobin metadata AND the JSON we expose from
+    # /api/status — see the CONDUIT_BINARY_VERSION_* set() block above.
+    pico_set_binary_version(${TARGET}
+        MAJOR ${CONDUIT_BINARY_VERSION_MAJOR}
+        MINOR ${CONDUIT_BINARY_VERSION_MINOR})
+    # The C-side reads CONDUIT_BINARY_VERSION_{MAJOR,MINOR} from
+    # ${CMAKE_CURRENT_BINARY_DIR}/conduit_version.h, generated by
+    # configure_file above. See its block comment for why this beats
+    # target_compile_definitions for the rebuild-on-bump path.
 
     # Embed the A/B partition table so the bootrom can discover the layout
     # and pick between A and B based on binary version.
@@ -228,7 +296,7 @@ function(conduit_define_app_minimal TARGET)
     pico_enable_stdio_usb(${TARGET} 1)
     pico_enable_stdio_uart(${TARGET} 0)
 
-    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 2)
+    pico_set_binary_version(${TARGET} MAJOR 10 MINOR 3)
     pico_embed_pt_in_binary(${TARGET} ${CMAKE_SOURCE_DIR}/bootloader/partitions.json)
     if(EXISTS "${CMAKE_SOURCE_DIR}/keys/private.pem")
         pico_sign_binary(${TARGET} ${CMAKE_SOURCE_DIR}/keys/private.pem)

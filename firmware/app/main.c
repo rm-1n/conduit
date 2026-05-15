@@ -25,6 +25,8 @@
 #include "commands.h"
 #include "diag.h"
 #include "discovery.h"
+#include "identity.h"
+#include "incident_log.h"
 #endif
 
 // Symbol from the rmii_ethernet driver — the inner step of its loop.
@@ -122,6 +124,28 @@ int main() {
     // the bootrom. Needed for /api/status and /api/commit semantics.
     ota_init_boot_state();
 
+    // Read the IDENTITY partition (id=2) into RAM. Holds the per-device
+    // unique-id + cert + key the host-side `commission flash-identity`
+    // tool wrote at provisioning. Phase 1 only logs that the load
+    // succeeded; Phase 2's TLS server will hand the cert/key to mbedtls.
+    // Failure is non-fatal — the firmware keeps booting over plain HTTP
+    // for diagnosis (a fresh dev board with no IDENTITY blob yet hits
+    // this path, and we want it reachable).
+    // Read the IDENTITY partition (id=2) into RAM. flash_start_xip()
+    // restores full-flash XIP coverage so partition 2 is reachable —
+    // see identity.c. Failure is non-fatal; the firmware keeps booting
+    // over plain HTTP for diagnosis. MUST run before multicore_launch_core1
+    // because flash_start_xip cuts XIP mid-call.
+    conduit_identity_t identity = {0};
+    if (conduit_identity_load(&identity)) {
+        DEV_LOG("[identity] loaded id=%s key=%uB cert=%uB\n",
+                identity.unique_id,
+                (unsigned)identity.key_len,
+                (unsigned)identity.cert_len);
+    } else {
+        DEV_LOG("[identity] no valid IDENTITY partition; running unauthenticated\n");
+    }
+
     // Seed the runtime console with a boot banner so users see something
     // immediately when the web IDE attaches, even before their own log()
     // calls fire. Firmware calls conduit_log() directly; user code uses the
@@ -129,8 +153,14 @@ int main() {
     conduit_log("[poe] firmware v%s booted (%s), ip %s\n",
             CONDUIT_VERSION_STRING, ota_boot_type_str(), network_get_ip_str());
 
-    // Start the HTTP API server (registers callbacks, no lwIP polling here)
+    // Start the HTTP API server (registers callbacks, no lwIP polling here).
+    // Port 80 binds unconditionally — the self-host story relies on it.
     http_server_init();
+
+    // Start the HTTPS server on port 443 if a valid IDENTITY blob was
+    // loaded above. Without an identity, leaves 443 closed; the device
+    // is HTTP-only by design until commissioning.
+    http_server_init_tls();
 
     // Multicast discovery beacon — broadcasts {id, ip, name, v} every
     // 1 s so `conduit discover` can find us by unique-id without
@@ -180,10 +210,34 @@ int main() {
     // reset before rom_explicit_buy rolls back to the previous partition.
     watchdog_enable(WATCHDOG_TIMEOUT_MS, true);
 
+#ifndef CONDUIT_MINIMAL
+    incident_log_init();
+#endif
+
     // Run user-supplied one-shot setup before entering the periodic loop.
     // The web IDE ships a strong definition that overrides the weak stub
     // at the top of this file.
     conduit_setup();
+
+#ifndef CONDUIT_MINIMAL
+    // Core-1 watchdog state. Each main-loop iteration we sample
+    // g_core1_iter; if the value hasn't changed for CORE1_WEDGE_MS we
+    // assume the lwIP/RMII thread on Core 1 is stuck (deadlock,
+    // mbedtls hot loop, etc.) and self-heal: log a forensic incident
+    // record to flash and force a hardware-watchdog reboot. Without
+    // this safety net a Core-1 wedge bricks the device until physical
+    // power-cycle (Core 0 keeps patting the watchdog perfectly happy
+    // because the wedge is local to Core 1's stack).
+    //
+    // 3000 ms — generous enough to absorb a multi-record mbedtls send
+    // burst (worst observed ~700 ms), a slow PHY MDIO read, or a
+    // back-to-back TLS handshake pair (~2× 1.5 s on software ChaCha20),
+    // all of which advance g_core1_iter at low rates but DO advance.
+    // Anything that fails to advance for 3 s is genuinely wedged.
+    #define CORE1_WEDGE_MS 3000
+    uint32_t       last_c1 = __atomic_load_n(&g_core1_iter, __ATOMIC_RELAXED);
+    absolute_time_t last_c1_change = get_absolute_time();
+#endif
 
     // Main loop — Core 0 runs user's 1 kHz loop hook, pats the watchdog,
     // and prints a diagnostic line every ~1 s. No lwIP calls from here
@@ -223,7 +277,86 @@ int main() {
             continue;
         }
         watchdog_update();
+
+#ifndef CONDUIT_MINIMAL
+        // Core-1 wedge detector. If Core 1 stops ticking g_core1_iter
+        // for CORE1_WEDGE_MS, log a forensic record to flash and force
+        // a hardware-watchdog reboot. incident_log_append_emergency
+        // resets Core 1 first (it's dead, won't cooperate with
+        // flash_safe_execute) and writes the page directly with
+        // interrupts disabled.
+        {
+            uint32_t c1 = __atomic_load_n(&g_core1_iter, __ATOMIC_RELAXED);
+            if (c1 != last_c1) {
+                last_c1 = c1;
+                last_c1_change = get_absolute_time();
+            } else if (absolute_time_diff_us(last_c1_change, get_absolute_time())
+                       > (int64_t)CORE1_WEDGE_MS * 1000) {
+                char msg[64];
+                snprintf(msg, sizeof msg, "core1 stuck %llums (c1=%lu)",
+                         (unsigned long long)(absolute_time_diff_us(
+                             last_c1_change, get_absolute_time()) / 1000),
+                         (unsigned long)c1);
+                DEV_LOG("[watchdog] %s — rebooting\n", msg);
+                incident_log_append_emergency(INCIDENT_CORE1_WEDGE, msg);
+                __atomic_store_n(&g_reboot_pending, true, __ATOMIC_RELEASE);
+                watchdog_reboot(0, 0, 100);
+                while (1) tight_loop_contents();
+            }
+        }
+#endif
+#ifndef CONDUIT_MINIMAL
+        // OTA-in-progress fast path: SUSPEND conduit_loop() completely
+        // and hand Core 0 entirely to ota_pump.
+        //
+        // This is a HARD pause, not a yield. We don't try to interleave
+        // user code with ota_pump (e.g. "run conduit_loop only if the
+        // ring has slack") because that risks violating real-time
+        // constraints the user's loop may rely on — e.g. ADC sampling
+        // pacing, GPIO toggle timing, sensor polling deadlines. Once
+        // OTA starts we tear the loop down cleanly and don't bring it
+        // back until the device reboots into the new image. Old code
+        // is about to be replaced anyway, so this is harmless.
+        //
+        // Why the pause is necessary (load-bearing comment, do not
+        // remove): without it, a heavy conduit_loop() (e.g. 50 ms/iter
+        // for float math + transmit() + log()) drops the main loop
+        // from ~1 kHz to ~20 Hz. ota_pump drains one 512-B UF2 block
+        // per iter, so effective drain rate falls to ~10 KB/s. The
+        // 32 KB ota_ring fills in ~3 s, http_recv stops calling
+        // altcp_recved, the device's TCP recv window collapses to 0,
+        // and the browser stalls at ~130 KB sent (OS TCP send buffer
+        // ≈ 100 KB + ota_ring 32 KB). Symptom matches the original
+        // "upload timed out at 130475/436736 bytes (29.9%)" report.
+        //
+        // With the pause, the main loop runs at near-CPU speed
+        // (microseconds/iter), so ota_pump throughput is bounded only
+        // by hardware flash erase/program (~5 ms per 512-B UF2 block
+        // ⇒ ~100 KB/s), comfortably above the worst observed HTTPS
+        // receive rate (~25 KB/s on software ChaCha20).
+        //
+        // If a user ever needs to know they're paused (e.g. to NOT
+        // arm a deadline-sensitive timer that would miss its trigger),
+        // ota_in_progress() is the public API for that — same one
+        // used here. It reads a single atomic flag; safe from any
+        // context.
+        if (ota_in_progress()) {
+            // Loop is PAUSED — Core 0 is reserved for the OTA pump.
+            ota_pump();
+        } else {
+            // Loop is RUNNING normally.
+            conduit_loop();
+        }
+#else
         conduit_loop();
+#endif
+
+#ifndef CONDUIT_MINIMAL
+        // Write any pending boot-time incident record once both
+        // cores are alive — see incident_log.c for the deferred-
+        // write rationale.
+        incident_log_post_boot_tick();
+#endif
 
         // Health check — once per diag print interval (≈ 1 s) is plenty
         // of resolution for a 60-second grace window.

@@ -155,13 +155,3 @@ def test_discover_cli_empty(monkeypatch):
     assert "No devices heard" in res.output
 
 
-def test_scan_emits_deprecation_warning(monkeypatch):
-    """Existing `scan` still works but warns once on use."""
-    monkeypatch.setattr(
-        cli, "scan_subnet",
-        lambda subnet: [{"_ip": "192.168.1.10", "version": "1.2.0", "mac": "aa:bb"}],
-    )
-    res = CliRunner().invoke(cli.main, ["scan", "-s", "192.168.1"])
-    assert res.exit_code == 0
-    assert "deprecated" in res.output
-    assert "discover" in res.output                # nudge to the new command

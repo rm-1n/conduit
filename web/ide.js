@@ -640,16 +640,13 @@ void conduit_loop(void) {
       if (known.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
-        opt.textContent = '(no device — Add an IP)';
+        opt.textContent = '(no device — Add one in Hardware Manager)';
         deviceSelect.appendChild(opt);
       } else {
         for (const d of known) {
           const opt = document.createElement('option');
           opt.value = d.ip;
-          const parts = [d.ip];
-          if (d.version) parts.push(`v${d.version}`);
-          if (d.partition) parts.push(d.partition);
-          opt.textContent = parts.join(' — ');
+          opt.textContent = devicePickerLabel(d);
           deviceSelect.appendChild(opt);
         }
       }
@@ -666,13 +663,25 @@ void conduit_loop(void) {
     const deviceLabel   = document.getElementById('ide-device-label');
     const deviceLed     = document.getElementById('ide-device-led');
 
+    // Picker label: prefer human name, then unique-id, then bare IP.
+    // Same shape as Hardware Manager's row label so the picker doesn't
+    // surprise people who registered the device under a name.
+    function devicePickerLabel(d) {
+      const head = d.name || d.uniqueId || d.ip;
+      const tail = [];
+      if (head !== d.ip)    tail.push(d.ip);
+      if (d.version)        tail.push(`v${d.version}`);
+      if (d.partition)      tail.push(d.partition);
+      return tail.length ? `${head} — ${tail.join(' · ')}` : head;
+    }
+
     function rebuildDeviceMenu(known) {
       if (!deviceMenu) return;
       deviceMenu.innerHTML = '';
       if (!known || known.length === 0) {
         const empty = document.createElement('li');
         empty.className = 'device-picker__menu-empty';
-        empty.textContent = 'No devices yet — find one with `conduit discover` and Add its IP.';
+        empty.textContent = 'No devices yet — open Hardware Manager to add one.';
         deviceMenu.appendChild(empty);
         return;
       }
@@ -681,10 +690,7 @@ void conduit_loop(void) {
         li.className = 'device-picker__menu-item';
         li.setAttribute('role', 'option');
         li.dataset.value = d.ip;
-        const parts = [d.ip];
-        if (d.version)   parts.push(`v${d.version}`);
-        if (d.partition) parts.push(d.partition);
-        li.textContent = parts.join(' — ');
+        li.textContent = devicePickerLabel(d);
         if (d.ip === deviceSelect.value) li.setAttribute('aria-selected', 'true');
         deviceMenu.appendChild(li);
       }
@@ -692,7 +698,7 @@ void conduit_loop(void) {
     function updateDevicePickerLabel() {
       if (!deviceLabel) return;
       const opt = deviceSelect.options[deviceSelect.selectedIndex];
-      deviceLabel.textContent = (opt && opt.textContent) || '(no device — Add an IP)';
+      deviceLabel.textContent = (opt && opt.textContent) || '(no device — Add one in Hardware Manager)';
       // Highlight the active row in the menu (if it's open).
       if (deviceMenu) {
         for (const row of deviceMenu.querySelectorAll('.device-picker__menu-item')) {
@@ -755,6 +761,14 @@ void conduit_loop(void) {
     // telemetry pane already maintains a `.status-dot[data-state]` span;
     // rather than re-deriving the connection state here, we just copy
     // its data-state attribute whenever it changes.
+    //
+    // A separate web/health.js was tried (independent /api/status
+    // probe driving the LED for faster red→green), but the extra
+    // HTTPS handshakes it generated competed with OTA uploads and
+    // wedged the device across sessions. Reverted — the slower
+    // stream-mirrored LED is reliable and the CONNECT_TIMEOUT_MS
+    // halving in telemetry.js/console.js already cuts the worst-case
+    // latency from 8 s to 4 s without adding probe traffic.
     const telState = document.getElementById('ide-telemetry-state');
     if (telState && deviceLed) {
       const syncLed = () => deviceLed.setAttribute('data-state',
@@ -807,22 +821,31 @@ void conduit_loop(void) {
       const ip = (deviceSelect.value || '').trim()
               || (document.getElementById('ide-quick-ip').value || '').trim();
       if (!ip) { connStatus('no device — Add an IP first', 'err'); return; }
+
+      // Don't pause streams during the probe. The previous design did
+      // — to avoid 3 simultaneous TLS handshakes on a single-threaded
+      // mbedtls — but the firmware-side slab + 128 KB MEM_SIZE handle
+      // that load fine now, and the pause/resume choreography was
+      // load-bearing for a subtle bug: if the probe failed for ANY
+      // reason (transient network glitch, brief device reboot,
+      // browser-side quirk), the resume branch was skipped via the
+      // early return, leaving both streams paused with no path back
+      // online without a manual page reload. Streams running through
+      // the probe is now the cleaner default — the streamLoop's own
+      // retry logic handles their lifecycle, the probe is just an
+      // out-of-band reachability check that updates the connStatus
+      // banner.
       try {
         connStatus(`Reconnecting ${ip}…`);
         const result = await window.Conduit.probeAndRemember(ip);
-        if (!result) { connStatus(`no response from ${ip}`, 'err'); return; }
-        // Cycle telemetry: pause aborts the in-flight fetch + clears
-        // chart, resume starts a fresh stream against the now-verified
-        // device. Console has the same effect via resetCursor + clear.
-        const tel = window.Conduit && window.Conduit.telemetry;
-        if (tel && tel.pause)  tel.pause();
-        if (tel && tel.resume) tel.resume();
-        const con = window.Conduit && window.Conduit.console;
-        if (con && con.resetCursor) con.resetCursor();
-        if (con && con.clear)       con.clear();
+        if (!result) {
+          connStatus(`no response from ${ip}`, 'err');
+          return;
+        }
         connStatus(`Reconnected (v${result.version}, ${result.partition})`, 'ok');
       } catch (e) {
         connStatus(`reconnect error: ${e.message || e}`, 'err');
+        return;
       } finally {
         refreshDeviceList();
       }
@@ -830,7 +853,7 @@ void conduit_loop(void) {
     // Auto-kick reconnect once on boot. Deferred slightly so the rest
     // of init (telemetry's streamLoop, console's poll loop) has wired
     // up — pause/resume needs the loops to exist to do their thing.
-    setTimeout(() => { reconnect().catch(() => {}); }, 800);
+    setTimeout(() => { reconnect().catch(() => {}); }, 200);
 
     setupResizers();
 
@@ -971,6 +994,33 @@ void conduit_loop(void) {
     resetBuildBar();
     setProgressBar({ pct: 0, label: 'Building…', title: null });
 
+    // Streams are paused at the start of the upload phase (see below,
+    // just after buildUf2 returns) and resumed in the outer finally.
+    // The build phase is pure CPU (WASM compile, no device traffic) so
+    // it runs with streams still live. Once we start uploading, every
+    // mbedtls cycle the device spends encrypting a 16-byte stream
+    // keepalive is a cycle it isn't spending decrypting upload bytes —
+    // and the device's slab/lwIP heap headroom is tighter when three
+    // TLS sessions (upload + 2 streams) all need state at once. Pause
+    // → upload → resume gives mbedtls undivided focus on the upload.
+    // The resume in finally fires on every exit path (build error,
+    // updateFirmware throw, success), so a stream that was running on
+    // entry is running on exit. The stream's own retry loop then
+    // reconnects against the post-reboot device — same path that page
+    // reload uses, which the user has confirmed works reliably.
+    const tlm = window.Conduit && window.Conduit.telemetry;
+    const con = window.Conduit && window.Conduit.console;
+
+    // Handle for the elapsed-time ticker that runs during the
+    // 'uploading' stage (was a dots-spinner before xhr.upload.onprogress
+    // gave us a real percentage). Declared at function scope so the
+    // outer `finally` can clear it regardless of which error path the
+    // upload took. See the onStage 'uploading' branch below for the
+    // ticker setup.
+    let uploadSpinHandle = null;
+    let result;
+    try {
+
     const stampVer = nextStampedVersion();
     try {
       const pre = await window.Conduit.getStatus(ip);
@@ -1002,54 +1052,89 @@ void conduit_loop(void) {
     // bar stays neutral until we have a concrete final outcome.
     setProgressBar({ pct: 50, label: 'Uploading…' });
 
-    // Pause the telemetry stream for the OTA window. Reasons:
-    //  1. The /api/upload POST and our /api/data?stream=1 GET compete for
-    //     the device's single lwIP HTTP slot — concurrent traffic causes
-    //     half-dead TCP states and chart jitter.
-    //  2. Across the reboot the stream's TCP connection sits in a long
-    //     "half-closed" state in the browser; without an explicit abort
-    //     the next reconnect can take 10+ s.
-    // Wrapping in try/finally guarantees we resume even on upload errors.
-    const tlm = window.Conduit && window.Conduit.telemetry;
-    if (tlm && tlm.pause) tlm.pause();
-    // Same treatment for the runtime console — without this, its
-    // /api/log fetch sits half-open through the reboot and the LED
-    // stays misleadingly green for ~10 s after the device drops off
-    // the network. pauseStream flips it to 'updating…' immediately;
-    // resumeStream after commit drops cursor + reconnects.
-    const con = window.Conduit && window.Conduit.console;
+    // Pause both streams before kicking the upload. Aborts the active
+    // fetches, flushes any persistence, drops the chart series, and
+    // flips both panes' status lights to "paused". The outer finally
+    // resumes them after the OTA — regardless of outcome — and their
+    // own retry loops reconnect against the post-reboot device.
+    if (tlm && tlm.pause)       tlm.pause();
     if (con && con.pauseStream) con.pauseStream();
 
-    let result;
-    try {
-      result = await window.Conduit.updateFirmware({
+    // The 'uploading' stage is long (15-90 s on HTTPS) and the
+    // displayed % is OS-TCP-send-buffer-fill, not on-the-wire bytes
+    // (see upload.js:159-173). Effect: % jumps to ~30 instantly, sits
+    // flat for ~15 s while TCP drains and the device flashes, then
+    // climbs to 100. Flat-but-progressing looks like a hang to the
+    // user. So while the bytes-progress is honest enough, we ALSO
+    // show an elapsed-time counter so motion is always visible.
+    //
+    // The previous dots-spinner setInterval (uploadSpinHandle) was
+    // added back when there was no real progress source — it now
+    // just stomps onProgress's "Uploading · 42% (...)" label every
+    // 500 ms with "Uploading...". Removed; xhr.upload.onprogress is
+    // the honest signal.
+    let uploadStartMs = 0;
+    let lastProgressLabel = 'Uploading…';
+
+    result = await window.Conduit.updateFirmware({
         ip, token, data: uf2,
         onProgress: ({ pct, loaded, total }) => {
           // Upload covers 50..95% of the overall bar; the last 5% is
           // reserved for verify/commit so the user never sees 100%
           // until the device actually reports the new image running.
           const overall = 50 + (pct / 100) * 45;
-          setProgressBar({
-            pct: overall,
-            label: `Uploading · ${Math.round(pct)}% (${loaded}/${total} B)`,
-          });
+          const kb = (n) => (n / 1024).toFixed(0);
+          const elapsed = uploadStartMs ? Math.round((performance.now() - uploadStartMs) / 1000) : 0;
+          lastProgressLabel =
+            `Uploading · ${Math.round(pct)}% (${kb(loaded)}/${kb(total)} KB, ${elapsed}s)`;
+          setProgressBar({ pct: overall, label: lastProgressLabel });
         },
         onStage: (stage, detail) => {
+          // Build log always reflects the raw stage event. The progress
+          // bar gets a structured render via the stage descriptor table
+          // in upload.js — adding a new stage there is a one-row edit
+          // and the unit test (web/tests/unit/upload_stages.test.mjs)
+          // fails CI if a name is emitted without a matching table entry.
           logLine(detail && typeof detail === 'string' ? `[${stage}] ${detail}` : `[${stage}]`);
-          if      (stage === 'precheck')  setProgressBar({ pct: 50, label: 'Checking device…' });
-          else if (stage === 'waiting')   setProgressBar({ pct: 95, label: `Waiting for reboot… ${typeof detail === 'string' ? detail : ''}` });
-          else if (stage === 'verifying') setProgressBar({ pct: 97, label: 'Verifying…' });
-          else if (stage === 'commit')    setProgressBar({ pct: 99, label: 'Committing (TBYB)…' });
+          const d = window.Conduit && window.Conduit.stageDescriptor
+            ? window.Conduit.stageDescriptor(stage, detail) : null;
+
+          // Any stage transition clears the upload-elapsed ticker; the
+          // ticker only exists during the 'uploading' window.
+          if (uploadSpinHandle) {
+            clearInterval(uploadSpinHandle);
+            uploadSpinHandle = null;
+          }
+
+          if (d) {
+            setProgressBar({ pct: d.pct, label: d.label });
+            if (stage === 'uploading') {
+              // Start the elapsed-time ticker. It re-renders the most
+              // recent onProgress label every 1 s with the updated
+              // "Xs" suffix, so even when % is flat (OS buffer
+              // draining), the user sees the seconds counter advance.
+              // If no onProgress has fired yet, the ticker fills in a
+              // synthetic label showing only elapsed time.
+              uploadStartMs = performance.now();
+              uploadSpinHandle = setInterval(() => {
+                const elapsed = Math.round((performance.now() - uploadStartMs) / 1000);
+                // If we have a real progress label, splice the new
+                // elapsed time in. Otherwise render a fallback so the
+                // bar shows motion even before the first progress event.
+                if (lastProgressLabel.includes('% (')) {
+                  setProgressBar({
+                    label: lastProgressLabel.replace(/,\s*\d+s\)$/, `, ${elapsed}s)`),
+                  });
+                } else {
+                  setProgressBar({ label: `Uploading… (${elapsed}s)` });
+                }
+              }, 1000);
+            }
+          } else {
+            setProgressBar({ label: `${stage}…` });
+          }
         },
-      });
-    } finally {
-      // Resume both streams now that the device is committed and
-      // (re)online. resume() / resumeStream() also reset cursor/run
-      // state so we tail from the new firmware's fresh ring counter —
-      // no stale-cursor wedge, no diagonal across the OTA in the chart.
-      if (tlm && tlm.resume) tlm.resume();
-      if (con && con.resumeStream) con.resumeStream();
-    }
+    });
 
     // Refresh the device dropdown's cached entry with whatever post-OTA
     // status we got back. Without this the dropdown keeps showing the
@@ -1094,14 +1179,33 @@ void conduit_loop(void) {
         break;
       case 'unreachable':
         setProgressBar({ kind: 'warn',
-          label: 'Device did not respond; power-cycle to roll back.' });
+          label: 'Device did not respond — wedged or slow reboot.' });
         logLine('device did not come back — wedged or slow reboot');
         break;
-      case 'error':
-        setProgressBar({ kind: 'err',
-          label: `Error: ${result.error.message || result.error}` });
-        logLine(`error: ${result.error.message || result.error}`);
+      case 'error': {
+        const msg = result.error.message || result.error;
+        setProgressBar({ kind: 'err', label: `Error: ${msg}` });
+        logLine(`error: ${msg}`);
         break;
+      }
+    }
+    } finally {
+      if (uploadSpinHandle) {
+        clearInterval(uploadSpinHandle);
+        uploadSpinHandle = null;
+      }
+      // Resume both streams. Mirrors the pause-at-upload-start above.
+      // Runs on every exit path — build failure (early return), an
+      // updateFirmware throw, or a clean outcome. resume() on an
+      // already-running stream is a no-op (the early-return path
+      // before the pause hits this), so the unconditional call is
+      // safe. Order matters: console first so its streamLoop kicks
+      // off; telemetry's resume re-arms its console-handoff gate, so
+      // its first runStream open blocks until console reports a live
+      // connection. The user prefers log lines surfacing first, then
+      // the chart picking up.
+      if (con && con.resumeStream) con.resumeStream();
+      if (tlm && tlm.resume)       tlm.resume();
     }
   }
 

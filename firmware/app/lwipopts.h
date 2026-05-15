@@ -41,10 +41,35 @@
 // leaves slack for retransmits.
 #define TCP_MSS                         (1500 - 20 - 20)
 #define TCP_SND_BUF                     (12 * TCP_MSS)
-#define TCP_WND                         (12 * TCP_MSS)
-#define MEMP_NUM_TCP_SEG                48
-#define MEMP_NUM_PBUF                   24
-#define PBUF_POOL_SIZE                  24
+// TCP receive window — must be LARGER than the biggest TLS record
+// the peer can send, otherwise mbedtls can never accumulate enough
+// encrypted bytes in its input buffer to decrypt one record. With
+// `MBEDTLS_SSL_IN_CONTENT_LEN = 16384`, peers (curl/OpenSSL default)
+// send 16 KB plaintext records ≈ 16 KB + ~40 B TLS framing encrypted.
+// 11680-byte windows (8*MSS) starved this: peer fills the window with
+// a partial record, mbedtls has nothing to deliver to http_recv,
+// tcp_recved is never called for those encrypted bytes, window stays
+// at 0, deadlock.
+//
+// 16*MSS = 23360 B fits one full TLS record with comfortable slack
+// (~6.5 KB). The ring buffer (firmware/app/ota_ring.h) is sized 32 KB,
+// safely larger than this window.
+//
+// The producer/consumer OTA refactor (Core 0 drainer + deferred
+// altcp_recved in http_server.c) makes any in-window throughput
+// realistic — the recv callback is non-blocking, lwIP slides the
+// window as Core 0 catches up.
+#define TCP_WND                         (16 * TCP_MSS)
+// Segment pool — generous headroom; cost is ~50 KB SRAM.
+#define MEMP_NUM_TCP_SEG                96
+// Pbuf pool — bumped 24 → 64 along with the TCP_WND drop. The TCP_WND
+// change alone bounds *peer* in-flight bytes, but lwIP also queues
+// pbufs for our own pending sends and for the small periodic
+// keepalive traffic (telemetry record headers, log keepalives).
+// 64 pbufs * ~1.5 KB each = ~96 KB SRAM headroom; trivial vs the
+// 520 KB chip total.
+#define MEMP_NUM_PBUF                   64
+#define PBUF_POOL_SIZE                  64
 
 // Bumped from lwIP default 5. The two streaming endpoints
 // (/api/data?stream=1 and /api/log?stream=1) each pin a PCB for the
@@ -55,7 +80,16 @@
 // blinking but no new connections succeed. Keepalive (below) is the
 // cleanup mechanism; the bump is a safety margin while keepalive
 // probes do their work.
-#define MEMP_NUM_TCP_PCB                8
+// Bumped 8 → 24 because OTA via the conduit CLI / web IDE opens a fresh
+// TCP connection per 8 KB chunk (47 chunks for a typical app), and at 8
+// PCBs the pool exhausts: lwIP starts RST'ing new SYNs and OTA dies
+// with "Connection reset by peer". 24 leaves comfortable headroom for
+// short-lived OTA chunks plus the two listening pcbs (HTTP + HTTPS),
+// plus persistent browser streams (/api/log + /api/data). Each pcb is
+// ~140 B → ~2.2 KB extra SRAM, trivial. The proper fix is HTTP/1.1
+// keep-alive on the OTA path so all chunks share one TCP connection;
+// that's a CLI + IDE change for a follow-up.
+#define MEMP_NUM_TCP_PCB                24
 
 // lwIP's default LWIP_NUM_SYS_TIMEOUT_INTERNAL on this build is 2
 // (LWIP_TCP + LWIP_ARP). That's only enough for the cyclic system
@@ -80,14 +114,45 @@
 // browser-visible "data dump every 500 ms" cadence into smooth 25-record
 // batches every 100 ms — chart renders cleanly without visible step jumps.
 //
-// All TCP timeouts (RTO, persist, FIN-WAIT-2, etc.) are stored in ticks of
-// TCP_SLOW_INTERVAL but computed from ms at PCB-alloc time, so real-time
-// behaviour is unchanged — only resolution improves. CPU cost is one extra
-// tcp_tmr() call every ~50 ms (microseconds of work per call).
+// Bumped DOWN to 25 once as a HTTPS-OTA throughput experiment (halves
+// http_poll cadence so ota_pump_ack credits the window twice as often).
+// It also broke mbedtls — TLS handshake started failing on fresh
+// connections, status fetches returned nothing. Likely interaction
+// with mbedtls's record-level timers or the altcp_tls_mbedtls flush
+// path that assumes ~50 ms tick granularity. 50 ms is the proven safe
+// value; do not lower without a thorough TLS regression sweep.
+//
+// All TCP timeouts (RTO, persist, FIN-WAIT-2, etc.) are stored in ticks
+// of TCP_SLOW_INTERVAL but computed from ms at PCB-alloc time, so
+// real-time behaviour is unchanged — only resolution improves. CPU
+// cost is one extra tcp_tmr() call every ~50 ms (microseconds of work
+// per call).
 #define TCP_TMR_INTERVAL                50
 
-// Memory pool — need enough for OTA upload buffering
-#define MEM_SIZE                        8192
+// Memory pool. Backs lwIP-internal allocations: pbufs (PBUF_RAM),
+// TCP segments not in the MEMP pool, altcp per-pcb state.
+//
+// Historical note: this was bumped 48 → 192 KB to fix "TLS handshake
+// returns ERR_MEM after ~5 OTA cycles". That diagnosis was wrong —
+// mbedtls without MBEDTLS_PLATFORM_MEMORY uses libc calloc, which
+// goes to the newlib heap (NOT this pool). The 192 KB bump still
+// "fixed" the symptom because dragging up MEM_SIZE happened to shift
+// BSS, which shrank the newlib heap and rearranged where its
+// fragmenting allocations landed — a coincidence.
+//
+// 128 KB. Per-session lwIP heap demand under active streaming is
+// ~17 KB (small mbedtls handshake/session bookkeeping that the slab
+// doesn't intercept, plus pbuf chains and altcp per-pcb state). With
+// 3 concurrent sessions that's ~51 KB on top of ~32 KB of static
+// lwIP allocations, totalling ~84 KB under load. At 96 KB MEM_SIZE
+// that left only ~14 KB headroom — a fresh HTTPS handshake's
+// allocations exceeded it and the device RST'd. 128 KB gives a
+// comfortable ~45 KB of free heap under realistic streaming load.
+//
+// BSS budget recovered by dropping mbedtls_slab.c from 4 → 3 slots
+// (-25 KB) and HTTP_CONN_POOL from 8 → 5 (where the firmware really
+// needs at most 2 streams + 1 OTA + 1 control + 1 transient = 5).
+#define MEM_SIZE                        131072
 
 // Stats — explicit so the firmware-side diag.c heartbeat can read
 // real numbers for heap, MEMP pools, and link layer. Defaults are
@@ -102,5 +167,14 @@
 // We use raw TCP API, no httpd
 #define LWIP_HTTPD_CGI                  0
 #define LWIP_HTTPD_SSI                  0
+
+// altcp + altcp_tls — http_server.c uses the altcp API for both the
+// plain-HTTP listener (port 80) and the TLS listener (port 443). Both
+// flags are required to compile altcp_tls_mbedtls.c into the build.
+// pico_lwip_mbedtls is linked from app/CMakeLists.txt; the MBEDTLS_*
+// configuration lives there too.
+#define LWIP_ALTCP                      1
+#define LWIP_ALTCP_TLS                  1
+#define LWIP_ALTCP_TLS_MBEDTLS          1
 
 #endif /* __LWIPOPTS_H__ */

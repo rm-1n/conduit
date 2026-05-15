@@ -21,14 +21,46 @@ typedef enum {
 // Begin an OTA update session. Determines the inactive partition.
 ota_err_t ota_begin(void);
 
-// Feed raw data from the HTTP POST body.
-// The OTA engine internally accumulates 512-byte UF2 blocks.
-// Returns OTA_OK on success, or an error code.
+// Producer-side ingest from the HTTP POST body. Pushes bytes into the
+// SRAM ring; the actual flash erase/program is done by ota_pump() on
+// Core 0. May accept FEWER bytes than requested when the ring is
+// full — this is the TCP-native backpressure path. The caller MUST
+// honor the return value when computing altcp_recved.
+//
+// Bytes not accepted stay unacked at the TCP layer (we only ack what
+// the ring took); the peer will retransmit them when our advertised
+// window slides forward as Core 0 drains.
+size_t ota_write_chunk_ex(const uint8_t *data, size_t len);
+
+// Back-compat wrapper: feeds bytes through ota_write_chunk_ex on a
+// best-effort basis. Returns OTA_OK as long as a session is active.
+// New code should use ota_write_chunk_ex directly.
 ota_err_t ota_write_chunk(const uint8_t *data, size_t len);
 
-// Finalize the update: verify block count, trigger reboot into new partition.
-// Does not return on success.
-ota_err_t ota_finish(void);
+// Consumer-side. Called from the Core 0 main loop (gated on
+// ota_in_progress()). Drains ONE 512-byte UF2 block from the ring and
+// runs the flash erase/program through flash_safe_execute. No-op when
+// the ring has fewer than 512 bytes buffered.
+void ota_pump(void);
+
+// Producer signals "no more bytes coming" — body_received has reached
+// content_length. Once called, ota_write_chunk_ex rejects further
+// writes; ota_drain_complete will go true after the ring empties.
+void ota_begin_drain(void);
+
+// True when ota_begin_drain() was called AND the ring is empty.
+// http_poll polls this on the DRAINING conn; sends the response and
+// reboots once complete.
+bool ota_drain_complete(void);
+
+// Sticky error from the most recent failed pump. OTA_OK if none.
+ota_err_t ota_last_pump_error(void);
+
+// Verify block count, then trigger the reboot into the new partition.
+// Called by http_poll on the Core 1 side once ota_drain_complete()
+// returns true and ota_last_pump_error() is OTA_OK. Does not return
+// on success.
+ota_err_t ota_finalize_after_drain(void);
 
 // Abort an in-progress update and clean up state.
 void ota_abort(void);

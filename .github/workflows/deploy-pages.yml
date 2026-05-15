@@ -61,30 +61,51 @@ jobs:
           echo '--- post-injection identity block ---'
           grep -n CONDUIT_COMMIT web/index.html
 
-      - name: Download latest web-sdk bundle
+      - name: Download web-sdk bundle pinned to firmware version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # The build-web-sdk.yml workflow tags releases as
-        # `web-sdk-<MAJOR.MINOR>` from the firmware version. We pick
-        # whichever has the highest version (lexicographic on the
-        # tag is fine — MAJOR.MINOR sorts naturally as long as we
-        # don't go past one digit per part; if that's ever wrong the
-        # release publish chronology is the tiebreaker).
+        # Resolve the EXACT release tag matching the firmware MAJOR.MINOR
+        # in this commit, instead of grabbing whichever release is
+        # latest. Both build-web-sdk.yml and deploy-pages.yml run in
+        # parallel on a push to main; the prior "latest by date" lookup
+        # raced with build-web-sdk's publish step and pulled the
+        # PREVIOUS (stale) release if it finished first. Pinning to the
+        # current firmware version is race-free: either the matching
+        # release exists (deploy proceeds against an in-sync bundle) or
+        # it doesn't (fail with a clear message — re-run deploy-pages
+        # once build-web-sdk has finished publishing).
         run: |
-          TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
-                  --json tagName \
-                  --jq '[.[].tagName | select(startswith("web-sdk-"))] | first')
-          if [ -z "$TAG" ]; then
-            echo "::warning::No web-sdk-* Release found — deploying without the SDK bundle. The IDE will load but the in-browser compiler will fail at the first Build click."
-          else
-            echo "Pulling SDK from Release: $TAG"
-            mkdir -p /tmp/web-sdk web/assets/sdk
-            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --pattern 'web-sdk.tar.gz' --dir /tmp/web-sdk
-            tar -xzf /tmp/web-sdk/web-sdk.tar.gz -C web/assets/sdk
-            echo '--- staged SDK contents ---'
-            ls web/assets/sdk
+          MAJOR=$(grep -oP 'pico_set_binary_version\([^)]*MAJOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
+          MINOR=$(grep -oP 'pico_set_binary_version\([^)]*MINOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
+          if [ -z "$MAJOR" ] || [ -z "$MINOR" ]; then
+            echo "::error::failed to parse MAJOR/MINOR from firmware/app/CMakeLists.txt"
+            exit 1
           fi
+          TAG="web-sdk-${MAJOR}.${MINOR}"
+          echo "Resolving SDK Release: $TAG (pinned to firmware version)"
+          # Poll for up to ~7 minutes — build-web-sdk usually publishes
+          # within 3-5 min on a fresh-version push. If it's not up by
+          # then, either build-web-sdk failed (check its logs) or this
+          # is a workflow_dispatch on a version that nothing has built.
+          for i in $(seq 1 14); do
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release $TAG ready (attempt $i)."
+              break
+            fi
+            if [ "$i" -eq 14 ]; then
+              echo "::error::Release $TAG never appeared after ~7 min of polling."
+              echo "::error::Check whether build-web-sdk.yml succeeded for this commit."
+              exit 1
+            fi
+            echo "  attempt $i/14: $TAG not yet published, waiting 30 s..."
+            sleep 30
+          done
+          mkdir -p /tmp/web-sdk web/assets/sdk
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'web-sdk.tar.gz' --dir /tmp/web-sdk
+          tar -xzf /tmp/web-sdk/web-sdk.tar.gz -C web/assets/sdk
+          echo '--- staged SDK contents ---'
+          ls web/assets/sdk
 
       - name: Pack clang-headers tarball
         # compiler.js fetches a single clang-headers.tar (one HTTP fetch

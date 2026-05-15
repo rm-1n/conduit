@@ -9,7 +9,7 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-from conduit_cli import cli, api
+from conduit_cli import cli
 
 
 # ── Test doubles ─────────────────────────────────────────────────────
@@ -175,52 +175,16 @@ def test_upload_rejects_missing_file(tmp_path):
     assert "does not exist" in res.output.lower() or "exist" in res.output.lower()
 
 
-# ── scan command ─────────────────────────────────────────────────────
+# ── scan command removed ─────────────────────────────────────────────
 
 
-def test_scan_lists_results(monkeypatch):
-    monkeypatch.setattr(cli, "scan_subnet", lambda subnet: [
-        {"_ip": "192.168.1.10", "version": "1.2.0", "mac": "AA:BB:CC:DD:EE:01"},
-        {"_ip": "192.168.1.11", "version": "1.1.5", "mac": "AA:BB:CC:DD:EE:02"},
-    ])
+def test_scan_command_is_gone():
+    """`conduit scan` was deprecated when `conduit discover` (multicast)
+    landed; the /24 sweep was removed for the public release. If anyone
+    re-adds it, this test catches the regression so we can intercept the
+    discussion before it ships.
+    """
     res = CliRunner().invoke(cli.main, ["scan", "-s", "192.168.1"])
-    assert res.exit_code == 0
-    assert "Found 2 device" in res.output
-    assert "192.168.1.10" in res.output and "192.168.1.11" in res.output
-
-
-def test_scan_handles_no_devices(monkeypatch):
-    monkeypatch.setattr(cli, "scan_subnet", lambda subnet: [])
-    res = CliRunner().invoke(cli.main, ["scan", "-s", "10.0.0"])
-    assert res.exit_code == 0
-    assert "No devices" in res.output
-
-
-# ── api.scan_subnet smoke (uses synthetic transport via monkey-patch) ─
-
-
-def test_scan_subnet_enumerates_full_24(monkeypatch):
-    """scan_subnet should probe x.1 through x.254 (254 hosts, no .0 / .255)."""
-    seen_ips = []
-    real_scan = api.scan_subnet  # noqa: F841 (kept for readability)
-
-    class FakeAsyncClient:
-        async def __aenter__(self):
-            return self
-        async def __aexit__(self, *exc):
-            return False
-        async def get(self, url, **kw):
-            seen_ips.append(url)
-            class R:
-                status_code = 404
-                def json(self_inner): return {}
-            return R()
-
-    monkeypatch.setattr(api.httpx, "AsyncClient", FakeAsyncClient)
-    api.scan_subnet("172.16.0", timeout=0.01)
-
-    # exactly 254 unique IPs probed (.1 through .254 inclusive)
-    parsed = sorted({u.rsplit(".", 1)[1].split("/")[0] for u in seen_ips}, key=int)
-    assert parsed[0]  == "1"
-    assert parsed[-1] == "254"
-    assert len(parsed) == 254
+    assert res.exit_code != 0
+    # Click prints "No such command 'scan'." on an unknown subcommand.
+    assert "scan" in res.output.lower() and "no such command" in res.output.lower()

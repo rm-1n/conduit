@@ -1,0 +1,18 @@
+// conduit_version.h — generated from conduit_version.h.in by CMake.
+//
+// configure_file regenerates this header whenever CONDUIT_BINARY_VERSION_*
+// changes in CMakeLists.txt, and ninja tracks the .h-vs-.c dependency
+// correctly — so a single MAJOR/MINOR bump triggers a rebuild of every
+// translation unit that includes this header (currently http_server.c).
+//
+// The previous attempt to surface these values via target_compile_definitions
+// didn't always propagate through ninja's incremental tracking, leading to
+// "ninja: no work to do" after a sed-bump and a stale UF2 being re-uploaded.
+//
+// The version pair is also passed to `pico_set_binary_version` in the same
+// CMakeLists.txt — both consumers read from the same CMake variables so
+// they stay in lockstep.
+#pragma once
+
+#define CONDUIT_BINARY_VERSION_MAJOR @CONDUIT_BINARY_VERSION_MAJOR@
+#define CONDUIT_BINARY_VERSION_MINOR @CONDUIT_BINARY_VERSION_MINOR@

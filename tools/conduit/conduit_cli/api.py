@@ -1,8 +1,5 @@
 """HTTP client for CONDUIT device REST API."""
 
-# PEP 563 — defers annotation evaluation so PEP 604 syntax (`dict | None`,
-# `list[dict]`) parses cleanly on Python 3.9. Without this the function
-# defs in scan_subnet raise TypeError at import time on 3.9.
 from __future__ import annotations
 
 import httpx
@@ -68,27 +65,3 @@ class ConduitDevice:
         )
         r.raise_for_status()
         return r.json()
-
-
-def scan_subnet(subnet: str, timeout: float = 2.0) -> list[dict]:
-    """Scan a /24 subnet for CONDUIT devices. Returns list of status dicts."""
-    import asyncio
-
-    async def _probe(client: httpx.AsyncClient, ip: str) -> dict | None:
-        try:
-            r = await client.get(f"http://{ip}/api/status", timeout=timeout)
-            if r.status_code == 200:
-                d = r.json()
-                d["_ip"] = ip
-                return d
-        except (httpx.HTTPError, httpx.TimeoutException, Exception):
-            pass
-        return None
-
-    async def _scan():
-        async with httpx.AsyncClient() as client:
-            tasks = [_probe(client, f"{subnet}.{i}") for i in range(1, 255)]
-            results = await asyncio.gather(*tasks)
-            return [r for r in results if r is not None]
-
-    return asyncio.run(_scan())

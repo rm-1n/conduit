@@ -445,20 +445,28 @@ def validate_uf2(data: bytes):
     return num_blocks, family_id
 
 
-OTA_CHUNK_SIZE = 8 * 1024  # bytes per HTTP request; kept small so the
-# RMII NCE driver's Rx ring doesn't overflow on large TCP transactions
-# (see firmware/lib/pico-rmii-ethernet_nce/README.md "Limitations").
+def ota_upload(ip, token, uf2_path, use_https=False):
+    """Upload a UF2 as a single POST over HTTP or HTTPS.
 
+    Sends the entire UF2 in one request with both X-OTA-Start and
+    X-OTA-Finish set. The device's handle_upload_data accumulates body
+    bytes from however many TCP packets lwIP delivers them in. With
+    one POST: one TCP/TLS handshake, one in-flight HTTP request, no
+    PCB churn.
 
-def ota_upload(ip, token, uf2_path):
-    """Upload a UF2 over HTTP in small chunks (see OTA_CHUNK_SIZE).
+    Scheme selection (use_https=True):
+      Pre-flight always hits http://<ip>/api/status to discover the
+      device's `board_id` (cheap, doesn't need DNS or a cert). The
+      actual upload URL is then https://<dash-ip>.<board_id>.devices.rm1n.com/api/upload
+      so the per-device LE wildcard cert validates cleanly. DNS for
+      that hostname resolves to the LAN IP via the conduit-dns service.
+      If your LAN/router blocks DNS rebinding, the resolve will fail —
+      set up a DNS-rebind exception or run over plain HTTP.
 
-    Each chunk is a separate POST to /api/upload whose body is a slice of
-    the file. The first request carries X-OTA-Start: 1 to call ota_begin()
-    on the device; the last carries X-OTA-Finish: 1 to call ota_finish()
-    and reboot. Middle requests just stream bytes."""
-    import urllib.request
-
+    Timing: total elapsed wall-clock and KB/s throughput are printed
+    on success. Useful for comparing cipher/throughput experiments
+    (e.g. AES-GCM vs ChaCha20-Poly1305).
+    """
     info(f"Reading {uf2_path}...")
     with open(uf2_path, "rb") as f:
         data = f.read()
@@ -466,69 +474,123 @@ def ota_upload(ip, token, uf2_path):
     num_blocks, family_id = validate_uf2(data)
     ok(f"Valid UF2: {num_blocks} blocks, {len(data) / 1024:.1f} KB, family 0x{family_id:08x}")
 
-    # Check device is reachable first
+    # Pre-flight: confirm the device is reachable + grab board_id for
+    # the HTTPS hostname. Always over HTTP — fast, no TLS dependency.
     info(f"Checking device at {ip}...")
-    url = f"http://{ip}/api/status"
     try:
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        req = urllib.request.Request(f"http://{ip}/api/status",
+                                     headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             status_data = json.loads(resp.read().decode())
             ok(f"Device online — v{status_data.get('version', '?')}, "
-               f"partition {status_data.get('partition', '?')}")
+               f"partition {status_data.get('partition', '?')}, "
+               f"board_id {status_data.get('board_id', '?')}")
     except Exception as e:
         fail(f"Device unreachable: {e}")
         return False
 
     total = len(data)
-    n_chunks = (total + OTA_CHUNK_SIZE - 1) // OTA_CHUNK_SIZE
-    info(f"Uploading {total} bytes in {n_chunks} chunks of ≤{OTA_CHUNK_SIZE} bytes ...")
-    url = f"http://{ip}/api/upload"
 
-    for i in range(n_chunks):
-        chunk = data[i * OTA_CHUNK_SIZE : (i + 1) * OTA_CHUNK_SIZE]
-        headers = {
-            "Content-Type": "application/octet-stream",
-            "X-Auth-Token": token,
-            "Content-Length": str(len(chunk)),
-        }
-        if i == 0:
-            headers["X-OTA-Start"] = "1"
-        if i == n_chunks - 1:
-            headers["X-OTA-Finish"] = "1"
+    if use_https:
+        board_id = status_data.get("board_id")
+        if not board_id:
+            fail("HTTPS requested but device /api/status has no board_id")
+            return False
+        host = f"{ip.replace('.', '-')}.{board_id}.devices.rm1n.com"
+        upload_url = f"https://{host}/api/upload"
+        scheme = "HTTPS"
+    else:
+        upload_url = f"http://{ip}/api/upload"
+        scheme = "HTTP"
 
-        req = urllib.request.Request(url, data=chunk, method="POST", headers=headers)
-        is_last = (i == n_chunks - 1)
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                body = resp.read().decode()
-                result = json.loads(body)
-                if not result.get("ok"):
-                    fail(f"Chunk {i+1}/{n_chunks} rejected: {body}")
-                    return False
-        except urllib.error.HTTPError as e:
+    info(f"Uploading {total} bytes over {scheme} as a single POST...")
+
+    headers = {
+        "Content-Type": "application/octet-stream",
+        "X-Auth-Token": token,
+        "X-OTA-Start": "1",
+        "X-OTA-Finish": "1",
+        "Content-Length": str(total),
+    }
+
+    # httpx handles HTTPS with system CA trust cleanly; urllib.request
+    # would need extra ceremony for the per-device LE cert. Lazy import
+    # so plain CLI commands that don't need httpx stay startup-light.
+    import httpx
+    import threading
+
+    # Spinner while the upload is in flight. We tried polling /api/status
+    # for accurate progress but the status request competes with the
+    # HTTPS upload for Core 1's mbedtls cycles — pollers timed out
+    # silently between ~40 % and the reboot, leaving the on-screen
+    # progress bar stuck mid-upload. A spinner is honest: "we're
+    # working" without claiming a percentage we can't accurately measure.
+    # Throughput is computed AFTER the client exits, from total bytes
+    # over wall-clock time. That number includes a tail of "waiting for
+    # the device's RST", which is bounded by the read timeout below.
+    spinner_stop = threading.Event()
+
+    def spinner():
+        frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        i = 0
+        while not spinner_stop.is_set():
+            sys.stdout.write(f"\r  {CYAN}{frames[i % len(frames)]} uploading...{RESET}")
+            sys.stdout.flush()
+            spinner_stop.wait(0.1)
+            i += 1
+        # Erase the spinner line so it doesn't clash with the next print
+        sys.stdout.write("\r" + " " * 32 + "\r")
+        sys.stdout.flush()
+
+    spinner_thread = threading.Thread(target=spinner, daemon=True)
+    spinner_thread.start()
+
+    # Read timeout sized for the on-wire upload + the device's RST
+    # propagation. 60 s is comfortable margin on a 384 KB image
+    # (HTTPS-OTA at v10.49 measured ~20 s actual upload + a variable
+    # RST-detection tail).
+    READ_TIMEOUT = 60.0
+    t_start = time.monotonic()
+    try:
+        with httpx.Client(http2=False, verify=use_https) as client:
+            r = client.post(upload_url, content=data, headers=headers,
+                            timeout=READ_TIMEOUT)
+            r.raise_for_status()
             try:
-                body = e.read().decode()
+                result = r.json()
+                if not result.get("ok"):
+                    spinner_stop.set()
+                    spinner_thread.join(timeout=0.5)
+                    fail(f"Upload rejected: {r.text}")
+                    return False
             except Exception:
-                body = ""
-            fail(f"HTTP {e.code} on chunk {i+1}/{n_chunks}: {body}")
-            return False
-        except Exception as e:
-            # The final chunk triggers an immediate reboot, so the device
-            # typically tears down the TCP connection before we read the
-            # response — that's expected success, not a failure.
-            if is_last and ("Connection reset" in str(e)
-                            or "RemoteDisconnected" in str(e)
-                            or "timed out" in str(e)):
-                warn("Connection reset on final chunk (device rebooting — expected)")
-                break
-            fail(f"Chunk {i+1}/{n_chunks} failed: {e}")
-            return False
+                pass   # Response may be incomplete because the device
+                       # called reboot() inside its 200 OK — treat as success.
+    except httpx.HTTPStatusError as e:
+        spinner_stop.set()
+        spinner_thread.join(timeout=0.5)
+        fail(f"HTTP {e.response.status_code}: {e.response.text}")
+        return False
+    except (httpx.RemoteProtocolError, httpx.ReadError, httpx.ConnectError,
+            httpx.ReadTimeout, httpx.WriteError):
+        # The device calls reboot() inside its 200 OK response on
+        # X-OTA-Finish. The TCP/TLS connection drops before we read the
+        # body — that's success, not failure. (Specific exception type
+        # varies between platforms / TLS state; lump them all.)
+        pass
+    except Exception as e:
+        spinner_stop.set()
+        spinner_thread.join(timeout=0.5)
+        fail(f"Upload failed: {e}")
+        return False
+    finally:
+        t_elapsed = time.monotonic() - t_start
+        spinner_stop.set()
+        spinner_thread.join(timeout=0.5)
 
-        if (i + 1) % 4 == 0 or is_last:
-            print(f"  chunk {i+1}/{n_chunks} ok ({(i+1)*OTA_CHUNK_SIZE}/{total} bytes)")
-
-    ok("All chunks uploaded")
-
+    rate_kbs = (total / t_elapsed) / 1024 if t_elapsed > 0 else 0.0
+    ok(f"Upload + reboot RTT: {t_elapsed:.2f}s "
+       f"({rate_kbs:.1f} KB/s averaged over {scheme})")
     info("Device is rebooting with new firmware...")
 
     # Wait for device to come back
@@ -665,11 +727,11 @@ def provision_clean(picotool, pt_uf2, app_uf2, ip):
 
     partition = status.get("partition", "?")
     version = status.get("version", "?")
-    if partition == "A":
-        ok(f"Provisioned — partition A, v{version}")
-        return True
-    fail(f"Partition is {partition!r}, expected 'A' (version {version})")
-    return False
+    if partition != "A":
+        fail(f"Partition is {partition!r}, expected 'A' (version {version})")
+        return False
+    ok(f"Provisioned — partition A, v{version}")
+    return True
 
 
 def ota_commit(ip, token, timeout=5):
