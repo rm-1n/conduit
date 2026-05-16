@@ -1112,9 +1112,20 @@ static void handle_ws_upgrade(struct altcp_pcb *pcb, http_conn_t *conn) {
     // repurposed as the WS frame reassembly buffer (see ws_server.c's
     // notes on the WS_INGRESS_MAX cap). Register in the streaming
     // registry so a cable drop tears the WS down cleanly.
+    //
+    // Deliberately NOT enabling TCP keepalive (the legacy /api/log
+    // path does). The TCP keepalive idle timer measures time since
+    // last RECEIVED packet — for a unidirectional WS stream where
+    // the device is the producer and the browser only sends ACKs +
+    // an occasional WS PONG, the timer apparently doesn't reset
+    // reliably under altcp_tls, so the firmware RSTs the connection
+    // every ~50 s (HTTP_KEEP_IDLE_MS + HTTP_KEEP_CNT*HTTP_KEEP_INTVL_MS
+    // = 30s + 4×5s) even while data is streaming. Liveness comes
+    // from app-layer WS PING/PONG plus the browser's stall watchdog
+    // instead. Browser-side close still cleans up via FIN, and
+    // http_err / http_server_on_link_down clean up cable-drop cases.
     conn->state = CONN_STATE_WS;
     altcp_nagle_disable(pcb);
-    enable_keepalive(pcb);
     register_streaming(pcb, conn);
     altcp_poll(pcb, http_poll, 1);
     g_streams_started_total++;

@@ -696,13 +696,13 @@
      telemetry, cmd, and status. Must load AFTER app.js (uses
      deviceUrlForIp) but BEFORE the per-pane consumers (console.js,
      telemetry.js, commands.js) so they can subscribe at init time. -->
-<script src="stream.js?v=5"></script>
+<script src="stream.js?v=7"></script>
 <script src="hardware.js?v=4"></script>
 <script src="ide.js?v=168"></script>
 <script src="log_store.js?v=121"></script>
 <script src="log_export.js?v=121"></script>
 <script src="console.js?v=135"></script>
-<script src="chart.js?v=143"></script>
+<script src="chart.js?v=144"></script>
 <!-- data_store.js: in-memory time-series store. Loaded before
      telemetry.js so the append target exists by the time the first
      record arrives. -->

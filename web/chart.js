@@ -1151,17 +1151,27 @@
       this._applyXScale();
     }
 
-    // Force a one-shot redraw, ignoring the throttle and the paused
-    // bail-out. Used by drag-zoom (and could be used by any other
-    // explicit user action) so the chart reacts to UI input even when
-    // the live-data refresh is suspended.
+    // Coalesced user-initiated redraw. Bypasses the paused gate (so
+    // zoom/pan still re-paint a frozen snapshot) and bypasses the 30 fps
+    // live-data throttle (so the user gets immediate feedback). But
+    // batched via rAF: rapid wheel/drag streams (Firefox emits 60+
+    // wheel events/sec on smooth scrolling) collapse into one paint
+    // per frame. Without this coalescing each event ran a full
+    // setData → buildRenderData → mergeTimelines → decimate cycle
+    // synchronously, blocking the main thread long enough that the
+    // WebSocket's STALL_MS (5 s) tripped and tore down the connection.
     _renderNow() {
-      if (!this.uplot) return;
-      const expectedSeriesCount = 1 + this._seriesLabels().length;
-      if (this.uplot.series.length !== expectedSeriesCount) return;
-      this.lastSetDataMs = performance.now();
-      this.uplot.setData(this._buildRenderData(), false);
-      this._applyXScale();
+      if (this.renderNowPending) return;
+      this.renderNowPending = true;
+      requestAnimationFrame(() => {
+        this.renderNowPending = false;
+        if (!this.uplot) return;
+        const expectedSeriesCount = 1 + this._seriesLabels().length;
+        if (this.uplot.series.length !== expectedSeriesCount) return;
+        this.lastSetDataMs = performance.now();
+        this.uplot.setData(this._buildRenderData(), false);
+        this._applyXScale();
+      });
     }
 
     // ------------------------------------------------------------------

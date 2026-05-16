@@ -61,6 +61,16 @@ class ProbeResult:
     sample_log_line: Optional[str] = None
     errors: list = field(default_factory=list)
 
+    # Inter-frame gap stats (post-auth). Useful for catching the
+    # "looks fine but pauses for 15 s every minute" symptom.
+    frame_count: int = 0
+    max_gap_s: float = 0.0
+    gaps_over_1s: int = 0
+    gaps_over_5s: int = 0
+    gaps_over_10s: int = 0
+    longest_gaps: list = field(default_factory=list)   # top 5 [(t_offset, gap_s)]
+    duration_s: float = 0.0
+
 
 def _http_upgrade(sock: socket.socket, host: str, path: str = "/api/stream") -> bytes:
     """Send the HTTP Upgrade request, return the bytes that arrived AFTER
@@ -192,7 +202,11 @@ def probe(
         _send_frame(sock, OP_TEXT, auth_body)
 
         deadline = time.monotonic() + duration_s
-        sock.settimeout(max(0.5, duration_s / 4))
+        start_t = time.monotonic()
+        # Use a short socket timeout so we can sample the wall clock
+        # frequently and accumulate gap stats even when frames are dense.
+        sock.settimeout(0.5)
+        last_frame_t: Optional[float] = None
 
         while time.monotonic() < deadline:
             try:
@@ -203,6 +217,25 @@ def probe(
             except (ConnectionResetError, OSError) as e:
                 result.errors.append(f"socket error: {e}")
                 break
+
+            now = time.monotonic()
+            if last_frame_t is not None:
+                gap = now - last_frame_t
+                if gap > result.max_gap_s:
+                    result.max_gap_s = gap
+                if gap > 10.0:
+                    result.gaps_over_10s += 1
+                if gap > 5.0:
+                    result.gaps_over_5s += 1
+                if gap > 1.0:
+                    result.gaps_over_1s += 1
+                # Track top-5 longest with their time offset since auth.
+                t_offset = round(now - start_t, 2)
+                result.longest_gaps.append((t_offset, round(gap, 3)))
+                result.longest_gaps.sort(key=lambda p: -p[1])
+                result.longest_gaps = result.longest_gaps[:5]
+            last_frame_t = now
+            result.frame_count += 1
 
             if opcode == OP_PING:
                 _send_frame(sock, OP_PONG, payload)
@@ -254,6 +287,7 @@ def probe(
             else:
                 result.errors.append(f"unknown channel {channel!r}")
 
+        result.duration_s = round(time.monotonic() - start_t, 2)
         # Polite close.
         try:
             _send_frame(sock, OP_CLOSE, struct.pack(">H", 1000))
@@ -288,12 +322,21 @@ def _format_report(r: ProbeResult) -> str:
         f"  auth_ok             : {r.auth_ok}",
         f"  status_seen         : {r.status_seen}",
         f"  notice_seen         : {r.notice_seen}",
+        f"  duration_s          : {r.duration_s}",
+        f"  frame_count         : {r.frame_count}",
         f"  log_bytes           : {r.log_bytes}",
         f"  data_bytes          : {r.data_bytes}",
         f"  keepalive_seen      : {r.keepalive_seen}",
         f"  cmd_reply_seen      : {r.cmd_reply_seen}",
         f"  pings_received      : {r.pings_received}",
+        f"  max_gap_s           : {r.max_gap_s:.2f}",
+        f"  gaps_over_1s        : {r.gaps_over_1s}",
+        f"  gaps_over_5s        : {r.gaps_over_5s}",
+        f"  gaps_over_10s       : {r.gaps_over_10s}",
     ]
+    if r.longest_gaps:
+        gaps_str = ', '.join(f"{g}s@{t}s" for t, g in r.longest_gaps)
+        lines.append(f"  longest_gaps        : [{gaps_str}]")
     if r.last_notice:
         lines.append(f"  last_notice         : {r.last_notice}")
     if r.last_cmd_reply:

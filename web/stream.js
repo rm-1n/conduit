@@ -38,8 +38,15 @@
   const RECONNECT_OK_MS    = 500;
   const RECONNECT_ERR_MS   = 1500;
   const CONNECT_TIMEOUT_MS = 10000;
-  const STALL_MS           = 5000;
-  const STALL_CHECK_MS     = 500;
+  // Firmware sends an idle keepalive every WS_KEEPALIVE_MS (500 ms),
+  // so 15 s is 30× the keepalive cadence — wide enough to absorb a
+  // long main-thread blocker (WASM compile, large GC, a stutter on
+  // pan/zoom) without churning a TLS reconnect. A genuinely dead
+  // connection still surfaces in ≤15 s; tearing down sooner just
+  // multiplies the outage (5 s stall + 5 s reconnect = the very
+  // "10 s no-data" symptom this widened window prevents).
+  const STALL_MS           = 15000;
+  const STALL_CHECK_MS     = 1000;
   const IP_CHECK_MS        = 1000;
   const CMD_TIMEOUT_MS     = 8000;
 
@@ -69,6 +76,13 @@
 
   let nextSeq = 1;
   const pendingCmds = new Map();    // seq -> {resolve, reject, timer, label}
+
+  // Per-channel byte/frame counters since last stats dump. Used by the
+  // 30 s `[stream] stats` heartbeat (debug-flag gated) for steady-state
+  // throughput visibility — useful when chasing "occasional stall"
+  // reports that don't trip the watchdog.
+  const stats = { logBytes: 0, dataBytes: 0, statusFrames: 0, noticeFrames: 0,
+                  cmdReplies: 0, frames: 0, sinceMs: performance.now() };
 
   const logSubs    = new Set();
   const dataSubs   = new Set();
@@ -208,28 +222,55 @@
 
   function onMessage(ev) {
     lastByteMs = performance.now();
+    stats.frames++;
     if (typeof ev.data === 'string') {
       if (ev.data.length === 0) return;
       const ch = ev.data.charCodeAt(0);
       const body = ev.data.slice(1);
       switch (ch) {
-        case CH_LOG:    dispatchLog(body);    break;
-        case CH_CMD:    dispatchCmd(body);    break;
-        case CH_STATUS: dispatchStatus(body); break;
-        case CH_NOTICE: dispatchNotice(body); break;
+        case CH_LOG:    stats.logBytes += body.length; dispatchLog(body);    break;
+        case CH_CMD:    stats.cmdReplies++;            dispatchCmd(body);    break;
+        case CH_STATUS: stats.statusFrames++;          dispatchStatus(body); break;
+        case CH_NOTICE: stats.noticeFrames++;          dispatchNotice(body); break;
         default:        /* drop unknown text channel */ break;
       }
     } else if (ev.data instanceof ArrayBuffer) {
       const u8 = new Uint8Array(ev.data);
       if (u8.byteLength === 0) return;
-      if (u8[0] === CH_DATA) dispatchData(u8);
+      if (u8[0] === CH_DATA) { stats.dataBytes += u8.byteLength - 1; dispatchData(u8); }
     } else if (ev.data && ev.data.arrayBuffer) {
       ev.data.arrayBuffer().then((buf) => {
         const u8 = new Uint8Array(buf);
-        if (u8.byteLength > 0 && u8[0] === CH_DATA) dispatchData(u8);
+        if (u8.byteLength > 0 && u8[0] === CH_DATA) {
+          stats.dataBytes += u8.byteLength - 1;
+          dispatchData(u8);
+        }
       });
     }
   }
+
+  // 30 s steady-state heartbeat. Debug-flag gated so production stays
+  // quiet; when investigating stalls, set Conduit.streamDebug=true and
+  // the console shows e.g. `[stream] stats 30000ms: 5874f, 947KB data,
+  // 0B log, 0 cmd, 1 status, 0 notice, ws=OPEN, quiet=4ms`. Trends
+  // (a stream going from 5800f/30s to 0f/30s) make stalls obvious
+  // even when they don't trip the watchdog.
+  setInterval(() => {
+    if (!debug()) return;
+    const now = performance.now();
+    const elapsed = Math.round(now - stats.sinceMs);
+    const quietMs = lastByteMs > 0 ? Math.round(now - lastByteMs) : null;
+    const rs = ws ? ws.readyState : null;
+    const rsName = rs === 1 ? 'OPEN' : rs === 0 ? 'CONNECTING'
+                 : rs === 2 ? 'CLOSING' : rs === 3 ? 'CLOSED' : 'none';
+    console.log(TAG, `stats ${elapsed}ms: ${stats.frames}f, ${(stats.dataBytes / 1024).toFixed(1)}KB data, ` +
+                     `${stats.logBytes}B log, ${stats.cmdReplies} cmd, ${stats.statusFrames} status, ` +
+                     `${stats.noticeFrames} notice, ws=${rsName}` +
+                     (quietMs != null ? `, quiet=${quietMs}ms` : ''));
+    stats.frames = stats.logBytes = stats.dataBytes = 0;
+    stats.cmdReplies = stats.statusFrames = stats.noticeFrames = 0;
+    stats.sinceMs = now;
+  }, 30000);
 
   // -- Connection lifecycle ----------------------------------------
 
@@ -381,8 +422,17 @@
     stallHandle = setInterval(() => {
       if (stopped || paused || !ws) return;
       if (lastByteMs === 0) return;
-      if (performance.now() - lastByteMs > STALL_MS) {
-        console.warn(TAG, 'stall detected; closing for reconnect');
+      const quietMs = Math.round(performance.now() - lastByteMs);
+      if (quietMs > STALL_MS) {
+        // Include readyState + quiet duration so a future report makes
+        // it obvious whether the connection was actually dead
+        // (readyState=CLOSING/CLOSED) or the main thread was just busy
+        // (readyState=OPEN, quietMs only marginally past STALL_MS).
+        const rs = ws.readyState;
+        const rsName = rs === 0 ? 'CONNECTING' : rs === 1 ? 'OPEN'
+                     : rs === 2 ? 'CLOSING'    : rs === 3 ? 'CLOSED'
+                     : `?(${rs})`;
+        console.warn(TAG, `stall detected (${quietMs} ms quiet, ws=${rsName}); closing for reconnect`);
         try { ws.close(); } catch (_) {}
       }
     }, STALL_CHECK_MS);
