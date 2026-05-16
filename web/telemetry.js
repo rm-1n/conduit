@@ -361,6 +361,7 @@
   async function drain(ip) {
     let i = 0;
     let recordsThisCall = 0;
+    let keepalivesThisCall = 0;
     const startBufLen = parseBuf.byteLength;
     while (i < parseBuf.byteLength) {
       const r = parseRecord(parseBuf, i);
@@ -373,10 +374,9 @@
       // sees bytes from a quiet-but-healthy device. Skip everything
       // past the bookkeeping below — chart, store, schema cache,
       // reboot-detection — none of it should react to keepalives.
-      // lastByteMs (and the runStream chunk-level timer) already
-      // ticked when these bytes arrived.
       if (msgId === KEEPALIVE_MSG_ID) {
         i += recordBytes;
+        keepalivesThisCall++;
         continue;
       }
       const esz = dtypeSize(dtype);
@@ -472,13 +472,16 @@
 
     // Diagnostic: log the FIRST batch of records (so we can see they
     // got through), and any drain that consumed bytes but produced
-    // zero records (parse failure).
+    // zero usable records AND zero keepalives — that's a real parse
+    // failure worth investigating. Keepalive-only batches are normal
+    // and silent (firmware emits one every ~500 ms when the data
+    // ring is idle).
     if (recordsThisCall > 0 && !drainSeenAnyRecord) {
       drainSeenAnyRecord = true;
       diag('drain.first', { records: recordsThisCall, bufBefore: startBufLen,
                              bufAfter: parseBuf.byteLength,
                              schemaSize: schema.size });
-    } else if (recordsThisCall === 0 && startBufLen >= 16) {
+    } else if (recordsThisCall === 0 && keepalivesThisCall === 0 && startBufLen >= 16) {
       // Only log the parse-failure case once per second to avoid flood.
       if (!drain._lastEmptyMs || performance.now() - drain._lastEmptyMs > 1000) {
         drain._lastEmptyMs = performance.now();
