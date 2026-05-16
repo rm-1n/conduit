@@ -17,14 +17,21 @@
 // after open is always a CMD with name="auth" and token=<value>.
 // The server keeps the stream gated until that frame validates.
 //
-// Diagnostics: every lifecycle event logs to `[stream]` in DevTools
-// console. If you don't see [stream] connect logs after page load,
-// the IIFE didn't run — check Network tab for the script's 200/304.
+// Diagnostics: console.warn/console.error fires on abnormal events
+// (stall, handshake failure, close-before-ready, URL build error). The
+// happy path (open / auth / ready / close-on-reboot) is silent so the
+// DevTools console isn't noise during normal use. Enable verbose logs
+// for debugging by setting `window.Conduit.streamDebug = true` BEFORE
+// page load (e.g. via a `localStorage` flag or a DevTools snippet).
 
 (function () {
   'use strict';
 
   const TAG = '[stream]';
+  // Verbose logging — opt-in via `Conduit.streamDebug = true` before
+  // page load. With it off (the default) we log only abnormal events.
+  const debug = () => !!(window.Conduit && window.Conduit.streamDebug);
+  const dlog  = (...args) => { if (debug()) console.log(TAG, ...args); };
 
   // -- Constants ----------------------------------------------------
 
@@ -256,7 +263,7 @@
       throw e;
     }
     lastUrl = url;
-    console.log(TAG, 'opening', url);
+    dlog('opening', url);
 
     const sock = new WebSocket(url);
     sock.binaryType = 'arraybuffer';
@@ -268,7 +275,7 @@
         if (settled) return;
         settled = true;
         statusSubs.delete(onStatusOnce);
-        console.log(TAG, 'ready (got STATUS frame)');
+        dlog('ready (got STATUS frame)');
         streamConnected = true;
         lastByteMs = performance.now();
         clearConnectTimer();
@@ -278,7 +285,7 @@
       statusSubs.add(onStatusOnce);
 
       sock.onopen = () => {
-        console.log(TAG, 'socket open; sending auth frame');
+        dlog('socket open; sending auth frame');
         const tok = getToken();
         const payload = `seq=0&name=auth&token=${encodeURIComponent(tok)}`;
         try { sock.send(String.fromCharCode(CH_CMD) + payload); }
@@ -287,14 +294,14 @@
         }
       };
       sock.onmessage = onMessage;
-      sock.onerror = (ev) => {
+      sock.onerror = () => {
         // The browser fires onerror without details (per spec); the
         // onclose right after will carry the real story.
         if (!settled) console.warn(TAG, 'socket error before ready');
       };
       sock.onclose = (ev) => {
         if (settled) {
-          console.log(TAG, 'closed (post-ready):', ev.code, ev.reason || '');
+          dlog('closed (post-ready):', ev.code, ev.reason || '');
           // Outer connectLoop's Promise-wrap picks this up.
           return;
         }
@@ -316,7 +323,7 @@
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
   async function connectLoop() {
-    console.log(TAG, 'connectLoop started');
+    dlog('connectLoop started');
     while (!stopped) {
       if (paused) {
         await new Promise((r) => { pauseWaiter = r; });
@@ -326,7 +333,7 @@
       }
       const ip = getIp();
       if (ip !== knownIp) {
-        if (knownIp) console.log(TAG, 'device changed:', knownIp, '→', ip);
+        if (knownIp) dlog('device changed:', knownIp, '→', ip);
         knownIp = ip;
         teardown('device changed');
       }
@@ -352,7 +359,7 @@
         await sleep(RECONNECT_ERR_MS);
       }
     }
-    console.log(TAG, 'connectLoop exited');
+    dlog('connectLoop exited');
   }
 
   function watchIp() {
@@ -389,7 +396,7 @@
   function init(opts) {
     if (opts && opts.getIp)    getIp    = opts.getIp;
     if (opts && opts.getToken) getToken = opts.getToken;
-    console.log(TAG, 'init; current ip:', getIp(), 'origin:', window.location && window.location.origin);
+    dlog('init; ip:', getIp(), 'origin:', window.location && window.location.origin);
     watchIp();
     watchStall();
     window.addEventListener('online', onVisibilityWake);
@@ -451,12 +458,12 @@
       // streamPaused/paused flag is set, so no UI churn either.
       if (paused) return;
       paused = true;
-      console.log(TAG, 'paused (external) — keeping WS alive for OTA-side TLS');
+      dlog('paused (external) — keeping WS alive for OTA-side TLS');
     },
     resume() {
       if (!paused) return;
       paused = false;
-      console.log(TAG, 'resumed');
+      dlog('resumed');
       if (pauseWaiter) { pauseWaiter(); pauseWaiter = null; }
     },
     stop() {

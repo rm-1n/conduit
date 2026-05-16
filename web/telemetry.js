@@ -218,11 +218,16 @@
   const DIAG_MAX = 100;
   const diagBuf  = [];
   const tStart   = performance.now();
+  // Console output is opt-in via Conduit.telemetryDebug = true. The
+  // in-memory buffer is always populated and dumpable via
+  // window.CONDUIT_DIAG().
   function diag(event, fields) {
     const entry = { t: Math.round(performance.now() - tStart), event, ...(fields || {}) };
     diagBuf.push(entry);
     if (diagBuf.length > DIAG_MAX) diagBuf.shift();
-    try { console.log('[tlm]', entry); } catch (_) {}
+    if (window.Conduit && window.Conduit.telemetryDebug) {
+      try { console.log('[tlm]', entry); } catch (_) {}
+    }
   }
 
   // Drain logging is rate-limited — drain runs many times per chunk,
