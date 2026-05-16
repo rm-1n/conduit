@@ -325,12 +325,15 @@
   async function connectLoop() {
     dlog('connectLoop started');
     while (!stopped) {
-      if (paused) {
-        await new Promise((r) => { pauseWaiter = r; });
-        pauseWaiter = null;
-        if (stopped) break;
-        continue;
-      }
+      // Note: `paused` is intentionally NOT checked here. pause() is a
+      // signaling flag for subscribers (console/telemetry filter data
+      // by their local paused flags), not a connection gate. Blocking
+      // reconnect during pause would mean the post-OTA WS reconnect
+      // can't fire until ide.js resumes — but by then updateFirmware
+      // has already finished polling and fastReady is useless. With
+      // this loop free to reconnect, the device's reboot kills the
+      // WS, the reconnect attempt lands on the new firmware within
+      // ~1-2 s, and fastReady fires immediately.
       const ip = getIp();
       if (ip !== knownIp) {
         if (knownIp) dlog('device changed:', knownIp, '→', ip);
