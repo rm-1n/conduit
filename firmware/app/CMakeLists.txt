@@ -115,7 +115,7 @@ option(CONDUIT_DEV_LOGS "Enable verbose firmware status prints over USB CDC" OFF
 # that stays "1.2.0" across rollbacks; only the MAJOR.MINOR pair here
 # changes per build.
 set(CONDUIT_BINARY_VERSION_MAJOR 10)
-set(CONDUIT_BINARY_VERSION_MINOR 70)
+set(CONDUIT_BINARY_VERSION_MINOR 71)
 
 # Generate conduit_version.h from conduit_version.h.in so the version
 # constants reach C code through a real header. target_compile_definitions
@@ -154,6 +154,7 @@ function(conduit_define_app TARGET)
         main.c
         network.c
         http_server.c
+        ws_server.c
         ota.c
         ota_ring.c
         log_buffer.c

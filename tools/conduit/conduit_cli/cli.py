@@ -375,5 +375,36 @@ def fw_info(picotool):
     dev.picotool_info(picotool)
 
 
+@main.command(name="ws-probe")
+@click.option("-d", "--device", required=True, help="Device IP or hostname")
+@click.option("-p", "--port", type=int, default=80, show_default=True,
+              help="80 for plain HTTP, 443 for TLS")
+@click.option("--tls", is_flag=True, help="Use wss:// (TLS)")
+@click.option("--tls-verify", is_flag=True, help="Verify TLS cert (off by default for LAN devices)")
+@click.option("-t", "--token", default="changeme", show_default=True,
+              help="Auth token sent in the first-frame CMD")
+@click.option("--duration", type=float, default=6.0, show_default=True,
+              help="Seconds to listen after auth")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of text")
+def ws_probe_cmd(device, port, tls, tls_verify, token, duration, as_json):
+    """Open a WebSocket to /api/stream, authenticate, observe frames.
+
+    End-to-end protocol smoke for the unified bidirectional stream.
+    Reports handshake status, auth, status snapshot, log/data byte
+    counts, and any errors. Reuses the same probe engine that backs
+    `tests/test_ws_probe.py`.
+    """
+    from . import ws_probe as _wp
+
+    argv = ["-d", device, "-p", str(port), "-t", token, "--duration", str(duration)]
+    if tls:
+        argv.append("--tls")
+    if tls_verify:
+        argv.append("--tls-verify")
+    if as_json:
+        argv.append("--json")
+    sys.exit(_wp.main(argv))
+
+
 if __name__ == "__main__":
     main()

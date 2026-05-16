@@ -1076,8 +1076,27 @@ void conduit_loop(void) {
     let uploadStartMs = 0;
     let lastProgressLabel = 'Uploading…';
 
+    // Race the post-OTA poll against the WS reconnect: once the device
+    // reboots into the new firmware and stream.js lands its first
+    // STATUS frame, fire fastReady so updateFirmware skips the 2 s
+    // poll interval and proceeds straight to verify/commit. Cuts the
+    // 10-20 s "uploading 100% → committed" gap down to ~1 s on LAN.
+    // Created BEFORE updateFirmware kicks off; the WS will still be
+    // paused-but-alive during the upload (stream.pause is flag-only
+    // post-`80d7081`), so onNextConnect only fires after the device
+    // reboot kills the existing WS and the reconnect lands.
+    const stream = window.Conduit && window.Conduit.stream;
+    const fastReady = stream && typeof stream.onNextConnect === 'function'
+      ? new Promise((resolve) => {
+          const unsub = stream.onNextConnect(() => {
+            try { unsub(); } catch (_) {}
+            resolve();
+          });
+        })
+      : null;
+
     result = await window.Conduit.updateFirmware({
-        ip, token, data: uf2,
+        ip, token, data: uf2, fastReady,
         onProgress: ({ pct, loaded, total }) => {
           // Upload covers 50..95% of the overall bar; the last 5% is
           // reserved for verify/commit so the user never sees 100%

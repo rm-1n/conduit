@@ -13,6 +13,7 @@
  */
 
 #include "http_server.h"
+#include "ws_server.h"
 #include "network.h"
 #include "ota.h"
 #include "ota_ring.h"
@@ -28,6 +29,8 @@
 #include "rmii_ethernet/netif.h"
 
 #include "mbedtls/platform.h"
+#include "mbedtls/sha1.h"
+#include "mbedtls/base64.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -57,6 +60,8 @@ typedef enum {
                            // ring and run the last flash write before responding
     CONN_STATE_WAITING,    // /api/log long-poll: holding until data or deadline
     CONN_STATE_STREAMING,  // /api/log?stream=1: persistent push of new bytes
+    CONN_STATE_WS,         // /api/stream: bidirectional WebSocket. Frame codec
+                           // and channel dispatch live in ws_server.{c,h}.
     CONN_STATE_DONE,       // Response sent, waiting for close
 } conn_state_t;
 
@@ -78,6 +83,7 @@ typedef enum {
     ROUTE_DATA_SCHEMA,  // /api/data_schema — id→name JSON
     ROUTE_CMD,          // /api/cmd — POST command dispatch (auth)
     ROUTE_INCIDENTS,    // /api/incidents — GET list / POST clear (auth)
+    ROUTE_STREAM,       // /api/stream — bidirectional WebSocket
 } route_t;
 
 typedef struct {
@@ -115,6 +121,12 @@ typedef struct {
     // without this, a quiet device looks identical to a wedged TX
     // path and the indicator flaps "no data" forever.
     absolute_time_t last_tx_at;
+    // Per-conn WebSocket state. Only meaningful when state == CONN_STATE_WS;
+    // ws_server_on_open() initializes it post-Upgrade. The conn's
+    // header_buf (2 KB) doubles as the WS frame reassembly buffer
+    // since we're done parsing HTTP requests by the time this is
+    // active. See ws_server.h for the full per-conn state shape.
+    ws_state_t ws;
 } http_conn_t;
 
 // --------------------------------------------------------------------------
@@ -334,7 +346,11 @@ static err_t send_cors_preflight(struct altcp_pcb *pcb) {
 // Route handlers
 // --------------------------------------------------------------------------
 
-static void handle_status(struct altcp_pcb *pcb) {
+// Build the device-status JSON into `out`. Shared between the HTTP
+// /api/status path and the WS_CH_STATUS push from ws_server.c, so a
+// schema change touches one place.
+int http_server_build_status_json(char *out, size_t out_max) {
+    if (!out || out_max == 0) return 0;
     char board_id[32];
     get_board_id(board_id, sizeof(board_id));
 
@@ -351,8 +367,7 @@ static void handle_status(struct altcp_pcb *pcb) {
         }
     }
 
-    char json[HTTP_MAX_RESPONSE];
-    int len = snprintf(json, sizeof(json),
+    int len = snprintf(out, out_max,
         "{"
         "\"version\":\"%s\","
         // binary_version is the picobin MAJOR.MINOR baked in by
@@ -389,8 +404,19 @@ static void handle_status(struct altcp_pcb *pcb) {
         (unsigned)netif_rmii_ethernet_rx_drops(),
         ota_boot_type_str(),
         ota_commit_pending() ? "true" : "false");
+    if (len < 0) return 0;
+    if ((size_t)len >= out_max) return (int)(out_max - 1);
+    return len;
+}
 
-    send_json(pcb, "200 OK", json);
+static void handle_status(struct altcp_pcb *pcb) {
+    char json[HTTP_MAX_RESPONSE];
+    int n = http_server_build_status_json(json, sizeof(json));
+    if (n <= 0) {
+        send_error(pcb, "500 Internal Server Error", "status build failed");
+        return;
+    }
+    send_response(pcb, "200 OK", "application/json", json, (size_t)n);
 }
 
 // GET /api/incidents — JSON array of records persisted across reboots
@@ -990,6 +1016,113 @@ static void handle_cmd(struct altcp_pcb *pcb, http_conn_t *conn) {
 }
 
 // --------------------------------------------------------------------------
+// WebSocket Upgrade — GET /api/stream
+// --------------------------------------------------------------------------
+
+// RFC 6455 §1.3 — the well-known GUID concatenated with the client's
+// Sec-WebSocket-Key before SHA-1 + base64 produces Sec-WebSocket-Accept.
+static const char WS_GUID[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+// Lookahead helper: does `value` contain `token` (case-insensitive),
+// bounded at the end-of-header (\r). Used for `Connection: Upgrade`
+// which may legitimately be "Upgrade", "keep-alive, Upgrade", etc.
+static bool header_contains_token(const char *value, const char *token) {
+    if (!value || !token) return false;
+    size_t tlen = strlen(token);
+    while (*value && *value != '\r' && *value != '\n') {
+        // skip whitespace + ','
+        while (*value == ' ' || *value == ',' || *value == '\t') value++;
+        if (strncasecmp(value, token, tlen) == 0) {
+            char after = value[tlen];
+            if (after == '\0' || after == '\r' || after == '\n' ||
+                after == ',' || after == ' ' || after == '\t') {
+                return true;
+            }
+        }
+        // advance to next ','
+        while (*value && *value != ',' && *value != '\r' && *value != '\n') value++;
+    }
+    return false;
+}
+
+static void handle_ws_upgrade(struct altcp_pcb *pcb, http_conn_t *conn) {
+    // Required headers per RFC 6455 §4.1.
+    const char *upgrade    = find_header(conn->header_buf, "Upgrade");
+    const char *connection = find_header(conn->header_buf, "Connection");
+    const char *version    = find_header(conn->header_buf, "Sec-WebSocket-Version");
+    const char *key        = find_header(conn->header_buf, "Sec-WebSocket-Key");
+
+    if (!upgrade || strncasecmp(upgrade, "websocket", 9) != 0 ||
+        !connection || !header_contains_token(connection, "Upgrade") ||
+        !version || version[0] != '1' || version[1] != '3' ||
+        !key) {
+        send_error(pcb, "400 Bad Request", "websocket upgrade required");
+        conn->state = CONN_STATE_DONE;
+        return;
+    }
+
+    // Snapshot the key (up to its CR/LF).
+    char key_val[80];
+    size_t key_len = copy_header_value(key, key_val, sizeof(key_val));
+    if (key_len == 0 || key_len > 64) {
+        send_error(pcb, "400 Bad Request", "bad Sec-WebSocket-Key");
+        conn->state = CONN_STATE_DONE;
+        return;
+    }
+
+    // Compute SHA-1(key + GUID) and base64-encode for the accept token.
+    char concat[80 + sizeof(WS_GUID)];
+    size_t cat_len = key_len;
+    memcpy(concat, key_val, key_len);
+    memcpy(concat + cat_len, WS_GUID, sizeof(WS_GUID) - 1);
+    cat_len += sizeof(WS_GUID) - 1;
+
+    unsigned char sha[20];
+    if (mbedtls_sha1((const unsigned char *)concat, cat_len, sha) != 0) {
+        send_error(pcb, "500 Internal Server Error", "sha1 failed");
+        conn->state = CONN_STATE_DONE;
+        return;
+    }
+    unsigned char accept_b64[32];
+    size_t olen = 0;
+    if (mbedtls_base64_encode(accept_b64, sizeof(accept_b64), &olen, sha, sizeof(sha)) != 0) {
+        send_error(pcb, "500 Internal Server Error", "base64 failed");
+        conn->state = CONN_STATE_DONE;
+        return;
+    }
+    // 28 chars + NUL for a 20-byte SHA-1 input; defensively bound.
+    if (olen >= sizeof(accept_b64)) olen = sizeof(accept_b64) - 1;
+    accept_b64[olen] = '\0';
+
+    // Emit 101 Switching Protocols. NO body, NO Content-Length.
+    char hdr[256];
+    int hdr_len = snprintf(hdr, sizeof(hdr),
+        "HTTP/1.1 101 Switching Protocols\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Accept: %s\r\n"
+        "\r\n",
+        accept_b64);
+    if (hdr_len < 0) hdr_len = 0;
+    if (hdr_len > (int)sizeof(hdr)) hdr_len = (int)sizeof(hdr);
+    altcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
+    altcp_output(pcb);
+
+    // Conn transitions to CONN_STATE_WS. The HTTP header_buf is
+    // repurposed as the WS frame reassembly buffer (see ws_server.c's
+    // notes on the WS_INGRESS_MAX cap). Register in the streaming
+    // registry so a cable drop tears the WS down cleanly.
+    conn->state = CONN_STATE_WS;
+    altcp_nagle_disable(pcb);
+    enable_keepalive(pcb);
+    register_streaming(pcb, conn);
+    altcp_poll(pcb, http_poll, 1);
+    g_streams_started_total++;
+    ws_server_on_open(pcb, &conn->ws,
+                      (uint8_t *)conn->header_buf, HTTP_MAX_HEADER);
+}
+
+// --------------------------------------------------------------------------
 // HTTP parser
 // --------------------------------------------------------------------------
 
@@ -1029,6 +1162,8 @@ static void parse_request_line(http_conn_t *conn) {
             conn->route = ROUTE_CMD;
         } else if (strncmp(path, "/api/incidents", 14) == 0) {
             conn->route = ROUTE_INCIDENTS;
+        } else if (strncmp(path, "/api/stream", 11) == 0) {
+            conn->route = ROUTE_STREAM;
         }
     }
 
@@ -1109,9 +1244,11 @@ void http_server_on_link_down(void) {
         http_conn_t   *conn = stream_registry[i].conn;
         if (!pcb) continue;
         // Belt-and-braces: only abort entries that are still in the
-        // streaming state. Anything mid-OTA (CONN_STATE_BODY) or
-        // mid-header (CONN_STATE_HEADER) is intentionally left alone.
-        if (conn && conn->state != CONN_STATE_STREAMING) continue;
+        // streaming state OR the WebSocket state. Anything mid-OTA
+        // (CONN_STATE_BODY) or mid-header (CONN_STATE_HEADER) is
+        // intentionally left alone.
+        if (conn && conn->state != CONN_STATE_STREAMING
+                 && conn->state != CONN_STATE_WS) continue;
         // Detach all callbacks BEFORE altcp_abort. lwIP fires the err
         // callback synchronously from inside altcp_abort, and we want
         // it to no-op since we're freeing the conn ourselves below.
@@ -1205,6 +1342,16 @@ static err_t http_poll(void *arg, struct altcp_pcb *pcb) {
         send_log_response(pcb, conn->log_since);
         conn->state = CONN_STATE_DONE;
         conn_close(pcb, conn);
+        return ERR_OK;
+    }
+
+    if (conn->state == CONN_STATE_WS) {
+        // WebSocket periodic drain. ws_server_poll handles ring drains,
+        // app-layer PING, idle keepalive, and status pushes — see
+        // ws_server.c for the full policy. The opportunistic flush
+        // from http_recv handles sub-100 ms responses; this is the
+        // background tick for idle clients.
+        ws_server_poll(pcb, &conn->ws);
         return ERR_OK;
     }
 
@@ -1337,6 +1484,30 @@ static err_t http_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t e
         return ERR_OK;
     }
 
+    if (conn->state == CONN_STATE_WS) {
+        // WebSocket: feed every byte through the frame codec. The
+        // codec dispatches complete CMD/PING/CLOSE frames synchronously
+        // on this callback — that's the <100 ms inbound latency path
+        // (see ws_server.c). altcp_recved is unconditional: WS flow
+        // control is application-layer (PING/PONG + ring-drain pacing
+        // in ws_server_poll), not TCP window.
+        bool keep_open = true;
+        for (struct pbuf *q = p; q != NULL && keep_open; q = q->next) {
+            keep_open = ws_server_on_bytes(pcb, &conn->ws,
+                                           (uint8_t *)conn->header_buf,
+                                           HTTP_MAX_HEADER,
+                                           (const uint8_t *)q->payload,
+                                           q->len);
+        }
+        altcp_recved(pcb, p->tot_len);
+        pbuf_free(p);
+        if (!keep_open) {
+            conn->state = CONN_STATE_DONE;
+            conn_close(pcb, conn);
+        }
+        return ERR_OK;
+    }
+
     if (conn->state == CONN_STATE_DRAINING) {
         // Body fully received; trailing bytes (FIN piggybacks, peer-side
         // retransmits) ack immediately. ota_pump_ack continues to credit
@@ -1443,6 +1614,14 @@ static err_t http_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t e
                 } else if (conn->method == METHOD_POST && conn->route == ROUTE_INCIDENTS) {
                     handle_incidents_post(pcb, conn);
                     conn->state = CONN_STATE_DONE;
+                    immediate_ack += body_in_pbuf;
+                } else if (conn->method == METHOD_GET && conn->route == ROUTE_STREAM) {
+                    // handle_ws_upgrade transitions the conn to
+                    // CONN_STATE_WS on success and into CONN_STATE_DONE
+                    // on a malformed Upgrade. Either way the request
+                    // body (if any) is consumed: WebSocket clients
+                    // don't send a body on the Upgrade GET.
+                    handle_ws_upgrade(pcb, conn);
                     immediate_ack += body_in_pbuf;
                 } else {
                     send_error(pcb, "404 Not Found", "not found");
@@ -1656,4 +1835,22 @@ bool http_server_init_tls(void) {
     altcp_accept(pcb, http_accept);
     DEV_LOG("[tls] HTTPS listening on port %d\n", CONDUIT_HTTPS_PORT);
     return true;
+}
+
+void http_server_notify_event(http_event_t event) {
+    // Walk the conn pool and mark every active WebSocket so the next
+    // ws_server_poll() tick pushes a fresh STATUS snapshot. We don't
+    // emit the NOTICE here because that needs altcp_write on the right
+    // pcb — and we don't carry pcb pointers in the pool. The poll-time
+    // emit picks up state from network_*/ota_* getters which already
+    // reflect the new state by the time the caller invokes us.
+    //
+    // Future-proofing: the event parameter lets us differentiate
+    // notice kinds later if a caller wants a kind-specific message.
+    (void)event;
+    for (int i = 0; i < HTTP_CONN_POOL_SIZE; i++) {
+        if (!http_conn_in_use[i]) continue;
+        if (http_conn_pool[i].state != CONN_STATE_WS) continue;
+        ws_server_mark_status_dirty(&http_conn_pool[i].ws);
+    }
 }
