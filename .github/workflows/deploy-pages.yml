@@ -75,8 +75,12 @@ jobs:
         # it doesn't (fail with a clear message — re-run deploy-pages
         # once build-web-sdk has finished publishing).
         run: |
-          MAJOR=$(grep -oP 'pico_set_binary_version\([^)]*MAJOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
-          MINOR=$(grep -oP 'pico_set_binary_version\([^)]*MINOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
+          # Read from the set() block — single source of truth that
+          # also feeds pico_set_binary_version. The previous regex
+          # (matching pico_set_binary_version) picked up the minimal
+          # variant's hardcoded MAJOR 10 MINOR 3 because of `head -1`.
+          MAJOR=$(grep -oP 'set\(CONDUIT_BINARY_VERSION_MAJOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
+          MINOR=$(grep -oP 'set\(CONDUIT_BINARY_VERSION_MINOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
           if [ -z "$MAJOR" ] || [ -z "$MINOR" ]; then
             echo "::error::failed to parse MAJOR/MINOR from firmware/app/CMakeLists.txt"
             exit 1

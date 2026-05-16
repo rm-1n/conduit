@@ -68,19 +68,22 @@ jobs:
           submodules: recursive
 
       # ---- Version + skip-if-already-released ----------------------------
-      # Reads MAJOR / MINOR from the pico_set_binary_version call in
-      # firmware/app/CMakeLists.txt — same source of truth as the
-      # commissioning-image workflow. Asks GitHub whether
-      # `web-sdk-<version>` already exists; if so, every subsequent
-      # step is skipped and the run finishes in seconds.
+      # Reads MAJOR / MINOR from the set(CONDUIT_BINARY_VERSION_*)
+      # block in firmware/app/CMakeLists.txt — the single source of
+      # truth that also feeds pico_set_binary_version and the C-side
+      # conduit_version.h. The previous regex matched pico_set_binary_version
+      # with `head -1`, which silently picked up the minimal variant's
+      # hardcoded `pico_set_binary_version(${TARGET} MAJOR 10 MINOR 3)`
+      # instead of the templated main-app call — any bump to the
+      # templated MINOR was invisible to CI.
       # workflow_dispatch with inputs.force=true overrides the skip.
       - name: Resolve version + check existing release
         id: ver
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          MAJOR=$(grep -oP 'pico_set_binary_version\([^)]*MAJOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
-          MINOR=$(grep -oP 'pico_set_binary_version\([^)]*MINOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
+          MAJOR=$(grep -oP 'set\(CONDUIT_BINARY_VERSION_MAJOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
+          MINOR=$(grep -oP 'set\(CONDUIT_BINARY_VERSION_MINOR\s+\K\d+' firmware/app/CMakeLists.txt | head -1)
           if [ -z "$MAJOR" ] || [ -z "$MINOR" ]; then
             echo "::error::failed to parse MAJOR/MINOR from firmware/app/CMakeLists.txt"
             exit 1
