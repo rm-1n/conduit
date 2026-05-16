@@ -341,180 +341,47 @@
     }
   }
 
-  // --- Streaming loop --------------------------------------------------
+  // The HTTP /api/log fetch path has been retired. stream.js (the
+  // unified WebSocket transport) is now the SOLE data source — see
+  // attachToStream() below for the subscription. Reconnect, stall
+  // detection, and IP-change handling live entirely in stream.js;
+  // this module is a thin renderer + parser.
 
-  async function runStream(ip, signal) {
-    const since = cursor === null ? 0 : cursor;
-    const url = `${window.Conduit.deviceUrlForIp(ip, '/api/log')}?since=${since}&stream=1`;
-    wallMsAnchor = Date.now();  // consumed by the first record of this run
-    console.log('[con] runStream.open', { url, cursor });
+  // --- stream.js bridge -----------------------------------------------
 
-    // Track first-byte arrival so the connect-timeout below can decide
-    // whether to abort. Logs may be silent for long periods after the
-    // connect lands — we ONLY want the timeout to fire if the response
-    // never started, not if the device is just quiet.
-    let firstByteSeen = false;
-    const connectTimer = setTimeout(() => {
-      if (!firstByteSeen && activeAbort && !signal.aborted) {
-        console.log('[con] runStream.connectTimeout');
-        try { activeAbort.abort(); } catch (_) {}
-      }
-    }, CONNECT_TIMEOUT_MS);
-
-    let res;
-    try {
-      res = await fetch(url, { mode: 'cors', cache: 'no-store', signal });
-    } catch (e) {
-      clearTimeout(connectTimer);
-      console.log('[con] runStream.fetchError', String(e && e.message || e));
-      throw e;
+  function attachToStream() {
+    const s = window.Conduit && window.Conduit.stream;
+    if (!s) {
+      console.warn('[console] window.Conduit.stream missing — log pane will be inert');
+      return;
     }
-    if (!res.ok) { clearTimeout(connectTimer); throw new Error(`HTTP ${res.status}`); }
 
-    // Same defensive cursor handling as telemetry.js: only adopt the
-    // server-reported cursor when the header is actually exposed.
-    // If absent (CORS quirk on an error response, etc), keep the
-    // existing cursor — falling back to 0 would make the next
-    // &since= request too low and the device would replay already-
-    // received bytes.
-    const startHdr = res.headers.get('X-Log-Cursor');
-    const cursorBefore = cursor;
-    if (startHdr !== null) {
-      const startCursor = Number(startHdr);
-      if (Number.isFinite(startCursor)) cursor = startCursor;
-    } else if (cursor == null) {
-      cursor = 0;
-    }
-    console.log('[con] runStream.headers', { sentSince: since, xLogCursor: startHdr, cursorBefore, cursorAfter: cursor });
+    s.onLog((text) => {
+      if (stopped || streamPaused) return;
+      ingestChunk(text).catch(() => {});
+    });
 
-    if (consoleEl.textContent.startsWith('── connecting')) {
-      consoleEl.textContent = '';
-    }
-    setStage('connected');
-    firstByteSeen = true;
-    clearTimeout(connectTimer);
-    lastByteMs = performance.now();
-    // Notify any one-shot onNextConnect waiters that the stream just
-    // landed a fresh response from the device. ide.js's onBuildUpload
-    // races this against /api/status polling so the post-OTA console
-    // pane lights up the moment the device is reachable.
-    fireConnect();
+    s.onNextConnect(() => fireConnect());
 
-    const reader = res.body.getReader();
-    const dec = new TextDecoder('utf-8', { fatal: false });
-    try {
-      let chunkCount = 0;
-      let bytesThisStream = 0;
-      const streamStartedAt = performance.now();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) {
-          console.log('[con] runStream.eof', { chunkCount, bytesThisStream,
-                       cursorEnd: cursor, streamMs: Math.round(performance.now() - streamStartedAt) });
-          break;
-        }
-        if (value && value.byteLength) {
-          lastByteMs = performance.now();
-          cursor += value.byteLength;
-          bytesThisStream += value.byteLength;
-          // Log every chunk in the first 5 s after a fresh connect; after
-          // that, every 50 chunks (or any chunk > 200 bytes — which would
-          // be a backlog drain after a reconnect).
-          const ageMs = performance.now() - streamStartedAt;
-          if (ageMs < 5000 || chunkCount % 50 === 0 || value.byteLength > 200) {
-            console.log('[con] runStream.chunk#' + chunkCount,
-                        { bytes: value.byteLength, cursorAfter: cursor,
-                          firstFew: new TextDecoder().decode(value.slice(0, 60)) });
-          }
-          chunkCount++;
-          await ingestChunk(dec.decode(value, { stream: true }));
-        }
-      }
-      const tail = dec.decode();
-      if (tail) await ingestChunk(tail);
-    } finally {
-      try { reader.cancel(); } catch (_) {}
-      lastByteMs = 0;
-      persistFlush();
-    }
-  }
-
-  async function streamLoop() {
-    while (!stopped) {
-      // External pause (OTA flow). Block here until resume() — the
-      // alternative was leaving the /api/log fetch open across the
-      // device's reboot, which keeps the LED green even though the
-      // device is unreachable for ~10 s. Distinct from `paused` (the
-      // user "Pause output" button), which only freezes the display.
-      if (streamPaused) {
-        setState('updating…', '');
-        await new Promise((r) => { streamPauseWaiter = r; });
-        streamPauseWaiter = null;
-        if (stopped) break;
-        continue;
-      }
-      const ip = getIp();
-      if (ip !== knownIp) {
-        knownIp = ip;
-        if (ip) reset(`connecting to ${ip}…`);
-        else reset('no device selected');
-        // Device change → close the run. Fresh anchor on next connect.
-        persistFlush();
-        currentRun = null;
-        lastUptimeUs = null;
-      }
-      if (!ip) {
-        setState('no device', '');
-        await sleep(RECONNECT_ERR_MS);
-        continue;
-      }
-
-      activeAbort = new AbortController();
-      // Fresh "reconnecting" stage on every attempt so the elapsed
-      // counter resets and the user can see we're actively retrying.
-      // Transition out of 'updating…' (if any prior pause left it
-      // there) — the user's mental model is "reconnecting" once we're
-      // actively trying handshakes.
-      if (currentStage !== 'connected' && currentStage !== 'no device') {
-        setStage('reconnecting');
-      }
-      try {
-        await runStream(ip, activeAbort.signal);
-        await sleep(RECONNECT_OK_MS);
-      } catch (e) {
-        if (e && e.name === 'AbortError') continue;
-        setStage('reconnecting');
-        await sleep(RECONNECT_ERR_MS);
-      } finally {
-        activeAbort = null;
-      }
-    }
-  }
-
-  function watchIp() {
-    if (ipWatchHandle) return;
-    ipWatchHandle = setInterval(() => {
+    // Console pane state machine — driven entirely by stream.js now
+    // that the legacy /api/log fetch path is gone. Five stages map
+    // 1:1 to what setStage() understands:
+    //   'paused'       — user toggle (display only)
+    //   'updating…'    — OTA pause (ide.js called pauseStream)
+    //   'no device'    — getIp() returns null
+    //   'connected'    — stream.isConnected() is true
+    //   'reconnecting' — otherwise (between WS attempts)
+    setInterval(() => {
       if (stopped) return;
-      const ip = getIp();
-      if (ip !== knownIp && activeAbort) activeAbort.abort();
-    }, IP_CHECK_MS);
-  }
-
-  // Stall watchdog. Now that the firmware emits a `\n` keepalive every
-  // ~500 ms when the log ring is silent (see http_poll
-  // STREAM_KEEPALIVE_MS), a quiet stream is no longer indistinguishable
-  // from a wedged TCP — STALL_MS of true silence means the connection
-  // is dead. Aborts the active fetch so streamLoop reconnects.
-  function watchStall() {
-    if (stallHandle) return;
-    stallHandle = setInterval(() => {
-      if (stopped || streamPaused || !activeAbort) return;
-      if (lastByteMs === 0) return;
-      if (performance.now() - lastByteMs > STALL_MS) {
-        setStage('no data');
-        try { activeAbort.abort(); } catch (_) {}
+      if (paused) return;                         // user pause owns the indicator
+      if (streamPaused) { setStage('updating…'); return; }
+      if (!getIp()) { setStage('no device'); return; }
+      if (s.isConnected()) {
+        if (currentStage !== 'connected') setStage('connected');
+      } else if (currentStage !== 'reconnecting') {
+        setStage('reconnecting');
       }
-    }, STALL_CHECK_MS);
+    }, 500);
   }
 
   // --- Init / public API -----------------------------------------------
@@ -560,40 +427,27 @@
     // runtime log. Wired in ide.js, which calls into our flushPersist()
     // before invoking the exporter.
 
-    watchIp();
-    watchStall();
-    // Start the stream UNPAUSED. The slab allocator + 128 KB MEM_SIZE
-    // means concurrent handshakes (probe + telemetry + console) no
-    // longer wedge the device, so the previous "stay paused until
-    // probe succeeds" choreography is unnecessary latency. If the
-    // device is unreachable, streamLoop's existing connect-timeout +
-    // backoff handles it gracefully.
-    streamLoop();
+    attachToStream();
 
     window.Conduit = window.Conduit || {};
     window.Conduit.console = {
       clear() { consoleEl.textContent = ''; pendingBuf = ''; updatePauseState(); },
-      resetCursor() {
-        cursor = null;
-        if (activeAbort) activeAbort.abort();
-      },
-      // Wake the stream loop when an external observer (telemetry's
-      // stall watchdog, the user's Refresh button) decides this stream
-      // is stale. Without this, a half-dead TCP that's silent post-
-      // headers would sit in `await reader.read()` forever — there's
-      // no stall watchdog here because logs may legitimately be silent
-      // for minutes. Aborting forces streamLoop to retry, which either
-      // succeeds (firmware reachable) or trips its own connect timeout.
+      // No-op kept for caller compatibility — there is no cursor to
+      // reset when stream.js is the data source (it always live-tails).
+      resetCursor() {},
+      // Force a stream reconnect — used by external observers (e.g.
+      // telemetry's connectivity hooks) that want to nudge a half-dead
+      // connection back to life. Delegated to stream.js's pause+resume
+      // which cycles the WS cleanly.
       kick() {
-        if (activeAbort) {
-          try { activeAbort.abort(); } catch (_) {}
-          setState('reconnecting…', 'err');
-        }
+        const s = window.Conduit && window.Conduit.stream;
+        if (!s) return;
+        s.pause();
+        setTimeout(() => s.resume(), 10);
       },
       // Inject a browser-side note (connection events, refresh outcomes,
       // etc.) into the runtime console pane. Tagged so the user can tell
-      // it apart from device-emitted log lines, and routed through the
-      // same renderAppend path so it respects pause + scroll-to-bottom.
+      // it apart from device-emitted log lines.
       note(text, level) {
         if (!text) return;
         const tag = level === 'err'  ? '[err]'
@@ -604,45 +458,39 @@
       stop() {
         stopped = true;
         persistFlush();
-        if (activeAbort) activeAbort.abort();
-        if (streamPauseWaiter) { streamPauseWaiter(); streamPauseWaiter = null; }
-        if (ipWatchHandle) { clearInterval(ipWatchHandle); ipWatchHandle = null; }
-        if (stallHandle)   { clearInterval(stallHandle);   stallHandle   = null; }
       },
-      // External "pause the whole stream" for OTA flows. ide.js calls
-      // pauseStream() before kicking the upload so the LED flips to
-      // 'updating…' (off color) instead of staying green through the
-      // device's reboot. resumeStream() drops the cursor (the new
-      // firmware's log byte-counter starts at 0) and wakes streamLoop;
-      // the next loop iteration reconnects, runStream's setState on
-      // header receive flips the LED back to green — or, if the device
-      // never came back, the catch path in streamLoop sets red.
+      // External "pause the data flow" for OTA flows. ide.js calls
+      // pauseStream() before the upload so the WS is fully down for
+      // the duration of the OTA — keeping mbedtls focused on the
+      // upload's TLS session alone. resumeStream() reopens after the
+      // device boots the new firmware. Delegates to stream.js.
       pauseStream() {
         if (streamPaused) return;
         streamPaused = true;
-        if (activeAbort) activeAbort.abort();
         persistFlush();
+        currentRun = null;
+        lastUptimeUs = null;
+        const s = window.Conduit && window.Conduit.stream;
+        if (s) s.pause();
       },
       resumeStream() {
         if (!streamPaused) return;
         streamPaused = false;
-        cursor = null;
         currentRun = null;
         lastUptimeUs = null;
-        if (streamPauseWaiter) { streamPauseWaiter(); streamPauseWaiter = null; }
+        const s = window.Conduit && window.Conduit.stream;
+        if (s) s.resume();
       },
       setPaused,
       isPaused() { return paused; },
-      // True when the most recent setStage call moved us into 'connected'
-      // and nothing since has moved us out. Telemetry waits on this before
-      // opening its own stream so the two TLS handshakes serialize cleanly
-      // — console (text, small) lands first, then telemetry (binary frames).
-      isStreamConnected() { return streamConnected; },
-      // Register a one-shot listener that fires the next time runStream
-      // successfully opens — i.e. the next "device is reachable" signal
-      // from this transport. Returns an unsubscribe function. Used by
-      // the OTA flow to detect post-reboot reachability without a
-      // separate /api/status poll. Fires once and is removed.
+      // True when the WS stream is in the connected state. Used by
+      // telemetry.js's legacy gating contract; with stream.js as the
+      // single transport, both panes are in the same state at the
+      // same time anyway, so the value matches stream.isConnected().
+      isStreamConnected() {
+        const s = window.Conduit && window.Conduit.stream;
+        return !!(s && s.isConnected());
+      },
       onNextConnect(cb) {
         if (typeof cb !== 'function') return () => {};
         connectListeners.push(cb);
@@ -656,8 +504,6 @@
           tsToggleBtn.setAttribute('aria-pressed', showTimestamps ? 'true' : 'false');
         }
       },
-      // Used by the relocated Download flow — flush in-flight batches
-      // so the on-disk HDF5 includes the freshest console bytes.
       flushPersist() { persistFlush(); },
     };
   }

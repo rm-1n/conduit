@@ -154,6 +154,7 @@ function(conduit_define_app TARGET)
         main.c
         network.c
         http_server.c
+        ws_server.c
         ota.c
         ota_ring.c
         log_buffer.c

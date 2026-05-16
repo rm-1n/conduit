@@ -43,23 +43,15 @@
   window.Conduit.cmd.buildQuery = buildQuery;
 
   async function send(name, args) {
-    const ip = getIp();
-    if (!ip) throw new Error('no device selected');
-    const tok = getToken();
-    const url = `${window.Conduit.deviceUrlForIp(ip, '/api/cmd')}?${buildQuery(name, args)}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      mode: 'cors',
-      cache: 'no-store',
-      headers: tok ? { 'X-Auth-Token': tok } : {},
-    });
-    let body = null;
-    try { body = await res.json(); } catch (_) { body = null; }
-    if (!res.ok) {
-      const err = body && body.error ? body.error : `HTTP ${res.status}`;
-      throw new Error(err);
-    }
-    return body;
+    if (!getIp()) throw new Error('no device selected');
+    const stream = window.Conduit && window.Conduit.stream;
+    if (!stream) throw new Error('stream transport unavailable');
+    if (!stream.isConnected()) throw new Error('stream not connected — wait for the device, then retry');
+    // stream.cmd resolves with {seq, ok: true, result: ...} on success,
+    // rejects with Error(<server error>) on ok=false. The reply shape
+    // matches what the old HTTP path produced so existing call sites
+    // (safeSend / reportOK / firePreset) don't need changes.
+    return await stream.cmd(name, args);
   }
 
   // -- DOM wiring ---------------------------------------------------------
