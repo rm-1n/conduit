@@ -437,10 +437,21 @@
       return () => { disconnectListeners = disconnectListeners.filter((x) => x !== cb); };
     },
     pause() {
+      // External pause (OTA flow). Just stop new connect attempts —
+      // don't tear down the live WS. Closing the WS at the moment ide.js
+      // opens a fresh TLS for /api/upload triggers Firefox to wedge the
+      // OPTIONS preflight on connection-reuse races, showing as
+      // "CORS request did not succeed. Status code: (null)". The WS
+      // dies naturally a second later when the device reboots into
+      // the new firmware, and connectLoop picks it back up via the
+      // browser's onclose. The mbedtls slab has plenty of room for
+      // one WS + one OTA session concurrently (sized for the old
+      // four-conn design). Subscribers (console.js/telemetry.js)
+      // already ignore inbound traffic while their local
+      // streamPaused/paused flag is set, so no UI churn either.
       if (paused) return;
       paused = true;
-      console.log(TAG, 'paused (external)');
-      teardown('paused');
+      console.log(TAG, 'paused (external) — keeping WS alive for OTA-side TLS');
     },
     resume() {
       if (!paused) return;
