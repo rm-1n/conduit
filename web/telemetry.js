@@ -244,6 +244,27 @@
   //   'disconnected' (off)   — initial / stop()
   let currentStage = 'disconnected';
   let stageEnteredAt = 0;
+  // Braille spinner — mirror of console.js. Drives the animated
+  // 'connecting' indicator. Frames cycle through the standard 10
+  // braille loading glyphs. The --font-mono fallback chain (Menlo,
+  // Consolas, monospace) supplies the U+28xx coverage.
+  const SPINNER_FRAMES = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏';
+  const SPINNER_INTERVAL_MS = 80;
+  let spinnerHandle = null;
+  let spinnerIdx = 0;
+  function startSpinner() {
+    if (spinnerHandle) return;
+    spinnerIdx = 0;
+    if (stateEl) stateEl.textContent = `connecting ${SPINNER_FRAMES[0]}`;
+    spinnerHandle = setInterval(() => {
+      if (!stateEl || currentStage !== 'connecting' || paused) return;
+      spinnerIdx = (spinnerIdx + 1) % SPINNER_FRAMES.length;
+      stateEl.textContent = `connecting ${SPINNER_FRAMES[spinnerIdx]}`;
+    }, SPINNER_INTERVAL_MS);
+  }
+  function stopSpinner() {
+    if (spinnerHandle) { clearInterval(spinnerHandle); spinnerHandle = null; }
+  }
   function setStage(stage) {
     currentStage = stage;
     stageEnteredAt = performance.now();
@@ -254,6 +275,7 @@
     let text, cls;
     switch (currentStage) {
       case 'connected':    text = 'connected';    cls = 'ok';  break;
+      case 'connecting':   text = 'connecting';   cls = '';    break;
       case 'no data':      text = 'no data';      cls = 'err'; break;
       case 'reconnecting': text = 'reconnecting…'; cls = 'err'; break;
       case 'paused':       text = 'paused';       cls = '';    break;
@@ -261,7 +283,12 @@
       case 'disconnected': text = 'disconnected'; cls = '';    break;
       default:             text = currentStage;   cls = '';    break;
     }
-    stateEl.textContent = text;
+    if (currentStage === 'connecting') {
+      startSpinner();             // spinner owns textContent
+    } else {
+      stopSpinner();
+      stateEl.textContent = text;
+    }
     stateEl.setAttribute('data-state',
       cls === 'ok' ? 'ok' : cls === 'err' ? 'err' : 'off');
   }
@@ -526,6 +553,15 @@
     });
     s.onData((bytes) => {
       if (stopped || paused) return;
+      // Mirror of console.js's preliminary-log gate: drop incoming
+      // records while the WS session hasn't passed the stability
+      // gate yet. Pairs with the spinner-only 'connecting'
+      // indicator so the chart stays empty during the page-load
+      // WS-cycling window — no brief data glimpse before the steady
+      // stream lands. Any records emitted during the first ≤5 s of
+      // the eventually-stable session are dropped; the chart picks
+      // up cleanly once the green LED flips.
+      if (!s.isStable()) return;
       // stream.js strips the 1-byte channel tag before delivering; the
       // remaining bytes are exactly what /api/data?stream=1 produces
       // — a stream of 16-byte-header records (see data_buffer.h).
@@ -534,14 +570,26 @@
       if (ip) drain(ip).catch(() => {});
     });
     // Indicator state machine driven entirely by stream state.
+    // Three live stages map to the LED:
+    //   'connected'    — stream.isStreaming() — WS open AND data flowing
+    //   'no data'      — stream.isConnected() but no recent frames
+    //   'reconnecting' — WS closed or never opened yet
+    // Green ('connected') requires actively-flowing data, not just an
+    // open socket — so brief open/close cycles never deceive the user.
     setInterval(() => {
       if (stopped) return;
       if (paused) { setState('paused', ''); return; }
       if (!getIp()) { setState('no device', ''); return; }
-      if (s.isConnected()) {
+      // Binary indicator: green-'connected' only when the current
+      // session is stable AND data is flowing; otherwise spinner-
+      // 'connecting'. Collapses the old 'no data' / 'reconnecting'
+      // amber/red flicker through the WS-cycling window into a
+      // single calm spinner. (See stream.isStable() — non-sticky,
+      // so cable yank → spinner → green again on recovery.)
+      if (s.isStable() && s.isStreaming()) {
         if (currentStage !== 'connected') setStage('connected');
-      } else if (currentStage !== 'reconnecting') {
-        setStage('reconnecting');
+      } else if (currentStage !== 'connecting') {
+        setStage('connecting');
       }
     }, 500);
   }

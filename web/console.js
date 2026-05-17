@@ -138,6 +138,29 @@
   //   | 'disconnected' | 'updating…'
   let currentStage = 'disconnected';
   let stageEnteredAt = 0;
+  // Braille spinner used to animate the 'connecting' label so the
+  // user can see the IDE is actively trying to come up (vs frozen).
+  // Frames cycle through the 10 standard "loading" braille glyphs.
+  // The fallback chain in --font-mono (Menlo / Consolas / etc.) all
+  // have braille (U+28xx) coverage so the glyph renders cleanly even
+  // though Roboto Mono itself is Latin-only.
+  const SPINNER_FRAMES = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏';
+  const SPINNER_INTERVAL_MS = 80;
+  let spinnerHandle = null;
+  let spinnerIdx = 0;
+  function startSpinner() {
+    if (spinnerHandle) return;
+    spinnerIdx = 0;
+    if (stateEl) stateEl.textContent = `connecting ${SPINNER_FRAMES[0]}`;
+    spinnerHandle = setInterval(() => {
+      if (!stateEl || currentStage !== 'connecting' || paused) return;
+      spinnerIdx = (spinnerIdx + 1) % SPINNER_FRAMES.length;
+      stateEl.textContent = `connecting ${SPINNER_FRAMES[spinnerIdx]}`;
+    }, SPINNER_INTERVAL_MS);
+  }
+  function stopSpinner() {
+    if (spinnerHandle) { clearInterval(spinnerHandle); spinnerHandle = null; }
+  }
   function setStage(stage) {
     currentStage = stage;
     stageEnteredAt = performance.now();
@@ -149,6 +172,8 @@
     switch (currentStage) {
       case 'connected':
         text = 'connected'; cls = 'ok'; break;
+      case 'connecting':
+        text = 'connecting'; cls = ''; break;
       case 'no data':
         text = 'no data'; cls = 'err'; break;
       case 'reconnecting':
@@ -163,7 +188,12 @@
     lastStateCls = cls;
     if (!stateEl) return;
     if (paused) return;
-    stateEl.textContent = text;
+    if (currentStage === 'connecting') {
+      startSpinner();             // spinner owns textContent
+    } else {
+      stopSpinner();
+      stateEl.textContent = text;
+    }
     stateEl.setAttribute('data-state',
       cls === 'ok' ? 'ok' : cls === 'err' ? 'err' : 'off');
   }
@@ -358,28 +388,48 @@
 
     s.onLog((text) => {
       if (stopped || streamPaused) return;
+      // Suppress preliminary prints: drop log content while the WS
+      // session hasn't reached the stability gate yet. Pairs with
+      // the spinner-only 'connecting' indicator so the console pane
+      // stays empty during the page-load WS-cycling window instead
+      // of flashing a few lines that get cut off mid-stream. Loses
+      // any content emitted during the first ≤5 s of the
+      // eventually-stable session; acceptable trade for clean UX.
+      if (!s.isStable()) return;
       ingestChunk(text).catch(() => {});
     });
 
     s.onNextConnect(() => fireConnect());
 
     // Console pane state machine — driven entirely by stream.js now
-    // that the legacy /api/log fetch path is gone. Five stages map
-    // 1:1 to what setStage() understands:
+    // that the legacy /api/log fetch path is gone. Six stages:
     //   'paused'       — user toggle (display only)
     //   'updating…'    — OTA pause (ide.js called pauseStream)
     //   'no device'    — getIp() returns null
-    //   'connected'    — stream.isConnected() is true
-    //   'reconnecting' — otherwise (between WS attempts)
+    //   'connected'    — stream.isStreaming() — WS open AND data flowing
+    //   'no data'      — stream.isConnected() but no recent frames
+    //   'reconnecting' — WS closed or never opened yet
+    // Note: green ('connected') requires actively-flowing data, not
+    // just an open socket. A briefly-open WS that cycles before any
+    // bytes arrive (e.g. the recent watchIp false-positive close)
+    // never reaches 'connected' — the indicator stays honest.
     setInterval(() => {
       if (stopped) return;
       if (paused) return;                         // user pause owns the indicator
       if (streamPaused) { setStage('updating…'); return; }
       if (!getIp()) { setStage('no device'); return; }
-      if (s.isConnected()) {
+      // Binary indicator: green-'connected' only when the current
+      // session is stable AND data is flowing; otherwise spinner-
+      // 'connecting'. Collapses the old 'no data' / 'reconnecting'
+      // amber/red flicker through the WS-cycling window into a
+      // single calm spinner. A real outage produces a steady
+      // spinner; a real recovery produces one clean flip to green
+      // after the new session passes STABLE_MS. (See
+      // stream.isStable() — non-sticky.)
+      if (s.isStable() && s.isStreaming()) {
         if (currentStage !== 'connected') setStage('connected');
-      } else if (currentStage !== 'reconnecting') {
-        setStage('reconnecting');
+      } else if (currentStage !== 'connecting') {
+        setStage('connecting');
       }
     }, 500);
   }

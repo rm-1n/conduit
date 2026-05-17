@@ -66,13 +66,40 @@
   let stopped       = false;
   let paused        = false;
   let pauseWaiter   = null;
-  let lastByteMs    = 0;
+  let lastByteMs    = 0;       // any inbound frame (incl. STATUS, NOTICE)
+  let lastDataMs    = 0;       // LOG or DATA frame only — the "real" streaming signal
   let stallHandle   = null;
   let ipWatchHandle = null;
   let connectTimer  = null;
+  let txPingHandle  = null;
 
   let streamConnected = false;
   let lastUrl         = null;
+  // Has THIS page-load ever successfully completed a WS open? Used to
+  // silence the "closed BEFORE ready" / "socket error before ready"
+  // warn on the very first connect attempt(s). Firefox routinely fails
+  // the first WebSocket opened during document `loading` state with
+  // "The connection... was interrupted while the page was loading";
+  // the retry a second later succeeds. Logging it as warn each time
+  // pollutes the console with noise that suggests an actual problem.
+  // After the first successful open, the watchdog warns stay loud
+  // because a real disconnect is worth seeing.
+  let everConnected = false;
+  // Counts consecutive failures before everConnected flips true. Drives
+  // exponential backoff so the page-load WS-race burst doesn't spam
+  // Firefox's "interrupted while the page was loading" warning. Reset
+  // on the first successful clean session close.
+  let consecutiveEarlyFails = 0;
+  // Counts consecutive sessions that died within SHORT_SESSION_MS of
+  // becoming streamConnected. When this climbs, retries back off
+  // exponentially so we stop firehosing the device (and the console)
+  // when something's making sessions die instantly. Reset by any
+  // session that lasts longer than SHORT_SESSION_MS.
+  let consecutiveShortSessions = 0;
+  const SHORT_SESSION_MS = 5000;
+  // Timestamp of streamConnected=true; used to measure session length
+  // at teardown time and as the "stable since" clock for isStable().
+  let connectedSinceMs = 0;
 
   let nextSeq = 1;
   const pendingCmds = new Map();    // seq -> {resolve, reject, timer, label}
@@ -82,7 +109,58 @@
   // throughput visibility — useful when chasing "occasional stall"
   // reports that don't trip the watchdog.
   const stats = { logBytes: 0, dataBytes: 0, statusFrames: 0, noticeFrames: 0,
-                  cmdReplies: 0, frames: 0, sinceMs: performance.now() };
+                  cmdReplies: 0, frames: 0, sinceMs: performance.now(),
+                  // Per-message processing-time accumulators. We track
+                  // the slowest individual dispatch (max), the count of
+                  // dispatches that exceeded a "slow" threshold, and
+                  // the second-bucket where the last zero-byte second
+                  // landed — together these three numbers usually pin
+                  // down which of the dropout causes in the plan is
+                  // firing (slow dispatch = chart/log handler heavy;
+                  // zero-byte second = WS RX paused; combinations = TCP
+                  // backpressure).
+                  maxDispatchMs: 0, slowDispatchCount: 0,
+                  zeroByteSeconds: 0, lastNonzeroSecondBucket: 0 };
+
+  // 1-second-bucket arrival rate. `bucketBytes` accumulates the byte
+  // count for the current wall-clock second; whenever the second
+  // changes we check whether the just-finished second saw any traffic
+  // and warn (always-on; not gated) if it didn't AND we expected
+  // traffic (i.e. we were connected past auth). This catches the
+  // "dropout that didn't trip the 15 s watchdog" case where the
+  // browser saw, say, 4 s of zero bytes.
+  let bucketBytes = 0;
+  let bucketStartMs = performance.now();
+  const SLOW_DISPATCH_MS = 10;
+
+  // "Streaming" threshold — how recently a frame must have arrived for
+  // `isStreaming()` to return true. Firmware sends a keepalive every
+  // 500 ms when idle, so 2 s gives a 4× safety margin while still
+  // catching a stuck stream within a couple of polls of the consumer's
+  // 500 ms indicator interval.
+  const DATA_RECENT_MS = 2000;
+  // Minimum continuous-streamConnected duration before the page-load
+  // gate (`isStable`) flips true. Chosen ≥ SHORT_SESSION_MS so a
+  // session that survives the short-session backoff trigger is also
+  // the one that flips the UI to "connected".
+  const STABLE_MS = 5000;
+  function noteBytes(n) {
+    const now = performance.now();
+    if (now - bucketStartMs >= 1000) {
+      if (streamConnected && bucketBytes === 0) {
+        stats.zeroByteSeconds++;
+        // Always log this — it's a real dropout signal, not a stat dump.
+        // Firmware emits idle keepalive every 500 ms, so a zero-byte
+        // second means inbound is genuinely paused.
+        console.warn(TAG, `zero-byte second (no inbound for >1 s while connected)`);
+      } else if (bucketBytes > 0) {
+        stats.lastNonzeroSecondBucket = bucketBytes;
+      }
+      bucketBytes = 0;
+      bucketStartMs = now;
+    }
+    bucketBytes += n;
+  }
 
   const logSubs    = new Set();
   const dataSubs   = new Set();
@@ -221,32 +299,49 @@
   }
 
   function onMessage(ev) {
-    lastByteMs = performance.now();
+    const t0 = performance.now();
+    lastByteMs = t0;
     stats.frames++;
     if (typeof ev.data === 'string') {
       if (ev.data.length === 0) return;
       const ch = ev.data.charCodeAt(0);
       const body = ev.data.slice(1);
+      noteBytes(body.length + 1);
       switch (ch) {
-        case CH_LOG:    stats.logBytes += body.length; dispatchLog(body);    break;
-        case CH_CMD:    stats.cmdReplies++;            dispatchCmd(body);    break;
-        case CH_STATUS: stats.statusFrames++;          dispatchStatus(body); break;
-        case CH_NOTICE: stats.noticeFrames++;          dispatchNotice(body); break;
-        default:        /* drop unknown text channel */ break;
+        case CH_LOG:
+          stats.logBytes += body.length; lastDataMs = t0; dispatchLog(body); break;
+        case CH_CMD:
+          stats.cmdReplies++;            dispatchCmd(body); break;
+        case CH_STATUS:
+          stats.statusFrames++;          dispatchStatus(body); break;
+        case CH_NOTICE:
+          stats.noticeFrames++;          dispatchNotice(body); break;
+        default: /* drop unknown text channel */ break;
       }
     } else if (ev.data instanceof ArrayBuffer) {
       const u8 = new Uint8Array(ev.data);
       if (u8.byteLength === 0) return;
-      if (u8[0] === CH_DATA) { stats.dataBytes += u8.byteLength - 1; dispatchData(u8); }
+      noteBytes(u8.byteLength);
+      if (u8[0] === CH_DATA) {
+        stats.dataBytes += u8.byteLength - 1;
+        lastDataMs = t0;
+        dispatchData(u8);
+      }
     } else if (ev.data && ev.data.arrayBuffer) {
       ev.data.arrayBuffer().then((buf) => {
         const u8 = new Uint8Array(buf);
-        if (u8.byteLength > 0 && u8[0] === CH_DATA) {
+        if (u8.byteLength === 0) return;
+        noteBytes(u8.byteLength);
+        if (u8[0] === CH_DATA) {
           stats.dataBytes += u8.byteLength - 1;
+          lastDataMs = performance.now();
           dispatchData(u8);
         }
       });
     }
+    const dispatchMs = performance.now() - t0;
+    if (dispatchMs > stats.maxDispatchMs) stats.maxDispatchMs = dispatchMs;
+    if (dispatchMs > SLOW_DISPATCH_MS) stats.slowDispatchCount++;
   }
 
   // 30 s steady-state heartbeat. Debug-flag gated so production stays
@@ -263,12 +358,18 @@
     const rs = ws ? ws.readyState : null;
     const rsName = rs === 1 ? 'OPEN' : rs === 0 ? 'CONNECTING'
                  : rs === 2 ? 'CLOSING' : rs === 3 ? 'CLOSED' : 'none';
+    const bufAmt = ws ? ws.bufferedAmount : 0;
     console.log(TAG, `stats ${elapsed}ms: ${stats.frames}f, ${(stats.dataBytes / 1024).toFixed(1)}KB data, ` +
                      `${stats.logBytes}B log, ${stats.cmdReplies} cmd, ${stats.statusFrames} status, ` +
-                     `${stats.noticeFrames} notice, ws=${rsName}` +
-                     (quietMs != null ? `, quiet=${quietMs}ms` : ''));
+                     `${stats.noticeFrames} notice, ws=${rsName}, bufOut=${bufAmt}` +
+                     (quietMs != null ? `, quiet=${quietMs}ms` : '') +
+                     `, maxDispatch=${stats.maxDispatchMs.toFixed(1)}ms` +
+                     `, slowDispatch=${stats.slowDispatchCount}` +
+                     `, zeroSec=${stats.zeroByteSeconds}`);
     stats.frames = stats.logBytes = stats.dataBytes = 0;
     stats.cmdReplies = stats.statusFrames = stats.noticeFrames = 0;
+    stats.maxDispatchMs = 0; stats.slowDispatchCount = 0;
+    stats.zeroByteSeconds = 0;
     stats.sinceMs = now;
   }, 30000);
 
@@ -278,8 +379,22 @@
     if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
   }
 
-  function teardown(reason) {
+  function teardown(reason, opts) {
+    const isShort = !!(opts && opts.isShort);
     const wasConnected = streamConnected;
+    // Always-on warn when we tear down a previously-working long
+    // session — that's a real disconnect worth seeing ("who killed
+    // my WS?"). Demoted to debug for short-session teardowns (the
+    // unsolved page-load 2.8 s Firefox WS abort): the UI's spinner
+    // gate already hides it, and the console doesn't need a loud
+    // warn for every cycle. Never-connected teardowns stay quiet
+    // — they happen during the normal page-load retry loop.
+    if (wasConnected) {
+      if (isShort) dlog(`teardown after short session: ${reason}`);
+      else         console.warn(TAG, `teardown after connected: ${reason}`);
+    } else {
+      dlog(`teardown (never connected): ${reason}`);
+    }
     streamConnected = false;
     clearConnectTimer();
     for (const [, p] of pendingCmds) {
@@ -292,7 +407,9 @@
       try { ws.close(); } catch (_) {}
       ws = null;
     }
+    if (txPingHandle) { clearInterval(txPingHandle); txPingHandle = null; }
     lastByteMs = 0;
+    lastDataMs = 0;
     if (wasConnected) fireDisconnect();
   }
 
@@ -318,8 +435,18 @@
         statusSubs.delete(onStatusOnce);
         dlog('ready (got STATUS frame)');
         streamConnected = true;
-        lastByteMs = performance.now();
+        everConnected = true;
+        connectedSinceMs = performance.now();
+        lastByteMs = connectedSinceMs;
         clearConnectTimer();
+        // Start the browser-side TX heartbeat. See TX_PING_MS comment
+        // for why — without this, fresh WS sessions die at ~3 s on
+        // page load even when the device is happily sending keepalive.
+        if (txPingHandle) clearInterval(txPingHandle);
+        txPingHandle = setInterval(() => {
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          try { ws.send(''); } catch (_) {}
+        }, TX_PING_MS);
         fireConnect();
         resolve();
       };
@@ -337,8 +464,14 @@
       sock.onmessage = onMessage;
       sock.onerror = () => {
         // The browser fires onerror without details (per spec); the
-        // onclose right after will carry the real story.
-        if (!settled) console.warn(TAG, 'socket error before ready');
+        // onclose right after will carry the real story. The first
+        // attempt of a fresh page-load often hits "page-loading" race
+        // and the warn would just be noise; demote to dlog until we've
+        // succeeded at least once.
+        if (!settled) {
+          if (everConnected) console.warn(TAG, 'socket error before ready');
+          else dlog('socket error before ready (first attempt — likely page-load race, will retry)');
+        }
       };
       sock.onclose = (ev) => {
         if (settled) {
@@ -348,7 +481,12 @@
         }
         settled = true;
         statusSubs.delete(onStatusOnce);
-        console.warn(TAG, 'closed BEFORE ready:', ev.code, ev.reason || '');
+        if (everConnected) {
+          console.warn(TAG, 'closed BEFORE ready:', ev.code, ev.reason || '');
+        } else {
+          dlog('closed BEFORE ready (first attempt — likely page-load race, will retry):',
+               ev.code, ev.reason || '');
+        }
         reject(new Error(`closed before ready (code ${ev.code})`));
       };
 
@@ -363,20 +501,69 @@
 
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
+  // Resolves once the document is fully loaded, all CSS-declared fonts
+  // are resolved, AND a settle delay has elapsed. Firefox's WebSocket
+  // layer emits "interrupted while the page was loading" if a WS is
+  // opened while ANY sub-resource the document references is still
+  // pending — and Google Fonts via `<link rel="stylesheet">` keeps
+  // that bookkeeping active well past `window.load`. `document.fonts.ready`
+  // is a Promise that resolves when every @font-face has either loaded
+  // or failed; it's the targeted signal here. The 100 ms post-fonts
+  // settle covers any other lingering sub-resources.
+  const POST_LOAD_SETTLE_MS = 1000;
+  // How often we send an EMPTY TEXT frame from browser → device to
+  // keep the connection bidirectionally active. WebSocket.send('') is
+  // a valid zero-length frame the firmware silently drops in
+  // ws_handle_message (msg_buf_len < 1 → return). Without this the
+  // browser only RECEIVES (device keepalive every 500ms), and some
+  // browser/intermediary layer appears to drop "idle-incoming-only"
+  // WSes after ~3s during page-load. With an outgoing tick every
+  // 2s, the connection has TX activity that satisfies whatever
+  // staleness check is killing fresh sessions.
+  const TX_PING_MS = 2000;
+  function awaitPageLoad() {
+    const fontsReady = (document.fonts && document.fonts.ready)
+      ? document.fonts.ready
+      : Promise.resolve();
+    const docComplete = (document.readyState === 'complete')
+      ? Promise.resolve()
+      : new Promise((r) => window.addEventListener('load', r, { once: true }));
+    return Promise.all([docComplete, fontsReady])
+      .then(() => new Promise((r) => setTimeout(r, POST_LOAD_SETTLE_MS)));
+  }
+
   async function connectLoop() {
     dlog('connectLoop started');
+    // Hold the very first WS open until the page is fully loaded.
+    // Subsequent reconnects (after disconnect / device change) don't
+    // gate on load — by then the page is settled and we want fast
+    // recovery, not deferred reconnection.
+    await awaitPageLoad();
+    dlog('page loaded; proceeding to first connect');
     while (!stopped) {
-      // Note: `paused` is intentionally NOT checked here. pause() is a
-      // signaling flag for subscribers (console/telemetry filter data
-      // by their local paused flags), not a connection gate. Blocking
-      // reconnect during pause would mean the post-OTA WS reconnect
-      // can't fire until ide.js resumes — but by then updateFirmware
-      // has already finished polling and fastReady is useless. With
-      // this loop free to reconnect, the device's reboot kills the
-      // WS, the reconnect attempt lands on the new firmware within
-      // ~1-2 s, and fastReady fires immediately.
+      // Paused (typically by ide.js during OTA): the device is
+      // intentionally offline; don't retry, don't generate console
+      // noise. The existing WS may still be alive at pause time —
+      // we keep it open until the device's reboot kills it. Once
+      // resume() fires (ide.js after the OTA round-trip), the loop
+      // wakes and tries one fresh connect against the new firmware.
+      // fastReady no longer fires inside the OTA window — `/api/status`
+      // polling handles "device is back" in upload.js's waitForDevice
+      // — but the saved 1-3 s isn't worth the ~7 noisy retry attempts
+      // Firefox prints during the device's reboot window.
+      if (paused) {
+        await new Promise((r) => { pauseWaiter = r; });
+        pauseWaiter = null;
+        if (stopped) break;
+        continue;
+      }
       const ip = getIp();
-      if (ip !== knownIp) {
+      // A transient null from defaultGetIp() (DOM-select re-render,
+      // localStorage rehydrate, etc.) must NOT count as a device
+      // change — that would tear down a perfectly good live WS. Treat
+      // null as "no signal yet, hold current state". Only a non-null
+      // change to a different IP is a real device switch.
+      if (ip && ip !== knownIp) {
         if (knownIp) dlog('device changed:', knownIp, '→', ip);
         knownIp = ip;
         teardown('device changed');
@@ -388,19 +575,80 @@
       try {
         await openOnce(ip);
         // Wait until the socket closes (sock.onclose post-ready hits this).
-        await new Promise((resolve) => {
-          if (!ws || ws.readyState === WebSocket.CLOSED) { resolve(); return; }
+        // Capture the close `code` so teardown can surface what actually
+        // killed the WS (1000=clean, 1006=abnormal/no-close-frame, etc.).
+        // Without this the user just saw "eof" and the misleading Firefox
+        // "interrupted while page was loading" message for the next
+        // reconnect attempt — no way to tell whether the device went
+        // away, the network blipped, or mbedtls failed.
+        const closeInfo = await new Promise((resolve) => {
+          if (!ws || ws.readyState === WebSocket.CLOSED) { resolve({ code: null, reason: 'already-closed' }); return; }
           const prev = ws.onclose;
           ws.onclose = (ev) => {
             try { if (prev) prev(ev); } catch (_) {}
-            resolve();
+            resolve({ code: ev && ev.code, reason: ev && ev.reason });
           };
         });
-        teardown('eof');
-        await sleep(RECONNECT_OK_MS);
+        const codeName =
+          closeInfo.code === 1000 ? 'clean'
+          : closeInfo.code === 1001 ? 'going-away'
+          : closeInfo.code === 1006 ? 'abnormal (no close frame — TCP drop / device unreachable)'
+          : closeInfo.code === 1011 ? 'server-error'
+          : closeInfo.code == null ? closeInfo.reason
+          : `code=${closeInfo.code}`;
+        const sessionMs = connectedSinceMs > 0
+          ? Math.round(performance.now() - connectedSinceMs)
+          : 0;
+        const isShort = sessionMs > 0 && sessionMs < SHORT_SESSION_MS;
+        if (isShort) consecutiveShortSessions++; else consecutiveShortSessions = 0;
+        connectedSinceMs = 0;
+        // Pass isShort to teardown so the noisy "teardown after
+        // connected" warn drops to debug-only for chronic-cycling
+        // short sessions. Escalate back to warn once cycling
+        // persists (consecutiveShortSessions >= 3) — that's where
+        // it stops being the known wobble and becomes a real
+        // problem worth seeing.
+        const shortAndQuiet = isShort && consecutiveShortSessions < 3;
+        teardown(`eof: ${codeName} (session lasted ${sessionMs}ms)`,
+                 { isShort: shortAndQuiet });
+        consecutiveEarlyFails = 0;
+        // Short-session backoff: fast retry early (the typical case
+        // is ONE short session followed by a stable one — waiting
+        // seconds in between just delays the user's data). Escalate
+        // only if cycling persists, which means the device is really
+        // unreachable or in trouble, not the chronic 1-cycle wobble.
+        // Sequence: 250 ms, 750 ms, 2 s, 5 s, 12 s, 30 s (cap).
+        if (isShort) {
+          const SHORT_BACKOFFS_MS = [250, 750, 2000, 5000, 12000, 30000];
+          const idx = Math.min(consecutiveShortSessions - 1, SHORT_BACKOFFS_MS.length - 1);
+          const backoff = SHORT_BACKOFFS_MS[idx];
+          if (consecutiveShortSessions >= 3) {
+            console.warn(TAG, `short session #${consecutiveShortSessions} (${sessionMs}ms) — backing off ${backoff}ms — sustained cycling, device may be unreachable`);
+          } else {
+            dlog(`short session #${consecutiveShortSessions} (${sessionMs}ms) — backing off ${backoff}ms`);
+          }
+          await sleep(backoff);
+        } else {
+          await sleep(RECONNECT_OK_MS);
+        }
       } catch (e) {
         teardown(String(e && e.message || e));
-        await sleep(RECONNECT_ERR_MS);
+        // Exponential backoff for the page-load-race burst: when we
+        // haven't successfully connected yet AND attempts keep failing,
+        // each retry within Firefox's post-load settle window prints
+        // a fresh "interrupted while the page was loading" warning.
+        // Backing off 1.5 → 3 → 6 → 10 s cuts the warning count from
+        // ~5 to ~2 in the typical reload-and-recover case, without
+        // adding meaningful latency once the device is actually live
+        // (one success resets the counter to 0). Capped at 10 s so
+        // we don't wait forever if the device truly is down.
+        if (!everConnected) {
+          consecutiveEarlyFails++;
+          const backoff = Math.min(10000, RECONNECT_ERR_MS * Math.pow(2, consecutiveEarlyFails - 1));
+          await sleep(backoff);
+        } else {
+          await sleep(RECONNECT_ERR_MS);
+        }
       }
     }
     dlog('connectLoop exited');
@@ -411,7 +659,17 @@
     ipWatchHandle = setInterval(() => {
       if (stopped) return;
       const ip = getIp();
-      if (ip !== knownIp && ws) {
+      // Only close on a CHANGE to a different non-null IP. A transient
+      // null (the device-select dropdown briefly losing its value
+      // during ide.js's re-render, or hardware.js repopulating the
+      // list) used to kill the live WS — manifested as repeating
+      // connected → reconnecting → connected cycles, each carrying
+      // only a brief burst of data before the next close. The user
+      // can still explicitly clear the device (picks empty option in
+      // the dropdown); that's reflected by knownIp staying at the old
+      // value until they pick a new IP, at which point we'll re-target.
+      if (ip && ip !== knownIp && ws) {
+        console.warn(TAG, `watchIp closing WS — ip changed from ${JSON.stringify(knownIp)} to ${JSON.stringify(ip)}`);
         try { ws.close(); } catch (_) {}
       }
     }, IP_CHECK_MS);
@@ -438,10 +696,35 @@
     }, STALL_CHECK_MS);
   }
 
-  function onVisibilityWake() {
-    if (stopped || paused || !ws) return;
-    if (lastByteMs > 0 && performance.now() - lastByteMs < 1000) return;
-    try { ws.close(); } catch (_) {}
+  // Visibility/online wake check. The intent is to catch the case
+  // where the browser threw out the WS while the tab was hidden,
+  // hadn't surfaced the close yet, and we want to force-reconnect on
+  // refocus. The danger: a backgrounded tab also DEFERS WS message
+  // dispatch — lastByteMs looks stale (often 5-10 s) at the exact
+  // moment of refocus even though queued messages are about to flush.
+  // Closing immediately murders a healthy connection and triggers a
+  // reconnect cycle.
+  //
+  // Mitigations here:
+  //  1. lastByteMs === 0 → fresh WS, never closes (was a bug; would
+  //     trip on a WS that just opened before its first byte arrived).
+  //  2. After a wake event, defer the staleness check by 1.5 s so any
+  //     deferred-dispatch messages get a chance to land and tick
+  //     lastByteMs. If the connection is genuinely dead, lastByteMs
+  //     will still be stale after 1.5 s and we close. If it was just
+  //     queued-but-alive, lastByteMs gets fresh and we leave it alone.
+  let visibilityWakePending = null;
+  function scheduleVisibilityWake(source) {
+    if (visibilityWakePending) clearTimeout(visibilityWakePending);
+    visibilityWakePending = setTimeout(() => {
+      visibilityWakePending = null;
+      if (stopped || paused || !ws) return;
+      if (lastByteMs === 0) return;          // fresh WS, no frames yet
+      const age = performance.now() - lastByteMs;
+      if (age < 2000) return;                // recently saw a frame; healthy
+      console.warn(TAG, `${source} wake closing WS — lastByteMs age=${Math.round(age)}ms`);
+      try { ws.close(); } catch (_) {}
+    }, 1500);
   }
 
   // -- Init / public API -------------------------------------------
@@ -452,9 +735,9 @@
     dlog('init; ip:', getIp(), 'origin:', window.location && window.location.origin);
     watchIp();
     watchStall();
-    window.addEventListener('online', onVisibilityWake);
+    window.addEventListener('online', () => scheduleVisibilityWake('online'));
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) onVisibilityWake();
+      if (!document.hidden) scheduleVisibilityWake('visibility');
     });
     connectLoop();
   }
@@ -479,7 +762,37 @@
 
   window.Conduit = window.Conduit || {};
   window.Conduit.stream = {
+    // WS open + handshake + auth complete + initial STATUS frame
+    // received. Use for "can I send a cmd?" decisions.
     isConnected() { return streamConnected; },
+    // WS connected AND a LOG/DATA frame arrived within the last
+    // DATA_RECENT_MS. This is the right signal for the UI "green LED"
+    // indicator: STATUS and NOTICE frames don't count as "streaming"
+    // — they're just the handshake bookkeeping. Without this
+    // distinction the LED briefly painted green on every STATUS push
+    // (every reconnect, every link-change notice) even if no real
+    // telemetry / log followed. Keepalive DATA frames DO count —
+    // they're the firmware's "I'm alive" heartbeat (every ~500 ms
+    // when the data ring is otherwise idle).
+    isStreaming() {
+      return streamConnected
+          && lastDataMs > 0
+          && (performance.now() - lastDataMs) < DATA_RECENT_MS;
+    },
+    // Current-session stability. True iff the WS is connected AND
+    // the current session has held streamConnected continuously for
+    // at least STABLE_MS. Non-sticky on purpose: when the live link
+    // dies (cable yank, device reboot, page-load WS cycle) this
+    // immediately returns false, and the consumer UI returns to its
+    // 'connecting' spinner instead of flickering through the brief
+    // sessions of a reconnect cycle. A real momentary outage
+    // produces a brief spinner; the underlying transport-layer
+    // cycling never reaches the green LED at all.
+    isStable() {
+      return streamConnected
+          && connectedSinceMs > 0
+          && (performance.now() - connectedSinceMs) >= STABLE_MS;
+    },
     currentUrl()  { return lastUrl; },
     cmd,
     onLog(cb)    { if (typeof cb === 'function') logSubs.add(cb);    return () => logSubs.delete(cb); },
@@ -497,26 +810,31 @@
       return () => { disconnectListeners = disconnectListeners.filter((x) => x !== cb); };
     },
     pause() {
-      // External pause (OTA flow). Just stop new connect attempts —
-      // don't tear down the live WS. Closing the WS at the moment ide.js
-      // opens a fresh TLS for /api/upload triggers Firefox to wedge the
-      // OPTIONS preflight on connection-reuse races, showing as
-      // "CORS request did not succeed. Status code: (null)". The WS
-      // dies naturally a second later when the device reboots into
-      // the new firmware, and connectLoop picks it back up via the
-      // browser's onclose. The mbedtls slab has plenty of room for
-      // one WS + one OTA session concurrently (sized for the old
-      // four-conn design). Subscribers (console.js/telemetry.js)
-      // already ignore inbound traffic while their local
-      // streamPaused/paused flag is set, so no UI churn either.
+      // External pause (OTA flow). Keep the live WS alive (do NOT
+      // close it — closing at OTA-upload time tripped Firefox's
+      // connection-reuse on the OPTIONS preflight, showing as
+      // "CORS request did not succeed. Status code: (null)"). But
+      // ALSO stop the connectLoop from retrying once the existing
+      // WS dies during the device's reboot. Without that block, the
+      // loop hammers 4-7 retries against a down device in the ~10 s
+      // reboot window — each one prints Firefox's "Firefox can't
+      // establish a connection" + "interrupted while the page was
+      // loading" pair to the console. Cleaner UX: silence during
+      // expected offline, noisy on unexpected drops.
+      // Subscribers (console.js/telemetry.js) gate their data on
+      // their own paused flags, so no UI churn either way.
       if (paused) return;
       paused = true;
-      dlog('paused (external) — keeping WS alive for OTA-side TLS');
+      dlog('paused (external) — WS stays alive; new connect attempts suppressed');
     },
     resume() {
       if (!paused) return;
       paused = false;
       dlog('resumed');
+      // Wake the connectLoop if it was parked on pauseWaiter. It will
+      // immediately try one connect against (hopefully) the device's
+      // post-OTA firmware; the existing onNextConnect listener (set
+      // by ide.js as fastReady) fires on the first STATUS frame.
       if (pauseWaiter) { pauseWaiter(); pauseWaiter = null; }
     },
     stop() {

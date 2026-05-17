@@ -89,28 +89,42 @@ static size_t ws_build_header(uint8_t hdr[10], uint8_t opcode, uint32_t payload_
 // header for (1 + body_len) bytes total, write header+tag+body, flush.
 // Returns true on success; false if altcp_write rebuffed (e.g. ERR_MEM
 // — caller may retry later).
+//
+// CRITICAL: this used to do two separate altcp_writes (header with
+// TCP_WRITE_FLAG_MORE, then body). If the second write returned
+// ERR_MEM, the header sat queued in lwIP's segment list and got
+// silently concatenated to the next emit's header on the wire — the
+// browser's RFC 6455 parser would see corrupt framing and close the
+// conn. Now we check `altcp_sndbuf` for the FULL frame up front and
+// concatenate the header + tag + body into the shared g_out_scratch
+// before a single altcp_write call, eliminating the partial-write
+// window entirely.
 static bool ws_emit(struct altcp_pcb *pcb, uint8_t opcode,
                     uint8_t channel, const uint8_t *body, size_t body_len) {
-    uint32_t total = (uint32_t)(1 + body_len);
-    if (total > altcp_sndbuf(pcb)) {
-        // Send buffer can't hold this frame right now. The caller
-        // (ws_server_poll's drain loop) checks sndbuf availability up
-        // front, but we double-check here so we don't half-write a
-        // frame.
+    uint8_t hdr[10];
+    uint32_t payload_total = (uint32_t)(1 + body_len);
+    size_t hdr_len = ws_build_header(hdr, opcode, payload_total);
+    size_t frame_len = hdr_len + payload_total;        // hdr + tag + body
+    if (frame_len > altcp_sndbuf(pcb)) {
+        // Send buffer can't hold the full frame right now. Caller
+        // retries on the next slow-timer tick.
         return false;
     }
-    uint8_t hdr[10];
-    size_t hdr_len = ws_build_header(hdr, opcode, total);
-    uint8_t prefix[14];
-    memcpy(prefix, hdr, hdr_len);
-    prefix[hdr_len] = channel;
-    size_t prefix_len = hdr_len + 1;
-    err_t e = altcp_write(pcb, prefix, prefix_len, TCP_WRITE_FLAG_COPY | (body_len ? TCP_WRITE_FLAG_MORE : 0));
-    if (e != ERR_OK) return false;
-    if (body_len > 0) {
-        e = altcp_write(pcb, body, body_len, TCP_WRITE_FLAG_COPY);
-        if (e != ERR_OK) return false;
+    if (frame_len > sizeof(g_out_scratch)) {
+        // Frame larger than our scratch — should never happen because
+        // ws_drain_* caps payloads at WS_EGRESS_*_CAP < scratch size.
+        return false;
     }
+    // Shift body FIRST, then write the header. ws_drain_log/data
+    // populate g_out_scratch and call us with body=g_out_scratch, so
+    // src and dst overlap (dst starts hdr_len+1 bytes higher). memmove
+    // copies from the high end down for forward-overlapping ranges,
+    // which is exactly the order we need.
+    if (body_len > 0) memmove(g_out_scratch + hdr_len + 1, body, body_len);
+    memcpy(g_out_scratch, hdr, hdr_len);
+    g_out_scratch[hdr_len] = channel;
+    err_t e = altcp_write(pcb, g_out_scratch, frame_len, TCP_WRITE_FLAG_COPY);
+    if (e != ERR_OK) return false;
     altcp_output(pcb);
     return true;
 }

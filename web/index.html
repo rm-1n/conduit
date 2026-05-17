@@ -4,19 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RM1N · Conduit — Firmware IDE</title>
-<!-- Conduit fonts (Google-hosted; matches the design source's
-     self-hosted Roboto Mono / Fraunces / Material Symbols Outlined). -->
+<!-- Conduit fonts. Roboto Mono is replaced by JetBrains Mono as the
+     mono face because every Roboto Mono webfont we tried (Google
+     Fonts' variable v31, Fontsource's static v5) ships with a
+     malformed glyph that Firefox loudly warns about on every page
+     load ("empty gid 1 used as component in glyph 225 / 226"). The
+     Fontsource variant also extended page-loading time enough to
+     correlate with extra Firefox-side WS aborts during the
+     post-load WS-open window. JetBrains Mono is also a single-file
+     CSS over the existing fonts.googleapis preconnect — fewer
+     concurrent font fetches during page load. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&family=Fraunces:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,100..400,0,0&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Fraunces:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,100..400,0,0&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.min.css">
-<link rel="stylesheet" href="style.css?v=143">
+<link rel="stylesheet" href="style.css?v=144">
 <!-- Conduit design system — loaded AFTER style.css so Conduit's
      :root token overrides win without touching the legacy IDE rules.
      conduit-tokens.css aliases the existing var names (--text→--ink etc)
      so everything keeps working. conduit-chrome.css adds the new
      site-level topbar + Control view layout. -->
-<link rel="stylesheet" href="conduit-tokens.css?v=121">
+<link rel="stylesheet" href="conduit-tokens.css?v=122">
 <link rel="stylesheet" href="conduit-chrome.css?v=147">
 </head>
 <body>
@@ -696,18 +704,18 @@
      telemetry, cmd, and status. Must load AFTER app.js (uses
      deviceUrlForIp) but BEFORE the per-pane consumers (console.js,
      telemetry.js, commands.js) so they can subscribe at init time. -->
-<script src="stream.js?v=7"></script>
+<script src="stream.js?v=24"></script>
 <script src="hardware.js?v=4"></script>
-<script src="ide.js?v=168"></script>
+<script src="ide.js?v=169"></script>
 <script src="log_store.js?v=121"></script>
 <script src="log_export.js?v=121"></script>
-<script src="console.js?v=135"></script>
-<script src="chart.js?v=144"></script>
+<script src="console.js?v=139"></script>
+<script src="chart.js?v=149"></script>
 <!-- data_store.js: in-memory time-series store. Loaded before
      telemetry.js so the append target exists by the time the first
      record arrives. -->
 <script src="data_store.js?v=121"></script>
-<script src="telemetry.js?v=148"></script>
+<script src="telemetry.js?v=153"></script>
 <!-- health.js was a periodic /api/status probe driving the device LED
      independently of the telemetry stream. Disabled: each extra HTTPS
      probe competes with the OTA upload's mbedtls cycles, and the

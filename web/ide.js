@@ -811,6 +811,22 @@ void conduit_loop(void) {
     document.getElementById('ide-btn-build').addEventListener('click', onBuild);
     document.getElementById('ide-btn-build-upload').addEventListener('click', onBuildUpload);
 
+    // Wait until the WS stream is both stability-gated AND actively
+    // streaming, or `timeoutMs` elapses. Used by reconnect() to hold
+    // the "Reconnected" banner until the green LED would flip — the
+    // probe alone is just HTTPS reachability and isn't enough to
+    // claim the user is back online.
+    async function awaitStableStream(timeoutMs) {
+      const s = window.Conduit && window.Conduit.stream;
+      if (!s || typeof s.isStable !== 'function') return true; // no gate; assume ok
+      const start = performance.now();
+      while (performance.now() - start < timeoutMs) {
+        if (s.isStable() && s.isStreaming && s.isStreaming()) return true;
+        await new Promise(r => setTimeout(r, 200));
+      }
+      return false;
+    }
+
     // Reconnect — re-probes the bound IP and force-restarts the
     // telemetry / runtime-console streams. Auto-fires once on UI start
     // to recover from a stale dropdown selection pointing at a device
@@ -842,7 +858,20 @@ void conduit_loop(void) {
           connStatus(`no response from ${ip}`, 'err');
           return;
         }
-        connStatus(`Reconnected (v${result.version}, ${result.partition})`, 'ok');
+        // Probe succeeded (HTTPS reachable) but that's not the same
+        // as "user-facing reconnected" — the WS stream still has to
+        // pass its stability gate (≥5 s streamConnected + streaming)
+        // before the green LED flips. Wait for that signal so the
+        // banner doesn't claim success ahead of the LED. If the
+        // stream doesn't stabilize within the window (chronic
+        // page-load cycling, or device went away again), report
+        // probed-but-not-streaming so the banner stays honest.
+        const stable = await awaitStableStream(15000);
+        if (stable) {
+          connStatus(`Reconnected (v${result.version}, ${result.partition})`, 'ok');
+        } else {
+          connStatus(`stream still establishing (v${result.version}, ${result.partition})`, '');
+        }
       } catch (e) {
         connStatus(`reconnect error: ${e.message || e}`, 'err');
         return;

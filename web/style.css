@@ -54,9 +54,9 @@
 html, body { height: 100%; }
 
 body {
-  /* Roboto Mono everywhere — the design system has a single typeface
-     across nav, body, code, data, labels, and buttons. Form controls
-     and pre/code blocks below `font-family: inherit` from this root. */
+  /* Single mono typeface everywhere — JetBrains Mono — across nav,
+     body, code, data, labels, and buttons. Form controls and pre/
+     code blocks below `font-family: inherit` from this root. */
   font-family: var(--font-mono);
   background: var(--bg);
   color: var(--text);

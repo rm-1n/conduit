@@ -37,6 +37,12 @@
 
   const SETDATA_MIN_MS    = 33;          // throttle uPlot.setData → ~30 fps
   const DEFAULT_WINDOW_S  = 10;
+  // Hard cap on the visible / scrolled-back window. The chart still
+  // collects everything in dataStore, but the UI never asks the
+  // decimator to digest more than 1 hour at once — that keeps every
+  // wheel/drag interaction in the steady-state perf envelope even
+  // after a long streaming session.
+  const MAX_WINDOW_S      = 3600;
   const GAP_THRESHOLD_S   = 0.5;
   // Reserved height inside .chart-wrap for uPlot's legend (which sits
   // BELOW the canvas and isn't part of uPlot's `height` opt). Sized to
@@ -390,10 +396,12 @@
       this.windowSel.className = 'cmd-select';
       this.windowSel.title = 'Time window';
       this._windowPresets = [[10000, '10 s'], [30000, '30 s'],
-                             [60000, '60 s'], [300000, '5 min']];
+                             [60000, '60 s'], [300000, '5 min'],
+                             [900000, '15 min'], [3600000, '1 h']];
       this._refreshWindowOptions();
       this.windowSel.addEventListener('change', () => {
-        this.windowS = (Number(this.windowSel.value) || 10000) / 1000;
+        this.windowS = Math.min(MAX_WINDOW_S,
+                                (Number(this.windowSel.value) || 10000) / 1000);
         this.userZoomed = false;
         this._syncToUplot();
         this._applyXScale();
@@ -524,13 +532,13 @@
       // element exists. Declared here so destroy() can disconnect it.
       this.legendRO = null;
 
-      // Double-click resets the visible window to the largest preset
-      // (5 min) — the single discoverable affordance for "show me
-      // everything I've recorded" after a series of zoom-ins. In paused
-      // mode this also clears the frozen-view bounds so the next render
-      // shows the full pre-pause range.
+      // Double-click resets the visible window to MAX_WINDOW_S — the
+      // single discoverable affordance for "show me everything I've
+      // recorded" after a series of zoom-ins. In paused mode this also
+      // clears the frozen-view bounds so the next render shows the
+      // widest allowed range of the snapshot.
       this.mount.addEventListener('dblclick', () => {
-        this.windowS = 300;
+        this.windowS = MAX_WINDOW_S;
         if (this.paused) {
           // Anchor the unzoomed view at pauseAtMs so we stay frozen but
           // see a wider range of the snapshot.
@@ -586,11 +594,17 @@
               const c = (newMin + newMax) / 2;
               newMin = c - 0.0005; newMax = c + 0.0005;
             }
+            // Cap zoom-out at MAX_WINDOW_S, keeping the cursor anchor.
+            if (newMax - newMin > MAX_WINDOW_S) {
+              const half = MAX_WINDOW_S / 2;
+              newMin = cursorVal - half;
+              newMax = cursorVal + half;
+            }
             this.frozenMin = newMin;
             this.frozenMax = newMax;
             this.windowS  = newMax - newMin;
           } else {
-            this.windowS = Math.max(0.1, this.windowS * factor);
+            this.windowS = Math.max(0.1, Math.min(MAX_WINDOW_S, this.windowS * factor));
           }
         }
         this._refreshWindowOptions();
@@ -772,12 +786,19 @@
             u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false);
 
             if (hadX) {
-              this.windowS = Math.max(0.1, xb - xa);
+              this.windowS = Math.max(0.1, Math.min(MAX_WINDOW_S, xb - xa));
               if (this.paused) {
                 // Paused → respect the SELECTED RANGE (xa..xb), not
                 // just its width. The frozen view shifts to whatever
                 // sub-region the user dragged over, letting them
-                // inspect arbitrary parts of the snapshot.
+                // inspect arbitrary parts of the snapshot. Clamp the
+                // range width to MAX_WINDOW_S, keeping the selection
+                // centered so the user's anchor stays visible.
+                if (xb - xa > MAX_WINDOW_S) {
+                  const center = (xa + xb) / 2;
+                  xa = center - MAX_WINDOW_S / 2;
+                  xb = center + MAX_WINDOW_S / 2;
+                }
                 this.frozenMin = xa;
                 this.frozenMax = xb;
               }
@@ -834,7 +855,7 @@
               // Must match the .uplot CSS font (style.css) — uPlot
               // renders tick labels with that font, so measuring with
               // a different one mis-sizes the y-axis gutter.
-              ctx.font = '12px "Roboto Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+              ctx.font = '12px "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
               let max = 0;
               for (const v of values) {
                 const w = ctx.measureText(String(v)).width;
@@ -1185,6 +1206,30 @@
     // GAP_THRESHOLD_S apart.
     _buildRenderData() {
       const ds = window.Conduit && window.Conduit.dataStore;
+      const t0 = performance.now();
+      // Wrap the actual builder so we can time it without leaking the
+      // measurement into every early-return path below.
+      const out = this._buildRenderDataInner(ds);
+      const dt = performance.now() - t0;
+      // 16 ms = one 60 fps frame budget. Anything past that means the
+      // chart is the main-thread offender that's blocking the WS RX
+      // queue (plan cause #2). Rate-limit the warning to once per
+      // second per chart so a sustained slow window doesn't flood.
+      if (dt > 16) {
+        const now = performance.now();
+        if (!this._lastBuildWarnMs || now - this._lastBuildWarnMs > 1000) {
+          this._lastBuildWarnMs = now;
+          const stats = (ds && ds.stats) ? ds.stats() : null;
+          console.warn('[chart]',
+            `_buildRenderData ${dt.toFixed(1)}ms, windowS=${this.windowS}, ` +
+            `channels=${this.knownChannels.size}` +
+            (stats ? `, store=${stats.samples} samples` : ''));
+        }
+      }
+      return out;
+    }
+
+    _buildRenderDataInner(ds) {
       if (!ds || this.knownChannels.size === 0) {
         // Empty placeholder — uPlot needs at least one column.
         const labels = this._seriesLabels();
@@ -1218,35 +1263,65 @@
         winMinMs = lastTms - this.windowS * 1000;
         winMaxMs = lastTms + 1;
       }
+      // Belt-and-suspenders cap: even if windowS slipped past the
+      // cap (e.g. via a stale persisted layout that pre-dates
+      // MAX_WINDOW_S), the slice is bounded to the rightmost
+      // MAX_WINDOW_S * 1000 ms. Keeps the decimator's worst case
+      // inside the perf envelope regardless of input shape.
+      const maxBackMs = MAX_WINDOW_S * 1000;
+      if (winMaxMs - winMinMs > maxBackMs) {
+        winMinMs = winMaxMs - maxBackMs;
+      }
       if (this.clearedSinceMs != null && this.clearedSinceMs > winMinMs) {
         winMinMs = this.clearedSinceMs;
       }
 
       // Slice each registered channel. Vector channels expand to one
-      // entry per component; for the common single-channel-per-plot case
+      // entry per component. For the common single-channel-per-plot case
       // (where every entry shares the same wallMs array — they all came
       // from the same dataStore.slice), we fall through to a fast path
       // that skips the union-merge.
+      //
+      // PRE-DECIMATION: when a series's raw slice exceeds ~2× pxWidth,
+      // we decimate it INDEPENDENTLY here to canvas resolution before
+      // any cross-series merging. This is the critical perf win for
+      // multi-channel plots over big windows: mergeTimelines is O(total
+      // samples across all series), and for two series of 2.5 M samples
+      // each the merge alone ran ~50 ms per frame. After pre-decimation
+      // each series is ~2 k points, the merge becomes trivial, and the
+      // final decimateForCanvas degenerates into its early-return path.
+      const pxWidth = (this.mount && this.mount.clientWidth) || 600;
+      const decimateThreshold = pxWidth * 2;
       const sliced = []; // [{ wallMs, values }]
       for (const [name, meta] of this.knownChannels) {
         const slice = ds.slice(name, { fromWallMs: winMinMs, toWallMs: winMaxMs });
         if (slice.count === 0) {
-          // Push empty entries so the column count still matches the
-          // legend. uPlot tolerates empty arrays.
           if (meta.n === 1) sliced.push({ wallMs: null, values: null });
           else for (let k = 0; k < meta.n; k++) sliced.push({ wallMs: null, values: null });
           continue;
         }
+        // Each per-component series gets its own optional pre-decimation
+        // pass. Decimation operates on (wallMs, valuesView) pairs.
         if (meta.n === 1) {
-          sliced.push({ wallMs: slice.wallMs, values: slice.values });
+          if (slice.count > decimateThreshold) {
+            const dec = decimateSeries(slice.wallMs, slice.values, 1, 0, pxWidth);
+            sliced.push(dec);
+          } else {
+            sliced.push({ wallMs: slice.wallMs, values: slice.values });
+          }
         } else {
           for (let k = 0; k < meta.n; k++) {
-            // Strided view of the kth component. Float64 destination is
-            // safe for any source dtype — uPlot wants Numbers anyway.
-            const sub = new Float64Array(slice.count);
-            const src = slice.values;
-            for (let i = 0; i < slice.count; i++) sub[i] = src[i * meta.n + k];
-            sliced.push({ wallMs: slice.wallMs, values: sub });
+            if (slice.count > decimateThreshold) {
+              const dec = decimateSeries(slice.wallMs, slice.values, meta.n, k, pxWidth);
+              sliced.push(dec);
+            } else {
+              // Strided view of the kth component. Float64 destination is
+              // safe for any source dtype — uPlot wants Numbers anyway.
+              const sub = new Float64Array(slice.count);
+              const src = slice.values;
+              for (let i = 0; i < slice.count; i++) sub[i] = src[i * meta.n + k];
+              sliced.push({ wallMs: slice.wallMs, values: sub });
+            }
           }
         }
       }
@@ -1282,18 +1357,35 @@
       const n = xMs.length;
       if (n === 0) return [[], ...yArrays.map(() => [])];
 
-      // Convert ms → seconds (uPlot expects seconds on time scales).
-      // We don't inject null breakpoints for wallMs gaps here — that
-      // tripped up the decimator (every bucket containing a leading-
-      // edge sparse-fill null got flagged as a gap, blanking the
-      // chart). Real network/OTA gaps are typically followed by a
+      // Decimate FIRST, in millisecond timestamps. The decimator only
+      // touches indices, so passing ms vs sec doesn't change its work.
+      // Then convert the small decimated x-output (≈2× canvas width,
+      // typically <2000 values) from ms to seconds. Doing it the other
+      // way around forces an N-element Float64Array allocation + N
+      // divisions every frame — fine for the small steady-state slice,
+      // but ruinous for >1 M-point windows where the conversion alone
+      // takes 30-50 ms and laggies the wheel scroll. uPlot expects
+      // seconds on time scales; we honor that contract at decimator
+      // output instead of input.
+      //
+      // We also don't inject null breakpoints for wallMs gaps here —
+      // that tripped up the decimator (every bucket containing a
+      // leading-edge sparse-fill null got flagged as a gap, blanking
+      // the chart). Real network/OTA gaps are typically followed by a
       // chart.reset() anyway; if we want explicit gap rendering later,
       // wire uPlot's per-series `gaps` callback instead.
-      const xSec = new Float64Array(n);
-      for (let i = 0; i < n; i++) xSec[i] = xMs[i] / 1000;
-
-      return decimateForCanvas([xSec, ...yArrays],
-                               (this.mount && this.mount.clientWidth) || 600);
+      // Post-merge safety-net decimation. After pre-decimation each
+      // input series is ≤2× pxWidth, and the merge of k such series is
+      // ≤2× pxWidth × k. That's already small enough for uPlot, but
+      // running decimateForCanvas again keeps the wire-format identical
+      // to the legacy path and handles the corner case where a series
+      // wasn't pre-decimated (count below threshold).
+      const decimated = decimateForCanvas([xMs, ...yArrays], pxWidth);
+      const xDec = decimated[0];
+      const xLen = xDec.length;
+      const xSec = new Float64Array(xLen);
+      for (let i = 0; i < xLen; i++) xSec[i] = xDec[i] / 1000;
+      return [xSec, ...decimated.slice(1)];
     }
   }
 
@@ -1355,6 +1447,54 @@
     return {
       xMs: w === total ? xMs : xMs.slice(0, w),
       yArrays: yArrays.map((arr) => w === total ? arr : arr.slice(0, w)),
+    };
+  }
+
+  // Per-series pre-decimation. Operates on (wallMs, valuesView) for ONE
+  // series and returns a small {wallMs, values} pair containing only
+  // bucket-extreme samples (min + max per bucket). For vector channels
+  // the caller passes `stride > 1` and `componentOffset` to strip out
+  // the kth component while decimating in-place — no intermediate
+  // Float64Array allocation for the full component vector.
+  //
+  // The output preserves bucket min/max samples in time order, so the
+  // polyline still renders the peaks and troughs the user can see at
+  // canvas resolution. Compared to running decimateForCanvas on the
+  // post-merge union, this scales with O(slice.count) per series
+  // instead of O(slice.count × series_count), and produces tiny inputs
+  // for the downstream mergeTimelines pass.
+  function decimateSeries(wallMs, values, stride, componentOffset, pxWidth) {
+    const n = wallMs.length;
+    const numBuckets = pxWidth;
+    const bucketWidth = n / numBuckets;
+    // Max 2 emitted points per bucket (min + max); pre-size with that.
+    const xOut = new Float64Array(numBuckets * 2);
+    const yOut = new Float64Array(numBuckets * 2);
+    let w = 0;
+    for (let b = 0; b < numBuckets; b++) {
+      const a = Math.floor(b * bucketWidth);
+      const z = Math.min(Math.floor((b + 1) * bucketWidth), n);
+      let mn = Infinity, mx = -Infinity, iMn = -1, iMx = -1;
+      for (let i = a; i < z; i++) {
+        // Vector channels are flat-packed [comp0, comp1, ..., compN, comp0, comp1, ...].
+        const v = values[i * stride + componentOffset];
+        if (v < mn) { mn = v; iMn = i; }
+        if (v > mx) { mx = v; iMx = i; }
+      }
+      if (iMn === -1) continue;     // empty bucket; skip entirely
+      if (iMn === iMx) {
+        xOut[w] = wallMs[iMn]; yOut[w] = values[iMn * stride + componentOffset]; w++;
+      } else if (iMn < iMx) {
+        xOut[w] = wallMs[iMn]; yOut[w] = values[iMn * stride + componentOffset]; w++;
+        xOut[w] = wallMs[iMx]; yOut[w] = values[iMx * stride + componentOffset]; w++;
+      } else {
+        xOut[w] = wallMs[iMx]; yOut[w] = values[iMx * stride + componentOffset]; w++;
+        xOut[w] = wallMs[iMn]; yOut[w] = values[iMn * stride + componentOffset]; w++;
+      }
+    }
+    return {
+      wallMs: xOut.subarray(0, w),
+      values: yOut.subarray(0, w),
     };
   }
 
