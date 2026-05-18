@@ -312,9 +312,21 @@
     else pending.reject(new Error(obj.error || 'cmd failed'));
   }
 
+  // Latest STATUS object pushed by the device on auth (and on any
+  // status_dirty event). Cached so upload.js's precheck can use the
+  // already-received status instead of paying a cold ~3–9 s HTTPS
+  // handshake just to ask `/api/status` for fields it already has on
+  // the wire. The relevant precheck fields (partition, ota_in_progress)
+  // change only on reboot / OTA — both of which trigger a fresh STATUS
+  // push — so staleness within a session is bounded.
+  let lastStatusObj   = null;
+  let lastStatusAtMs  = 0;
+
   function dispatchStatus(jsonText) {
     let obj;
     try { obj = JSON.parse(jsonText); } catch (_) { return; }
+    lastStatusObj  = obj;
+    lastStatusAtMs = performance.now();
     for (const cb of statusSubs) { try { cb(obj); } catch (_) {} }
   }
 
@@ -896,6 +908,18 @@
     // (~15 ms typical against a LAN device).
     lastTimings() { return { ...lastTimings }; },
     timingsHistory() { return timingsHistory.slice(); },
+    // Latest STATUS frame the device pushed over the WS. Returns null
+    // if no STATUS has landed yet this page-load. The returned object
+    // is the same shape `fetch('/api/status')` produces — use it to
+    // avoid the cold-TLS-handshake cost of a separate HTTPS GET when
+    // the WS already has the data you'd be asking for.
+    lastStatus() { return lastStatusObj ? { ...lastStatusObj } : null; },
+    // Age in ms since the last STATUS frame was received (Infinity if
+    // none yet). Useful for callers that want a "recent" status only.
+    lastStatusAgeMs() {
+      return lastStatusObj == null ? Infinity
+                                   : (performance.now() - lastStatusAtMs);
+    },
     // Test-only: returns the underlying live WebSocket so a harness can
     // ws.close() it to drive a reconnect cycle (matches the protocol-level
     // close ws-probe sends at the end of each cycle). Not for app code —
