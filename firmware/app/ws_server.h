@@ -130,6 +130,21 @@ typedef struct {
 void ws_server_on_open(struct altcp_pcb *pcb, ws_state_t *s,
                        uint8_t *rx_buf, size_t rx_buf_size);
 
+// Same as ws_server_on_open but prepends `prefix_len` raw bytes (the
+// HTTP 101 response) into the same altcp_write that carries the
+// initial WS NOTICE frame. The 101 + NOTICE coalescing closes a TLS
+// frame-corruption window: under altcp_tls_mbedtls, two back-to-back
+// app-layer writes intermittently misframe the resulting TLS records
+// (the browser / ws-probe sees non-zero RSV bits in the first WS
+// frame ~40% of the time on fresh handshakes). Coalescing the two
+// app-layer writes into one guarantees a single TLS record is
+// produced and eliminates the corruption window. Caller is
+// http_server.c::handle_ws_upgrade and is the ONE place that should
+// touch this entry point; everyone else should use ws_server_on_open.
+void ws_server_on_open_with_prefix(struct altcp_pcb *pcb, ws_state_t *s,
+                                   uint8_t *rx_buf, size_t rx_buf_size,
+                                   const uint8_t *prefix, size_t prefix_len);
+
 // Inbound bytes from lwIP. Drives the decoder; dispatches complete
 // messages. Returns false if the connection should be closed (protocol
 // error, oversize message, close frame received) — caller should

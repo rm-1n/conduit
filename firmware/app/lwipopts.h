@@ -177,4 +177,12 @@
 #define LWIP_ALTCP_TLS                  1
 #define LWIP_ALTCP_TLS_MBEDTLS          1
 
+// TLS session tickets (RFC 5077). Browser/CLI presents the ticket from
+// a previous handshake; mbedtls validates it and skips the expensive
+// ECDHE+ECDSA path — abbreviated handshake completes in well under
+// 200 ms vs the ~2.8 s cold handshake. See mbedtls_config.h for the
+// matching MBEDTLS_SSL_SESSION_TICKETS / MBEDTLS_SSL_TICKET_C flags
+// the altcp glue tests for at compile time.
+#define ALTCP_MBEDTLS_USE_SESSION_TICKETS  1
+
 #endif /* __LWIPOPTS_H__ */

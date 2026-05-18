@@ -7,10 +7,12 @@
 #include <string.h>
 
 #include "lwip/mem.h"
+#include "pico/time.h"
 
 // Pull in our project mbedtls config so MBEDTLS_SSL_*_CONTENT_LEN
 // resolve to the same values mbedtls itself sees.
 #include "mbedtls/build_info.h"
+#include "mbedtls/platform_time.h"
 
 // mbedtls 3.x's IN/OUT buffer length is
 //   HEADER_LEN(13) + PAYLOAD_OVERHEAD + IN_CONTENT_LEN
@@ -129,4 +131,23 @@ void conduit_mbedtls_free(void *ptr) {
 
 void conduit_mbedtls_slab_stats(conduit_mbedtls_slab_stats_t *out) {
     if (out) *out = stats;
+}
+
+// MBEDTLS_PLATFORM_MS_TIME_ALT — provide the monotonic-millisecond clock
+// mbedtls 3.x's session-ticket code (and TLS 1.3 paths) require. We've
+// had this flag set since the initial mbedtls bring-up but nothing
+// actually emitted it; that worked only as long as no built-in code
+// referenced mbedtls_ms_time(). Turning on MBEDTLS_SSL_SESSION_TICKETS
+// drags ssl_ticket.c into the build, which calls this on every ticket
+// validate. Without an implementation, the link fails with `undefined
+// reference to mbedtls_ms_time`.
+//
+// `time_us_64()` is the SDK's monotonic-since-boot microsecond clock
+// (uses the hardware timer; never wraps in practice on a 64-bit
+// counter at 1 MHz). Dividing by 1000 gives us the ms granularity
+// mbedtls expects. mbedtls only compares values (ticket_age vs
+// ticket_lifetime), so absolute wall-clock isn't required — monotonic
+// since boot is fine and even preferable (no NTP dependency).
+mbedtls_ms_time_t mbedtls_ms_time(void) {
+    return (mbedtls_ms_time_t)(time_us_64() / 1000);
 }

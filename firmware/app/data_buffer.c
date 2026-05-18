@@ -15,6 +15,28 @@ static volatile uint32_t g_total = 0;
 static spin_lock_t *g_lock;
 static bool     g_inited = false;
 
+// Ring-overrun diagnostics. Both counters increment ONLY inside the
+// drop-oldest clamp in data_buffer_read; they record the cases where
+// the producer wrote so far ahead of the consumer that some bytes
+// got overwritten before the consumer could send them.
+//
+//   g_evictions_total       — how many read() calls hit the clamp.
+//                             Each one corresponds to ≥1 "gap" the
+//                             browser observes in uptime_us.
+//   g_evicted_bytes_total   — cumulative bytes silently dropped
+//                             across all clamp events. Divide by
+//                             ~20 (typical record size) for an
+//                             approximate record count.
+//
+// Surfaced via /api/status (see firmware/app/http_server.c) so a
+// long recording's HDF5 export can be cross-referenced: if the
+// counter matches the gap count, the gaps are consumer-stall driven
+// (browser fell behind, ring overflowed). If 0 and gaps exist, the
+// device emit loop itself paused — look at user code or core-1
+// scheduling.
+static volatile uint32_t g_evictions_total     = 0;
+static volatile uint32_t g_evicted_bytes_total = 0;
+
 static char     g_names[CONDUIT_DATA_MAX_NAMES][CONDUIT_DATA_NAME_MAX];
 
 // Per-session "already warned about this name" set. Bounded so a tight
@@ -188,6 +210,16 @@ size_t data_buffer_read(uint32_t since, uint8_t *out, size_t max,
         return 0;
     }
     if (behind > DATA_BUFFER_SIZE) {
+        // Producer wrote `behind - DATA_BUFFER_SIZE` bytes that the
+        // consumer never got — they were overwritten in the ring
+        // before the read() call arrived. Record the size of the
+        // gap and the event count so /api/status can surface what
+        // would otherwise be a silent drop. The increments happen
+        // under the spin lock (we're still holding it from line
+        // above), so the volatile reads from accessor functions
+        // see consistent values.
+        g_evicted_bytes_total += (behind - DATA_BUFFER_SIZE);
+        g_evictions_total++;
         since = total - DATA_BUFFER_SIZE;
         behind = DATA_BUFFER_SIZE;
     }
@@ -203,6 +235,14 @@ size_t data_buffer_read(uint32_t since, uint8_t *out, size_t max,
 
 uint32_t data_buffer_total_written(void) {
     return g_total;
+}
+
+uint32_t data_buffer_evictions_total(void) {
+    return g_evictions_total;
+}
+
+uint32_t data_buffer_evicted_bytes_total(void) {
+    return g_evicted_bytes_total;
 }
 
 size_t data_buffer_schema_json(char *out, size_t max) {

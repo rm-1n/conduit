@@ -731,11 +731,61 @@ body {
   transform: scale(1.07);
 }
 
-/* Telemetry pane toggle now lives in the IDE-internal toolbar with
-   the device picker / Add / Scan controls. `margin-left: auto`
-   pushes it to the far right of that toolbar so it stays visually
-   anchored to the pane it controls. */
-#ide-toggle-telemetry { margin-left: auto; }
+/* ---------- IDE-only topbar controls ----------
+   The device picker and the telemetry-pane toggle live in the global
+   topbar but only make sense in the IDE view. Hide them on
+   Hardware Manager / Account so the topbar reads as just brand + nav
+   + theme + search + account on those views. setView() in index.html
+   sets html[data-view="…"]. */
+html:not([data-view="ide"]) .topbar__ide-only { display: none; }
+
+/* Device picker on the black topbar — restyle the trigger so it
+   reads as a quiet, framed control on the chrome band (not a pale
+   surface pill borrowed from the IDE's interior palette). The popup
+   menu underneath is left on the page tokens so it pops as a
+   normal surface dropdown.
+
+   Override is scoped to `.topbar .device-picker` so the same widget
+   continues to render correctly if it's ever placed elsewhere. */
+.topbar .device-picker { font-family: var(--font-mono); }
+.topbar .device-picker__trigger {
+  background: transparent;
+  color: #FFF;
+  border: 1px solid #38383A;
+  border-radius: 0;
+  padding: 4px 10px;
+  height: 28px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.topbar .device-picker__trigger:hover {
+  background: #1C1C1E;
+  border-color: #38383A;
+}
+.topbar .device-picker__trigger:focus,
+.topbar .device-picker__trigger[aria-expanded="true"] {
+  background: #1C1C1E;
+  border-color: #FFF;
+  box-shadow: none;
+  outline: none;
+}
+.topbar .device-picker__label { color: #FFF; }
+.topbar .device-picker__caret { color: #8E8E93; }
+/* LED keeps its colored fill, but the resting "off" tone needs to be
+   visible against #000 — switch it from the page's --text3 (which is
+   near-invisible on black) to the chrome's mid-gray. */
+.topbar .device-picker__led[data-state="off"] { background: #8E8E93; }
+
+/* Telemetry-pane toggle in the topbar: keep the bordered iconbtn
+   chrome the search/account neighbours already share. Cancel the
+   active accent treatment from style.css so the pressed state stays
+   monochrome on the black band (the glyph already conveys it). */
+.topbar #ide-toggle-telemetry { margin-left: 4px; }
+.topbar #ide-toggle-telemetry[aria-pressed="true"] {
+  background: #1C1C1E;
+  color: #FFF;
+  border-color: #38383A;
+}
 
 /* ---------- IDE pane re-skin ----------
    The existing #ide-* DOM stays the same; we sharpen the chrome:

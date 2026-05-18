@@ -89,28 +89,42 @@ static size_t ws_build_header(uint8_t hdr[10], uint8_t opcode, uint32_t payload_
 // header for (1 + body_len) bytes total, write header+tag+body, flush.
 // Returns true on success; false if altcp_write rebuffed (e.g. ERR_MEM
 // — caller may retry later).
+//
+// CRITICAL: this used to do two separate altcp_writes (header with
+// TCP_WRITE_FLAG_MORE, then body). If the second write returned
+// ERR_MEM, the header sat queued in lwIP's segment list and got
+// silently concatenated to the next emit's header on the wire — the
+// browser's RFC 6455 parser would see corrupt framing and close the
+// conn. Now we check `altcp_sndbuf` for the FULL frame up front and
+// concatenate the header + tag + body into the shared g_out_scratch
+// before a single altcp_write call, eliminating the partial-write
+// window entirely.
 static bool ws_emit(struct altcp_pcb *pcb, uint8_t opcode,
                     uint8_t channel, const uint8_t *body, size_t body_len) {
-    uint32_t total = (uint32_t)(1 + body_len);
-    if (total > altcp_sndbuf(pcb)) {
-        // Send buffer can't hold this frame right now. The caller
-        // (ws_server_poll's drain loop) checks sndbuf availability up
-        // front, but we double-check here so we don't half-write a
-        // frame.
+    uint8_t hdr[10];
+    uint32_t payload_total = (uint32_t)(1 + body_len);
+    size_t hdr_len = ws_build_header(hdr, opcode, payload_total);
+    size_t frame_len = hdr_len + payload_total;        // hdr + tag + body
+    if (frame_len > altcp_sndbuf(pcb)) {
+        // Send buffer can't hold the full frame right now. Caller
+        // retries on the next slow-timer tick.
         return false;
     }
-    uint8_t hdr[10];
-    size_t hdr_len = ws_build_header(hdr, opcode, total);
-    uint8_t prefix[14];
-    memcpy(prefix, hdr, hdr_len);
-    prefix[hdr_len] = channel;
-    size_t prefix_len = hdr_len + 1;
-    err_t e = altcp_write(pcb, prefix, prefix_len, TCP_WRITE_FLAG_COPY | (body_len ? TCP_WRITE_FLAG_MORE : 0));
-    if (e != ERR_OK) return false;
-    if (body_len > 0) {
-        e = altcp_write(pcb, body, body_len, TCP_WRITE_FLAG_COPY);
-        if (e != ERR_OK) return false;
+    if (frame_len > sizeof(g_out_scratch)) {
+        // Frame larger than our scratch — should never happen because
+        // ws_drain_* caps payloads at WS_EGRESS_*_CAP < scratch size.
+        return false;
     }
+    // Shift body FIRST, then write the header. ws_drain_log/data
+    // populate g_out_scratch and call us with body=g_out_scratch, so
+    // src and dst overlap (dst starts hdr_len+1 bytes higher). memmove
+    // copies from the high end down for forward-overlapping ranges,
+    // which is exactly the order we need.
+    if (body_len > 0) memmove(g_out_scratch + hdr_len + 1, body, body_len);
+    memcpy(g_out_scratch, hdr, hdr_len);
+    g_out_scratch[hdr_len] = channel;
+    err_t e = altcp_write(pcb, g_out_scratch, frame_len, TCP_WRITE_FLAG_COPY);
+    if (e != ERR_OK) return false;
     altcp_output(pcb);
     return true;
 }
@@ -578,13 +592,60 @@ static void ws_emit_idle_keepalive(struct altcp_pcb *pcb, ws_state_t *s) {
 
 void ws_server_on_open(struct altcp_pcb *pcb, ws_state_t *s,
                        uint8_t *rx_buf, size_t rx_buf_size) {
+    ws_server_on_open_with_prefix(pcb, s, rx_buf, rx_buf_size, NULL, 0);
+}
+
+// See ws_server.h for the rationale. Builds the post-handshake byte
+// stream — [optional HTTP 101 prefix][WS NOTICE frame for need_auth]
+// — into g_out_scratch and issues ONE altcp_write so the TLS layer
+// only ever produces a single application record. Without the
+// coalesce, the second altcp_write occasionally lands in a different
+// TLS record whose plaintext bytes get garbled (the symptom is
+// `non-zero RSV bits` rejection on the client's first frame parse).
+void ws_server_on_open_with_prefix(struct altcp_pcb *pcb, ws_state_t *s,
+                                   uint8_t *rx_buf, size_t rx_buf_size,
+                                   const uint8_t *prefix, size_t prefix_len) {
     (void)rx_buf;
     (void)rx_buf_size;
     memset(s, 0, sizeof *s);
     s->rx_state = WS_RX_NEED_HDR2;
     s->last_tx_at = get_absolute_time();
     s->last_ping_at = get_absolute_time();
-    ws_push_notice(pcb, s, "need_auth", "");
+
+    // Build the initial NOTICE body in a small stack buffer so we
+    // can compute its frame size up front and lay out the combined
+    // scratch precisely.
+    char notice_body[64];
+    int notice_len = snprintf(notice_body, sizeof(notice_body),
+                              "{\"kind\":\"need_auth\"}");
+    if (notice_len <= 0) return;
+    if (notice_len >= (int)sizeof(notice_body)) notice_len = (int)sizeof(notice_body) - 1;
+
+    // WS frame for the NOTICE: header + channel byte + body.
+    uint8_t ws_hdr[10];
+    uint32_t ws_payload_total = (uint32_t)(1 + notice_len);   // channel tag + body
+    size_t ws_hdr_len = ws_build_header(ws_hdr, WS_OP_TEXT, ws_payload_total);
+    size_t ws_frame_len = ws_hdr_len + ws_payload_total;
+
+    size_t total = prefix_len + ws_frame_len;
+    if (total > sizeof(g_out_scratch)) return;     // should never happen on the open path
+    if (total > altcp_sndbuf(pcb))      return;    // ditto: sndbuf is full MSS on a fresh accept
+
+    size_t off = 0;
+    if (prefix && prefix_len > 0) {
+        memcpy(g_out_scratch + off, prefix, prefix_len);
+        off += prefix_len;
+    }
+    memcpy(g_out_scratch + off, ws_hdr, ws_hdr_len);
+    off += ws_hdr_len;
+    g_out_scratch[off++] = WS_CH_NOTICE;
+    memcpy(g_out_scratch + off, notice_body, (size_t)notice_len);
+    off += (size_t)notice_len;
+
+    err_t e = altcp_write(pcb, g_out_scratch, off, TCP_WRITE_FLAG_COPY);
+    if (e != ERR_OK) return;
+    altcp_output(pcb);
+    s->last_tx_at = get_absolute_time();
 }
 
 bool ws_server_on_bytes(struct altcp_pcb *pcb, ws_state_t *s,

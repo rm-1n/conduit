@@ -138,6 +138,29 @@
   //   | 'disconnected' | 'updating…'
   let currentStage = 'disconnected';
   let stageEnteredAt = 0;
+  // Braille spinner used to animate the 'connecting' label so the
+  // user can see the IDE is actively trying to come up (vs frozen).
+  // Frames cycle through the 10 standard "loading" braille glyphs.
+  // The fallback chain in --font-mono (Menlo / Consolas / etc.) all
+  // have braille (U+28xx) coverage so the glyph renders cleanly even
+  // though Roboto Mono itself is Latin-only.
+  const SPINNER_FRAMES = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏';
+  const SPINNER_INTERVAL_MS = 80;
+  let spinnerHandle = null;
+  let spinnerIdx = 0;
+  function startSpinner() {
+    if (spinnerHandle) return;
+    spinnerIdx = 0;
+    if (stateEl) stateEl.textContent = `connecting ${SPINNER_FRAMES[0]}`;
+    spinnerHandle = setInterval(() => {
+      if (!stateEl || currentStage !== 'connecting' || paused) return;
+      spinnerIdx = (spinnerIdx + 1) % SPINNER_FRAMES.length;
+      stateEl.textContent = `connecting ${SPINNER_FRAMES[spinnerIdx]}`;
+    }, SPINNER_INTERVAL_MS);
+  }
+  function stopSpinner() {
+    if (spinnerHandle) { clearInterval(spinnerHandle); spinnerHandle = null; }
+  }
   function setStage(stage) {
     currentStage = stage;
     stageEnteredAt = performance.now();
@@ -149,6 +172,8 @@
     switch (currentStage) {
       case 'connected':
         text = 'connected'; cls = 'ok'; break;
+      case 'connecting':
+        text = 'connecting'; cls = ''; break;
       case 'no data':
         text = 'no data'; cls = 'err'; break;
       case 'reconnecting':
@@ -163,7 +188,12 @@
     lastStateCls = cls;
     if (!stateEl) return;
     if (paused) return;
-    stateEl.textContent = text;
+    if (currentStage === 'connecting') {
+      startSpinner();             // spinner owns textContent
+    } else {
+      stopSpinner();
+      stateEl.textContent = text;
+    }
     stateEl.setAttribute('data-state',
       cls === 'ok' ? 'ok' : cls === 'err' ? 'err' : 'off');
   }
@@ -358,28 +388,63 @@
 
     s.onLog((text) => {
       if (stopped || streamPaused) return;
+      // The pre-stability drop gate that used to live here (`if
+      // (!s.isStable()) return;`) was a workaround for the Firefox
+      // page-load 2.8 s WS-abort cycle: it would suppress the
+      // "first 2.5 s of data" that would otherwise flash on screen
+      // and then disappear when the WS got killed. Now that TLS
+      // session tickets are on, the reconnect cycle is ~50 ms — way
+      // below the threshold of visible flicker — and the legacy 5 s
+      // suppression was driving the "10/10 dis/reconnects in <2 s"
+      // metric to fail outright (data never showed for the first 5 s
+      // of every session). Drop it; deliver every log line as it
+      // arrives. The LED still gates "green" on `isStreaming()` —
+      // see the indicator state-machine below.
+      //
+      // Also nudge the LED green RIGHT NOW (the indicator
+      // setInterval below would otherwise lag up to 500 ms). The
+      // arrival of a real log frame is itself proof of streaming;
+      // we don't need the indicator's next poll tick to discover it.
+      if (currentStage !== 'connected' && !paused && !streamPaused) {
+        setStage('connected');
+      }
       ingestChunk(text).catch(() => {});
     });
 
     s.onNextConnect(() => fireConnect());
 
     // Console pane state machine — driven entirely by stream.js now
-    // that the legacy /api/log fetch path is gone. Five stages map
-    // 1:1 to what setStage() understands:
+    // that the legacy /api/log fetch path is gone. Six stages:
     //   'paused'       — user toggle (display only)
     //   'updating…'    — OTA pause (ide.js called pauseStream)
     //   'no device'    — getIp() returns null
-    //   'connected'    — stream.isConnected() is true
-    //   'reconnecting' — otherwise (between WS attempts)
+    //   'connected'    — stream.isStreaming() — WS open AND data flowing
+    //   'no data'      — stream.isConnected() but no recent frames
+    //   'reconnecting' — WS closed or never opened yet
+    // Note: green ('connected') requires actively-flowing data, not
+    // just an open socket. A briefly-open WS that cycles before any
+    // bytes arrive (e.g. the recent watchIp false-positive close)
+    // never reaches 'connected' — the indicator stays honest.
     setInterval(() => {
       if (stopped) return;
       if (paused) return;                         // user pause owns the indicator
       if (streamPaused) { setStage('updating…'); return; }
       if (!getIp()) { setStage('no device'); return; }
-      if (s.isConnected()) {
+      // Binary indicator: green-'connected' as soon as we're seeing
+      // recent frames (`isStreaming()` — WS open AND data within the
+      // last DATA_RECENT_MS); spinner-'connecting' otherwise.
+      // Previously also required `isStable()` (5 s of continuous
+      // connect time) to suppress flicker through the Firefox 2.8 s
+      // WS-abort cycle on page load — but with session tickets the
+      // reconnect cycle is ~50 ms and the LED-up budget can no
+      // longer absorb the extra 5 s. `isStreaming()` alone is
+      // self-throttling (any genuine outage stops data within
+      // DATA_RECENT_MS and the LED reverts to spinner) so the
+      // resulting transitions are still calm.
+      if (s.isStreaming()) {
         if (currentStage !== 'connected') setStage('connected');
-      } else if (currentStage !== 'reconnecting') {
-        setStage('reconnecting');
+      } else if (currentStage !== 'connecting') {
+        setStage('connecting');
       }
     }, 500);
   }
@@ -513,9 +578,7 @@
       getIp: () => {
         try {
           const sel = document.getElementById('ide-device-select');
-          if (sel && sel.value) return sel.value;
-          const fallback = document.getElementById('ide-quick-ip');
-          return fallback && fallback.value.trim() ? fallback.value.trim() : null;
+          return sel && sel.value ? sel.value : null;
         } catch (_) { return null; }
       },
     });

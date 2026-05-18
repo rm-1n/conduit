@@ -23,12 +23,26 @@
 // Payload is raw little-endian elements (RP2350 and typical browsers
 // agree). The browser uses DataView with littleEndian=true.
 
-// 64 KB ring. With 1 kHz × 2 channels × 20 B/record = 40 KB/s steady
-// load, this is ~1.6 s of backlog tolerance — enough to absorb a
-// transient browser stall (IndexedDB flush, GC pause, tab background)
-// without triggering the drop-oldest clamp in data_buffer_read. The
-// throughput-side fixes (TCP_SND_BUF + http_server out[] bump) handle
-// steady state; this slack handles burst-stall recovery.
+// 64 KB ring. We tried bumping it after observing 39 silent
+// ring-evictions in a 9-hour recording, clustering at 10–16 s of
+// gap each — but the worst-case gaps were too large for any
+// realistic firmware buffer to absorb (256 KB blew BSS by 192 KB;
+// 128 KB by 60 KB; on a 520 KB SRAM chip already loaded with
+// MEM_SIZE=128 KB lwIP heap + mbedtls slab + the rest, there's
+// just no room to grow the ring usefully).
+//
+// The bigger lever is browser-side: the multi-second stalls that
+// drove the consumer to fall behind in the first place come from
+// data_store.js's Float64Array doubling-growth strategy, which
+// allocates 100s of MB and memcpy's the entire array every few
+// minutes at long-session sizes. Eliminating those stalls keeps
+// the consumer close to live, and the existing 1.6 s ring is
+// plenty for the residual short stalls.
+//
+// What this commit DOES keep is the eviction telemetry — every
+// drop-oldest clamp in data_buffer_read now increments
+// g_evictions_total / g_evicted_bytes_total, surfaced through
+// /api/status so any future silent loss is visible.
 #define DATA_BUFFER_SIZE       65536    // must be a power of two
 #define CONDUIT_DATA_MAX_NAMES     32
 #define CONDUIT_DATA_NAME_MAX      32
@@ -109,3 +123,25 @@ uint32_t data_buffer_total_written(void);
 // written (not including terminator). Output looks like:
 //   {"0":"AIN0","2":"IMU_ACCEL","5":"TEMP_C"}
 size_t data_buffer_schema_json(char *out, size_t max);
+
+// Diagnostics — how many times the consumer fell so far behind that
+// the producer overwrote ring contents before they could be sent
+// (data_buffer_read clamped the cursor forward and silently dropped
+// the lost-in-between span). Both counters are reset only on reboot.
+//
+//   data_buffer_evictions_total       — number of read() calls that
+//                                       triggered the clamp
+//   data_buffer_evicted_records_total — approximate count of records
+//                                       lost across all those events
+//                                       (counts bytes evicted /
+//                                       average-record-size; off by
+//                                       small rounding when records
+//                                       are mixed-size)
+//
+// Surfaced in /api/status so a long recording can be cross-checked
+// against the HDF5 gap analysis: if eviction counter == HDF5 gap
+// count, the gaps are 100% consumer-stall driven (browser fell
+// behind, ring overflowed). If counter is 0 and gaps still exist,
+// the device emit loop itself paused — investigate user code.
+uint32_t data_buffer_evictions_total(void);
+uint32_t data_buffer_evicted_bytes_total(void);

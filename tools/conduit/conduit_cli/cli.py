@@ -385,14 +385,37 @@ def fw_info(picotool):
               help="Auth token sent in the first-frame CMD")
 @click.option("--duration", type=float, default=6.0, show_default=True,
               help="Seconds to listen after auth")
+@click.option("--exit-on-status", is_flag=True,
+              help="Break the listen loop the moment the first STATUS "
+                   "frame arrives — used by the reconnect-budget timing.")
+@click.option("--repeat", type=int, default=1, show_default=True,
+              help="Run N back-to-back probe cycles; print a per-cycle "
+                   "timing table.")
+@click.option("--threshold-s", type=float, default=2.0, show_default=True,
+              help="Per-cycle total_ms budget. With --repeat>1, the "
+                   "command exits 0 only if every cycle stays under.")
+@click.option("--gap-s", type=float, default=0.0, show_default=True,
+              help="Seconds to sleep between --repeat cycles.")
+@click.option("--reuse-session", is_flag=True,
+              help="Carry the TLS session from cycle to cycle so the "
+                   "server's session-ticket / session-cache can "
+                   "abbreviate the handshake. Only meaningful with --tls.")
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of text")
-def ws_probe_cmd(device, port, tls, tls_verify, token, duration, as_json):
+def ws_probe_cmd(device, port, tls, tls_verify, token, duration,
+                 exit_on_status, repeat, threshold_s, gap_s,
+                 reuse_session, as_json):
     """Open a WebSocket to /api/stream, authenticate, observe frames.
 
     End-to-end protocol smoke for the unified bidirectional stream.
     Reports handshake status, auth, status snapshot, log/data byte
-    counts, and any errors. Reuses the same probe engine that backs
+    counts, errors, and per-phase timings (connect → handshake → auth
+    → status → close). Reuses the same probe engine that backs
     `tests/test_ws_probe.py`.
+
+    Reconnect-budget mode:
+        conduit ws-probe -d <ip> --exit-on-status --repeat 10
+    runs 10 dis/reconnect cycles and exits 0 only if every cycle's
+    total round-trip stayed under --threshold-s.
     """
     from . import ws_probe as _wp
 
@@ -401,9 +424,54 @@ def ws_probe_cmd(device, port, tls, tls_verify, token, duration, as_json):
         argv.append("--tls")
     if tls_verify:
         argv.append("--tls-verify")
+    if exit_on_status:
+        argv.append("--exit-on-status")
+    if repeat != 1:
+        argv += ["--repeat", str(repeat)]
+    argv += ["--threshold-s", str(threshold_s)]
+    if gap_s > 0:
+        argv += ["--gap-s", str(gap_s)]
+    if reuse_session:
+        argv.append("--reuse-session")
     if as_json:
         argv.append("--json")
     sys.exit(_wp.main(argv))
+
+
+@main.command(name="analyze-hdf5")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False))
+@click.option("-c", "--channel", "channels", multiple=True,
+              help="Only analyze this channel (repeatable). Default: all.")
+@click.option("--threshold-ms", type=float, default=None,
+              help="Gap threshold in ms. Default: max(4 × median delta, 100 ms).")
+@click.option("--top", type=int, default=10, show_default=True,
+              help="Top-N worst gaps to list per channel.")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of text.")
+def analyze_hdf5_cmd(path, channels, threshold_ms, top, as_json):
+    """Analyze an IDE-exported HDF5 telemetry recording for data gaps.
+
+    Reads /telemetry/<NAME>/{uptime_us, wall_ms} for each channel,
+    computes inter-sample deltas, and reports cadence stats, gaps
+    above a threshold, top-N worst gaps with wall-clock context, lost-
+    record / lost-time estimates, and cross-channel synchrony (so a
+    producer-side stall is distinguishable from wire-level loss).
+
+    Examples:
+        conduit analyze-hdf5 recording.h5
+        conduit analyze-hdf5 recording.h5 --threshold-ms 50 --top 20
+        conduit analyze-hdf5 recording.h5 -c SIN0 -c SIN1 --json
+    """
+    from . import analyze_hdf5 as _ah
+
+    argv = [path]
+    for ch in channels:
+        argv += ["--channel", ch]
+    if threshold_ms is not None:
+        argv += ["--threshold-ms", str(threshold_ms)]
+    argv += ["--top", str(top)]
+    if as_json:
+        argv.append("--json")
+    sys.exit(_ah.main(argv))
 
 
 if __name__ == "__main__":

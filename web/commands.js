@@ -12,9 +12,7 @@
   function getIp() {
     try {
       const sel = document.getElementById('ide-device-select');
-      if (sel && sel.value) return sel.value;
-      const fallback = document.getElementById('ide-quick-ip');
-      return fallback && fallback.value.trim() ? fallback.value.trim() : null;
+      return sel && sel.value ? sel.value : null;
     } catch (_) { return null; }
   }
 

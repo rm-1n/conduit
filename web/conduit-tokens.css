@@ -94,7 +94,7 @@
 
 /* -- Typography ------------------------------------------- */
 :root {
-  --font-mono:    "Roboto Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-display: "Fraunces", "Times New Roman", Georgia, serif;
 
   --t-label:     10px;
