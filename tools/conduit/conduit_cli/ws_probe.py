@@ -71,6 +71,30 @@ class ProbeResult:
     longest_gaps: list = field(default_factory=list)   # top 5 [(t_offset, gap_s)]
     duration_s: float = 0.0
 
+    # Re/disconnect phase timings (ms, monotonic). Populated by probe()
+    # regardless of --exit-on-status; the flag only controls whether we
+    # break out as soon as STATUS lands or keep listening.
+    #   t_connect_ms   : TCP (or TLS-over-TCP) socket open
+    #   t_handshake_ms : HTTP Upgrade → 101 received
+    #   t_auth_ms      : CMD reply to the auth frame received
+    #   t_status_ms    : first STATUS frame received
+    #   t_close_ms     : CLOSE frame sent + socket closed (post-listen)
+    #   total_ms       : whole probe() round-trip including close
+    t_connect_ms: float = 0.0
+    t_handshake_ms: float = 0.0
+    t_auth_ms: float = 0.0
+    t_status_ms: float = 0.0
+    t_close_ms: float = 0.0
+    total_ms: float = 0.0
+
+    # TLS session resumption signal. True iff the server accepted a
+    # session ticket / session-ID resumption (`SSLSocket.session_reused`).
+    # `tls_session` is the post-handshake `SSLSession` object; pass it
+    # into probe(reuse_session=...) on the next call to attempt
+    # resumption. Both stay None for non-TLS probes.
+    tls_resumed: Optional[bool] = None
+    tls_session: object = None
+
 
 def _http_upgrade(sock: socket.socket, host: str, path: str = "/api/stream") -> bytes:
     """Send the HTTP Upgrade request, return the bytes that arrived AFTER
@@ -180,22 +204,54 @@ def probe(
     tls_verify: bool = False,
     timeout_s: float = 20.0,
     duration_s: float = 6.0,
+    exit_on_status: bool = False,
+    tls_context: Optional[ssl.SSLContext] = None,
+    reuse_session: object = None,
 ) -> ProbeResult:
     """Connect, authenticate, listen for `duration_s` seconds, return
-    the aggregate of what we saw. Raises on protocol errors."""
+    the aggregate of what we saw. Raises on protocol errors.
+
+    If `exit_on_status` is set, the listen loop breaks as soon as the
+    server has both echoed the auth reply AND emitted its first STATUS
+    frame — used by the reconnect-timing harness so we measure
+    end-to-end "back online" latency without paying the trailing
+    duration_s observation tax.
+
+    For TLS resumption testing: pass a stable `tls_context` (reused
+    across cycles) and the `reuse_session` returned from a previous
+    call's `ProbeResult.tls_session`. The wrap_socket call will offer
+    the session to the server; `result.tls_resumed` reflects what the
+    server accepted. `tls_context` may be None — a fresh default
+    context is created with verify off when `tls_verify` is False."""
     result = ProbeResult()
+    t_start = time.monotonic()
+    t_close_start = t_start    # safety: overwritten before the finally close
 
     sock = socket.create_connection((host, port), timeout=timeout_s)
     if use_tls:
-        ctx = ssl.create_default_context()
-        if not tls_verify:
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-        sock = ctx.wrap_socket(sock, server_hostname=host)
+        ctx = tls_context
+        if ctx is None:
+            ctx = ssl.create_default_context()
+            if not tls_verify:
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+        # Python's ssl.wrap_socket accepts `session=` to offer a prior
+        # SSLSession to the server; if the server's session-ticket /
+        # session-cache layer accepts it, the handshake is abbreviated
+        # (no fresh ECDHE/ECDSA) and SSLSocket.session_reused goes True.
+        wrap_kwargs = {"server_hostname": host}
+        if reuse_session is not None:
+            wrap_kwargs["session"] = reuse_session
+        sock = ctx.wrap_socket(sock, **wrap_kwargs)
+        result.tls_resumed = bool(getattr(sock, "session_reused", False))
+        # Snapshot the new session for the caller to reuse next cycle.
+        result.tls_session = getattr(sock, "session", None)
+    result.t_connect_ms = round((time.monotonic() - t_start) * 1000, 2)
 
     try:
         leftover = _http_upgrade(sock, host)
         result.handshake_ok = True
+        result.t_handshake_ms = round((time.monotonic() - t_start) * 1000, 2)
 
         # Send the auth frame immediately (matches stream.js's onopen).
         auth_body = b"C" + f"seq=0&name=auth&token={token}".encode("utf-8")
@@ -205,7 +261,10 @@ def probe(
         start_t = time.monotonic()
         # Use a short socket timeout so we can sample the wall clock
         # frequently and accumulate gap stats even when frames are dense.
-        sock.settimeout(0.5)
+        # The exit_on_status fast-path also needs this short slice so
+        # the reconnect harness doesn't sit blocked on recv() for 500 ms
+        # past the STATUS that already arrived.
+        sock.settimeout(0.05 if exit_on_status else 0.5)
         last_frame_t: Optional[float] = None
 
         while time.monotonic() < deadline:
@@ -272,13 +331,18 @@ def probe(
                 if obj:
                     result.cmd_reply_seen = True
                     result.last_cmd_reply = obj
-                    if obj.get("seq") == 0 and obj.get("ok"):
+                    if obj.get("seq") == 0 and obj.get("ok") and not result.auth_ok:
                         result.auth_ok = True
+                        result.t_auth_ms = round((time.monotonic() - t_start) * 1000, 2)
             elif channel == CH_STATUS:
                 obj = _json_loads(body, result, "STATUS")
                 if obj:
+                    if not result.status_seen:
+                        result.t_status_ms = round((time.monotonic() - t_start) * 1000, 2)
                     result.status_seen = True
                     result.last_status = obj
+                    if exit_on_status and result.auth_ok:
+                        break
             elif channel == CH_NOTICE:
                 obj = _json_loads(body, result, "NOTICE")
                 if obj:
@@ -288,7 +352,12 @@ def probe(
                 result.errors.append(f"unknown channel {channel!r}")
 
         result.duration_s = round(time.monotonic() - start_t, 2)
-        # Polite close.
+        # Polite close. t_close_ms measures the round-trip of "tell the
+        # peer we're going away + tear the socket down" — i.e. the
+        # disconnect side of the dis/reconnect budget. Captured before
+        # the finally-block sock.close() so we time the same operation
+        # in both the success and post-error path.
+        t_close_start = time.monotonic()
         try:
             _send_frame(sock, OP_CLOSE, struct.pack(">H", 1000))
         except OSError:
@@ -298,6 +367,8 @@ def probe(
             sock.close()
         except OSError:
             pass
+        result.t_close_ms = round((time.monotonic() - t_close_start) * 1000, 2)
+        result.total_ms = round((time.monotonic() - t_start) * 1000, 2)
     return result
 
 
@@ -333,6 +404,13 @@ def _format_report(r: ProbeResult) -> str:
         f"  gaps_over_1s        : {r.gaps_over_1s}",
         f"  gaps_over_5s        : {r.gaps_over_5s}",
         f"  gaps_over_10s       : {r.gaps_over_10s}",
+        # Phase timings — what the reconnect-budget gate uses.
+        f"  t_connect_ms        : {r.t_connect_ms:.1f}",
+        f"  t_handshake_ms      : {r.t_handshake_ms:.1f}",
+        f"  t_auth_ms           : {r.t_auth_ms:.1f}",
+        f"  t_status_ms         : {r.t_status_ms:.1f}",
+        f"  t_close_ms          : {r.t_close_ms:.1f}",
+        f"  total_ms            : {r.total_ms:.1f}",
     ]
     if r.longest_gaps:
         gaps_str = ', '.join(f"{g}s@{t}s" for t, g in r.longest_gaps)
@@ -373,56 +451,208 @@ def main(argv: Optional[list[str]] = None) -> int:
         default=6.0,
         help="seconds to listen after auth (default: 6)",
     )
+    p.add_argument(
+        "--exit-on-status",
+        action="store_true",
+        help="break the listen loop as soon as the first STATUS frame "
+             "arrives — used by the reconnect-budget timing harness "
+             "(implies a tighter 0.05 s recv slice).",
+    )
+    p.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="run N back-to-back probe cycles and print a per-iteration "
+             "timing table + pass/fail vs --threshold-s (default: 1).",
+    )
+    p.add_argument(
+        "--threshold-s",
+        type=float,
+        default=2.0,
+        help="per-cycle total_ms budget in seconds (default: 2.0). When "
+             "--repeat>1, exit 0 only if EVERY cycle's total_ms is "
+             "≤ threshold AND auth+status landed.",
+    )
+    p.add_argument(
+        "--gap-s",
+        type=float,
+        default=0.0,
+        help="seconds to sleep between --repeat cycles (default: 0). A "
+             "short non-zero gap can be useful when measuring the "
+             "device's recovery from one socket teardown to the next "
+             "accept without slamming it.",
+    )
+    p.add_argument(
+        "--reuse-session",
+        action="store_true",
+        help="Carry the TLS session from one --repeat cycle into the "
+             "next so the server's session-ticket/cache path can "
+             "abbreviate the handshake. Only meaningful with --tls. "
+             "Reports `resumed` per cycle and adds a yes/no column to "
+             "the timing table.",
+    )
     p.add_argument("--json", action="store_true", help="emit JSON instead of text")
     args = p.parse_args(argv)
 
-    try:
-        result = probe(
-            host=args.device,
-            port=args.port,
-            token=args.token,
-            use_tls=args.tls,
-            duration_s=args.duration,
-        )
-    except Exception as e:
+    # TLS context is shared across all cycles when --tls is set so
+    # Python's internal session machinery and any user-passed session
+    # state survive between probe() invocations. Without this, each
+    # cycle would create a fresh SSLContext and no resumption could ever
+    # happen even if both sides supported it.
+    shared_tls_ctx: Optional[ssl.SSLContext] = None
+    if args.tls:
+        shared_tls_ctx = ssl.create_default_context()
+        if not args.tls_verify:
+            shared_tls_ctx.check_hostname = False
+            shared_tls_ctx.verify_mode = ssl.CERT_NONE
+    carried_session: object = None       # only set when --reuse-session
+
+    def _run_one() -> tuple[Optional[ProbeResult], Optional[str]]:
+        nonlocal carried_session
+        try:
+            r = probe(
+                host=args.device,
+                port=args.port,
+                token=args.token,
+                use_tls=args.tls,
+                duration_s=args.duration,
+                exit_on_status=args.exit_on_status,
+                tls_context=shared_tls_ctx,
+                reuse_session=carried_session if args.reuse_session else None,
+            )
+            if args.reuse_session and r.tls_session is not None:
+                carried_session = r.tls_session
+            return r, None
+        except Exception as e:
+            return None, str(e)
+
+    # ------------------------------ single-shot ---------------------------
+    if args.repeat <= 1:
+        result, err = _run_one()
+        if err is not None:
+            if args.json:
+                print(json.dumps({"ok": False, "error": err}))
+            else:
+                print(f"probe failed: {err}", file=sys.stderr)
+            return 2
+        assert result is not None
         if args.json:
-            print(json.dumps({"ok": False, "error": str(e)}))
+            print(json.dumps(_result_to_dict(result)))
         else:
-            print(f"probe failed: {e}", file=sys.stderr)
-        return 2
+            print(_format_report(result))
+        if not result.handshake_ok:
+            return 2
+        if not (result.auth_ok and result.status_seen):
+            return 1
+        return 0
+
+    # ------------------------------ N-cycle harness -----------------------
+    # Used to verify the dis/reconnect budget across multiple consecutive
+    # cycles. Per-iteration table mirrors the JSON shape so the same
+    # output can be diffed across firmware iterations.
+    threshold_ms = args.threshold_s * 1000.0
+    rows: list[dict] = []
+    pass_count = 0
+    for i in range(args.repeat):
+        result, err = _run_one()
+        if err is not None:
+            rows.append({"i": i + 1, "ok": False, "error": err})
+        else:
+            assert result is not None
+            ok = (
+                result.handshake_ok
+                and result.auth_ok
+                and result.status_seen
+                and result.total_ms <= threshold_ms
+            )
+            if ok:
+                pass_count += 1
+            rows.append({
+                "i": i + 1,
+                "ok": ok,
+                "t_connect_ms":   result.t_connect_ms,
+                "t_handshake_ms": result.t_handshake_ms,
+                "t_auth_ms":      result.t_auth_ms,
+                "t_status_ms":    result.t_status_ms,
+                "t_close_ms":     result.t_close_ms,
+                "total_ms":       result.total_ms,
+                "auth_ok":        result.auth_ok,
+                "status_seen":    result.status_seen,
+                "tls_resumed":    result.tls_resumed,
+            })
+        if args.gap_s > 0 and i + 1 < args.repeat:
+            time.sleep(args.gap_s)
 
     if args.json:
-        print(
-            json.dumps(
-                {
-                    "ok": result.handshake_ok and result.auth_ok and result.status_seen,
-                    "handshake_ok": result.handshake_ok,
-                    "auth_ok": result.auth_ok,
-                    "status_seen": result.status_seen,
-                    "notice_seen": result.notice_seen,
-                    "log_bytes": result.log_bytes,
-                    "data_bytes": result.data_bytes,
-                    "keepalive_seen": result.keepalive_seen,
-                    "cmd_reply_seen": result.cmd_reply_seen,
-                    "pings_received": result.pings_received,
-                    "last_status": result.last_status,
-                    "last_notice": result.last_notice,
-                    "last_cmd_reply": result.last_cmd_reply,
-                    "sample_log_line": result.sample_log_line,
-                    "errors": result.errors,
-                }
-            )
-        )
+        print(json.dumps({
+            "ok": pass_count == args.repeat,
+            "repeat": args.repeat,
+            "pass": pass_count,
+            "threshold_ms": threshold_ms,
+            "rows": rows,
+        }))
     else:
-        print(_format_report(result))
-    # Exit code: 0 if the device authed and emitted a STATUS frame; 1 if
-    # the handshake worked but auth or status was missing; 2 on hard
-    # error (raised exception, handled above).
-    if not result.handshake_ok:
-        return 2
-    if not (result.auth_ok and result.status_seen):
-        return 1
-    return 0
+        print(f"WebSocket reconnect timing — {args.repeat} cycles, "
+              f"budget {args.threshold_s:.2f}s")
+        print("-" * 86)
+        # The trailing `tls` column is only meaningful with --tls; we
+        # render it always to keep the header stable, but it shows '-'
+        # for non-TLS cycles.
+        print(f"  {'#':>2}  {'conn':>6}  {'hshk':>6}  {'auth':>6}  "
+              f"{'stat':>6}  {'close':>6}  {'total':>7}  ok  tls")
+        for row in rows:
+            if "error" in row:
+                print(f"  {row['i']:>2}  ERROR: {row['error']}")
+                continue
+            marker = "✓" if row["ok"] else "✗"
+            tls_col = ("-" if row.get("tls_resumed") is None
+                       else "resumed" if row["tls_resumed"]
+                       else "full")
+            print(f"  {row['i']:>2}  "
+                  f"{row['t_connect_ms']:>6.1f}  "
+                  f"{row['t_handshake_ms']:>6.1f}  "
+                  f"{row['t_auth_ms']:>6.1f}  "
+                  f"{row['t_status_ms']:>6.1f}  "
+                  f"{row['t_close_ms']:>6.1f}  "
+                  f"{row['total_ms']:>7.1f}  {marker}  {tls_col}")
+        ok_rows = [r for r in rows if "error" not in r]
+        if ok_rows:
+            totals = [r["total_ms"] for r in ok_rows]
+            print("-" * 78)
+            print(f"  total_ms: min={min(totals):.1f}  "
+                  f"max={max(totals):.1f}  "
+                  f"avg={sum(totals)/len(totals):.1f}  "
+                  f"median={sorted(totals)[len(totals)//2]:.1f}")
+        print(f"  PASSED {pass_count}/{args.repeat} "
+              f"(threshold ≤ {args.threshold_s:.2f}s, all checks)")
+    return 0 if pass_count == args.repeat else 1
+
+
+def _result_to_dict(result: ProbeResult) -> dict:
+    return {
+        "ok": result.handshake_ok and result.auth_ok and result.status_seen,
+        "handshake_ok": result.handshake_ok,
+        "auth_ok": result.auth_ok,
+        "status_seen": result.status_seen,
+        "notice_seen": result.notice_seen,
+        "log_bytes": result.log_bytes,
+        "data_bytes": result.data_bytes,
+        "keepalive_seen": result.keepalive_seen,
+        "cmd_reply_seen": result.cmd_reply_seen,
+        "pings_received": result.pings_received,
+        "last_status": result.last_status,
+        "last_notice": result.last_notice,
+        "last_cmd_reply": result.last_cmd_reply,
+        "sample_log_line": result.sample_log_line,
+        "errors": result.errors,
+        "t_connect_ms":   result.t_connect_ms,
+        "t_handshake_ms": result.t_handshake_ms,
+        "t_auth_ms":      result.t_auth_ms,
+        "t_status_ms":    result.t_status_ms,
+        "t_close_ms":     result.t_close_ms,
+        "total_ms":       result.total_ms,
+        "tls_resumed":    result.tls_resumed,
+    }
 
 
 if __name__ == "__main__":

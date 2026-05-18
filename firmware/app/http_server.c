@@ -367,6 +367,16 @@ int http_server_build_status_json(char *out, size_t out_max) {
         }
     }
 
+    // Build the body without the trailing `}` so we can splice in
+    // the inlined data_schema below. The /api/data_schema endpoint
+    // stays live for backwards compat, but the IDE no longer needs
+    // a separate HTTPS round-trip to learn the channel registry —
+    // it reads the schema straight off the STATUS frame the device
+    // pushes immediately after auth. That cuts one full TLS
+    // handshake off the cold-page-load critical path on wss (a
+    // fresh fetch() to the wildcard hostname doesn't share TLS
+    // session state with the existing wss WebSocket pool in Chrome,
+    // so the second handshake costs another ~2 s on Cortex-M33).
     int len = snprintf(out, out_max,
         "{"
         "\"version\":\"%s\","
@@ -388,8 +398,19 @@ int http_server_build_status_json(char *out, size_t out_max) {
         "\"rx_drops\":%u,"
         "\"boot_type\":\"%s\","
         "\"tbyb_pending\":%s,"
+        // Data-ring eviction telemetry — see data_buffer.c for the
+        // mechanism. Non-zero values here mean the producer has at
+        // some point written faster than the consumer drained, and
+        // we silently overwrote ring contents. The corresponding
+        // browser-side symptom is gaps in uptime_us. Use this to
+        // cross-check HDF5 exports: if data_ring_evictions matches
+        // the analyzer's gap_count, the gaps are consumer-stall
+        // driven; if zero and gaps exist, the device emit loop
+        // itself paused.
+        "\"data_ring_evictions\":%u,"
+        "\"data_ring_evicted_bytes\":%u,"
         "\"device\":\"conduit\""
-        "}",
+        ,
         CONDUIT_VERSION_STRING,
         CONDUIT_BINARY_VERSION_MAJOR, CONDUIT_BINARY_VERSION_MINOR,
         network_get_ip_str(),
@@ -403,9 +424,36 @@ int http_server_build_status_json(char *out, size_t out_max) {
         ota_bytes_written(),
         (unsigned)netif_rmii_ethernet_rx_drops(),
         ota_boot_type_str(),
-        ota_commit_pending() ? "true" : "false");
+        ota_commit_pending() ? "true" : "false",
+        data_buffer_evictions_total(),
+        data_buffer_evicted_bytes_total());
     if (len < 0) return 0;
     if ((size_t)len >= out_max) return (int)(out_max - 1);
+
+    // Splice `,"data_schema":<schema>}` into the remaining buffer.
+    // data_buffer_schema_json builds a `{...}` object directly into
+    // the supplied buffer so we hand it the slot AFTER our own
+    // `,"data_schema":` prefix. On overflow we just close the JSON
+    // without the schema field — IDE falls back to /api/data_schema.
+    const size_t remaining_before_schema = out_max - (size_t)len;
+    const char *schema_prefix = ",\"data_schema\":";
+    const size_t prefix_len = strlen(schema_prefix);
+    if (remaining_before_schema > prefix_len + 2) {  // need at least ',"data_schema":{}}\0' worth
+        memcpy(out + len, schema_prefix, prefix_len);
+        size_t schema_len = data_buffer_schema_json(out + len + prefix_len,
+                                                    remaining_before_schema - prefix_len - 2);
+        if (schema_len > 0) {
+            len += (int)(prefix_len + schema_len);
+        }
+    }
+    // Close the JSON object.
+    if ((size_t)len < out_max - 1) {
+        out[len++] = '}';
+        out[len] = '\0';
+    } else {
+        out[out_max - 1] = '\0';
+        len = (int)(out_max - 1);
+    }
     return len;
 }
 
@@ -1094,7 +1142,14 @@ static void handle_ws_upgrade(struct altcp_pcb *pcb, http_conn_t *conn) {
     if (olen >= sizeof(accept_b64)) olen = sizeof(accept_b64) - 1;
     accept_b64[olen] = '\0';
 
-    // Emit 101 Switching Protocols. NO body, NO Content-Length.
+    // Build the 101 Switching Protocols response — NO body, NO
+    // Content-Length. The bytes are NOT written here; they're passed
+    // into ws_server_on_open_with_prefix so the 101 and the first WS
+    // NOTICE go out as a SINGLE altcp_write. Under altcp_tls_mbedtls,
+    // two back-to-back app-layer writes intermittently get misframed
+    // — the browser / ws-probe sees `non-zero RSV bits` rejection on
+    // the first WS frame ~40% of the time on fresh handshakes. The
+    // single-write coalescing closes that window deterministically.
     char hdr[256];
     int hdr_len = snprintf(hdr, sizeof(hdr),
         "HTTP/1.1 101 Switching Protocols\r\n"
@@ -1105,8 +1160,6 @@ static void handle_ws_upgrade(struct altcp_pcb *pcb, http_conn_t *conn) {
         accept_b64);
     if (hdr_len < 0) hdr_len = 0;
     if (hdr_len > (int)sizeof(hdr)) hdr_len = (int)sizeof(hdr);
-    altcp_write(pcb, hdr, hdr_len, TCP_WRITE_FLAG_COPY);
-    altcp_output(pcb);
 
     // Conn transitions to CONN_STATE_WS. The HTTP header_buf is
     // repurposed as the WS frame reassembly buffer (see ws_server.c's
@@ -1129,8 +1182,9 @@ static void handle_ws_upgrade(struct altcp_pcb *pcb, http_conn_t *conn) {
     register_streaming(pcb, conn);
     altcp_poll(pcb, http_poll, 1);
     g_streams_started_total++;
-    ws_server_on_open(pcb, &conn->ws,
-                      (uint8_t *)conn->header_buf, HTTP_MAX_HEADER);
+    ws_server_on_open_with_prefix(pcb, &conn->ws,
+                                  (uint8_t *)conn->header_buf, HTTP_MAX_HEADER,
+                                  (const uint8_t *)hdr, (size_t)hdr_len);
 }
 
 // --------------------------------------------------------------------------

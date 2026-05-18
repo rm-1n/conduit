@@ -18,6 +18,14 @@ dependencies = [
 test = [
     "pytest>=8",
 ]
+# `pip install -e ".[analysis]"` adds the HDF5 + numpy stack used by
+# `conduit analyze-hdf5`. Kept optional so the core CLI (build / flash
+# / OTA / ws-probe) stays a click+httpx-only install for users who
+# don't need the analyzer.
+analysis = [
+    "h5py>=3.10",
+    "numpy>=1.24",
+]
 
 [project.scripts]
 conduit = "conduit_cli.cli:main"

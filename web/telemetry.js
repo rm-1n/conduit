@@ -541,8 +541,35 @@
     // (a one-shot GET) provides the id→name map.
     s.onNextConnect(() => {
       fireConnect();
-      const ip = getIp();
-      if (ip) refreshSchema(ip, true).catch(() => {});
+      // No more proactive refreshSchema HTTPS fetch on connect —
+      // the firmware now inlines `data_schema` in the STATUS frame
+      // that arrives immediately after auth (see
+      // http_server.c::http_server_build_status_json). The HTTPS
+      // fetch was costing ~2 s of TLS handshake on cold-page-load
+      // against a real device (Chrome doesn't share TLS session
+      // state between fetch() and existing WebSocket connection
+      // pools), which is exactly the "wait between green LED and
+      // visible chart data" symptom the user reports.
+      //
+      // The onStatus handler below picks up data_schema from STATUS
+      // and populates the local Map. drain() still keeps the
+      // refreshSchema fallback for unknown msg_ids — that path now
+      // only fires after a firmware-side registration race
+      // (transmit() called for the first time AFTER the STATUS
+      // push), not on every page load.
+    });
+    s.onStatus((obj) => {
+      if (obj && obj.data_schema && typeof obj.data_schema === 'object') {
+        const next = new Map();
+        for (const k of Object.keys(obj.data_schema)) {
+          next.set(Number(k), String(obj.data_schema[k]));
+        }
+        // Replace wholesale — STATUS reflects the device's current
+        // registry. If the device rebooted / OTA'd and re-registered
+        // its channels under different msg_ids, the new STATUS will
+        // overwrite the old map cleanly.
+        schema = next;
+      }
     });
     // Stream went down — drop cached schema since msg_ids may
     // remap after firmware update / OTA / device change.
@@ -553,15 +580,21 @@
     });
     s.onData((bytes) => {
       if (stopped || paused) return;
-      // Mirror of console.js's preliminary-log gate: drop incoming
-      // records while the WS session hasn't passed the stability
-      // gate yet. Pairs with the spinner-only 'connecting'
-      // indicator so the chart stays empty during the page-load
-      // WS-cycling window — no brief data glimpse before the steady
-      // stream lands. Any records emitted during the first ≤5 s of
-      // the eventually-stable session are dropped; the chart picks
-      // up cleanly once the green LED flips.
-      if (!s.isStable()) return;
+      // Pre-stability drop gate removed (same change as console.js).
+      // With session tickets, reconnect is ~50 ms — no longer worth
+      // hiding 5 s of post-connect data to absorb the Firefox 2.8 s
+      // abort cycle, especially because that 5 s was the dominant
+      // contributor to the "10/10 reconnects with < 2 s visualization
+      // latency" budget. The LED still gates "green" on
+      // `isStreaming()`, so brief flicker is bounded by the
+      // DATA_RECENT_MS window in stream.js.
+      //
+      // Also nudge the LED green immediately on the first inbound
+      // record of a fresh session — without this the indicator's
+      // setInterval (500 ms cadence) is the dominant contributor to
+      // the user's "wait a few seconds for green" experience.
+      // Arrival of a real data frame is itself proof we're streaming.
+      if (currentStage !== 'connected') setStage('connected');
       // stream.js strips the 1-byte channel tag before delivering; the
       // remaining bytes are exactly what /api/data?stream=1 produces
       // — a stream of 16-byte-header records (see data_buffer.h).
@@ -580,13 +613,15 @@
       if (stopped) return;
       if (paused) { setState('paused', ''); return; }
       if (!getIp()) { setState('no device', ''); return; }
-      // Binary indicator: green-'connected' only when the current
-      // session is stable AND data is flowing; otherwise spinner-
-      // 'connecting'. Collapses the old 'no data' / 'reconnecting'
-      // amber/red flicker through the WS-cycling window into a
-      // single calm spinner. (See stream.isStable() — non-sticky,
-      // so cable yank → spinner → green again on recovery.)
-      if (s.isStable() && s.isStreaming()) {
+      // Binary indicator: green-'connected' as soon as `isStreaming()`
+      // — WS open AND data within the last DATA_RECENT_MS. Previously
+      // also required `isStable()` (5 s of continuous connect time),
+      // but that gate is incompatible with the < 2 s detection +
+      // visualization budget after session tickets dropped the
+      // reconnect cycle to ~50 ms. `isStreaming()` alone is
+      // self-throttling and yields a calm spinner-on / spinner-off
+      // transition without flicker.
+      if (s.isStreaming()) {
         if (currentStage !== 'connected') setStage('connected');
       } else if (currentStage !== 'connecting') {
         setStage('connecting');
@@ -703,9 +738,7 @@
       getIp: () => {
         try {
           const sel = document.getElementById('ide-device-select');
-          if (sel && sel.value) return sel.value;
-          const fallback = document.getElementById('ide-quick-ip');
-          return fallback && fallback.value.trim() ? fallback.value.trim() : null;
+          return sel && sel.value ? sel.value : null;
         } catch (_) { return null; }
       },
     });

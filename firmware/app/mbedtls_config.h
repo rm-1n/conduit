@@ -90,6 +90,31 @@
 
 #define MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
 
+// ---- TLS session resumption (RFC 5077 session tickets) -----------------
+//
+// Full ECDHE-ECDSA + ECDSA-sign handshake on a Cortex-M33 without HW
+// crypto runs ~2.7-3.0 s (software P-256 dominates). Every fresh wss
+// connect from the IDE pays that full cost. Stateless session tickets
+// (RFC 5077) let mbedtls hand the client an encrypted session blob;
+// on the next connect the client presents it and we complete an
+// abbreviated 1-RTT handshake — no fresh ECDHE, no fresh ECDSA —
+// expected total well under 200 ms.
+//
+// Both flags below are dependencies of altcp_tls_mbedtls's ticket
+// integration (see altcp_tls_mbedtls.c §`if defined(MBEDTLS_SSL_SESSION_TICKETS)
+// && ALTCP_MBEDTLS_USE_SESSION_TICKETS`). The corresponding
+// ALTCP_MBEDTLS_USE_SESSION_TICKETS=1 flip lives in lwipopts.h so the
+// SDK's lookup picks it up at the include-path layer that owns altcp
+// options.
+//
+// Stateless — the server stores nothing per-session beyond the ticket
+// encryption key, which mbedtls rotates internally. Memory cost is
+// ~2 KB BSS for the ticket context (key + AES-256-GCM state). Default
+// ticket TTL is 24 h (ALTCP_MBEDTLS_SESSION_TICKET_TIMEOUT_SECONDS in
+// the SDK header); fine for our use case.
+#define MBEDTLS_SSL_SESSION_TICKETS
+#define MBEDTLS_SSL_TICKET_C
+
 // ---- Crypto primitives ----------------------------------------------------
 
 #define MBEDTLS_AES_C

@@ -76,67 +76,10 @@ body {
   width: 100%;
 }
 
-/* ---- Top bar ---- */
-.ide-topbar {
-  height: var(--topbar-h);
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0 1rem;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-width: fit-content;
-  padding-right: 0.6rem;
-  border-right: 1px solid var(--border-soft);
-}
-.brand::before {
-  content: "";
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.brand h1 {
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-.brand-sub {
-  color: var(--text2);
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex: 1 1 auto;
-  min-width: 0;
-  flex-wrap: nowrap;
-}
-.toolbar-label {
-  color: var(--text2);
-  font-size: 0.78rem;
-  margin-right: 0.1rem;
-  font-weight: 500;
-}
-.sep {
-  width: 1px;
-  height: 22px;
-  background: var(--border-soft);
-  margin: 0 0.35rem;
-}
+/* The IDE-internal topbar was deleted — the device picker and the
+   telemetry-pane toggle now live in the global Conduit topbar
+   (see conduit-chrome.css). The legacy .ide-topbar / .toolbar /
+   .brand / .sep rules are gone with it. */
 
 /* ---- Inputs ---- */
 input[type="text"], input[type="password"], input[type="number"], select {
@@ -156,13 +99,9 @@ input:focus, select:focus {
 }
 input::placeholder { color: var(--text3); }
 
-/* Wide enough for "192.168.178.200" and "127.0.0.1:8766" without
-   placeholder truncation. */
-#ide-quick-ip { width: 20ch; }
-#ide-auth-token { width: 11ch; }
-/* Long enough to show "127.0.0.1:8766 — vsim-1.0.0 — A" and the
-   typical "192.168.178.200 — v1.2.0-b — A" without truncation. */
-#ide-device-select { min-width: 18ch; max-width: 40ch; }
+/* The visible UI is .device-picker__trigger (sized below); the hidden
+   <select> is layout-irrelevant. */
+#ide-device-select { display: none; }
 
 /* ---- Device picker ----
    Custom dropdown replacing the native <select>. Trigger button is
@@ -184,7 +123,11 @@ input::placeholder { color: var(--text3); }
   border-radius: var(--radius-sm);
   padding: 0.32rem 0.55rem;
   min-width: 22ch;
-  max-width: 40ch;
+  /* No max-width / ellipsis — the full device label (name · IP ·
+     version · partition) is always shown so the user can read at a
+     glance which device they're connected to. Trigger grows with
+     content. .device-picker__label below also has its ellipsis
+     stripped to match. */
   font-size: 0.83rem;
   color: var(--text);
   cursor: pointer;
@@ -225,8 +168,6 @@ input::placeholder { color: var(--text3); }
 .device-picker__label {
   flex: 1 1 auto;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   text-align: left;
 }
 .device-picker__caret {
@@ -1110,8 +1051,6 @@ body.plot-dragging, body.plot-dragging * { cursor: grabbing !important; }
   .resizer       { display: none; }
 }
 @media (max-width: 620px) {
-  .topbar { flex-wrap: wrap; height: auto; padding: 0.5rem; }
-  .toolbar { flex-wrap: wrap; }
   .main-area {
     grid-template-rows: minmax(220px, 1fr) 0 minmax(180px, auto);
   }

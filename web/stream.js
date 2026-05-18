@@ -35,7 +35,14 @@
 
   // -- Constants ----------------------------------------------------
 
-  const RECONNECT_OK_MS    = 500;
+  // 0 ms baseline between a clean session close and the next openOnce
+  // so the IDE reconnects at the same speed as `conduit ws-probe`
+  // (which paces at 0 in --repeat mode and lands ~15 ms per cycle on
+  // a LAN device). The previous 500 ms was a precautionary throttle
+  // that masked how fast the protocol actually is. The short-session
+  // backoff below (consecutiveShortSessions × SHORT_BACKOFFS_MS)
+  // remains the real safety mechanism if cycling becomes unhealthy.
+  const RECONNECT_OK_MS    = 0;
   const RECONNECT_ERR_MS   = 1500;
   const CONNECT_TIMEOUT_MS = 10000;
   // Firmware sends an idle keepalive every WS_KEEPALIVE_MS (500 ms),
@@ -100,6 +107,35 @@
   // Timestamp of streamConnected=true; used to measure session length
   // at teardown time and as the "stable since" clock for isStable().
   let connectedSinceMs = 0;
+  // True iff at least one LOG or DATA frame arrived during the CURRENT
+  // session. Used by the short-session-backoff gate so a healthy
+  // session that happened to be brief (e.g. user manually closes
+  // immediately after seeing data) doesn't escalate the backoff into
+  // multi-second territory. Reset on every teardown.
+  let gotDataInSession = false;
+
+  // ws-probe-equivalent phase timings for the most recent openOnce().
+  // Populated by openOnce(); read via Conduit.stream.lastTimings().
+  //   t_open_ms         : performance.now() of WebSocket onopen relative to ctor
+  //   t_auth_reply_ms   : moment we saw the CMD reply to seq=0 auth
+  //   t_status_ms       : moment we saw the first STATUS frame (ready)
+  //   total_ms          : same as t_status_ms — kept for parity with ws-probe's ProbeResult
+  //   ok                : did we make it to STATUS?
+  // The keys mirror the column names ws-probe prints so a side-by-side
+  // diff is trivial.
+  const lastTimings = {
+    t_open_ms: 0,
+    t_auth_reply_ms: 0,
+    t_status_ms: 0,
+    total_ms: 0,
+    ok: false,
+    at: 0,                       // performance.now() of the ctor for the last attempt
+  };
+  // Ring of the last N timings — small enough to inspect from DevTools
+  // without a separate log scrape, large enough to cover the 10-cycle
+  // budget the ws-probe harness uses.
+  const TIMINGS_RING = 32;
+  const timingsHistory = [];
 
   let nextSeq = 1;
   const pendingCmds = new Map();    // seq -> {resolve, reject, timer, label}
@@ -309,7 +345,9 @@
       noteBytes(body.length + 1);
       switch (ch) {
         case CH_LOG:
-          stats.logBytes += body.length; lastDataMs = t0; dispatchLog(body); break;
+          stats.logBytes += body.length; lastDataMs = t0;
+          gotDataInSession = true;
+          dispatchLog(body); break;
         case CH_CMD:
           stats.cmdReplies++;            dispatchCmd(body); break;
         case CH_STATUS:
@@ -321,6 +359,7 @@
     } else if (ev.data instanceof ArrayBuffer) {
       const u8 = new Uint8Array(ev.data);
       if (u8.byteLength === 0) return;
+      gotDataInSession = true;
       noteBytes(u8.byteLength);
       if (u8[0] === CH_DATA) {
         stats.dataBytes += u8.byteLength - 1;
@@ -331,6 +370,7 @@
       ev.data.arrayBuffer().then((buf) => {
         const u8 = new Uint8Array(buf);
         if (u8.byteLength === 0) return;
+        gotDataInSession = true;
         noteBytes(u8.byteLength);
         if (u8[0] === CH_DATA) {
           stats.dataBytes += u8.byteLength - 1;
@@ -410,6 +450,7 @@
     if (txPingHandle) { clearInterval(txPingHandle); txPingHandle = null; }
     lastByteMs = 0;
     lastDataMs = 0;
+    gotDataInSession = false;
     if (wasConnected) fireDisconnect();
   }
 
@@ -423,20 +464,63 @@
     lastUrl = url;
     dlog('opening', url);
 
+    // Phase-timing capture — mirrors ws-probe's ProbeResult so the two
+    // can be diffed cycle-for-cycle. t0 is set BEFORE the WebSocket
+    // constructor so it captures the TCP/TLS connect time same as
+    // ws-probe's t_connect_ms. The browser doesn't expose connect/upgrade
+    // boundaries separately (one onopen fires after both), so we
+    // collapse them into t_open_ms; the auth-reply / STATUS phases match
+    // ws-probe exactly.
+    const t0 = performance.now();
+    lastTimings.t_open_ms = 0;
+    lastTimings.t_auth_reply_ms = 0;
+    lastTimings.t_status_ms = 0;
+    lastTimings.total_ms = 0;
+    lastTimings.ok = false;
+    lastTimings.at = t0;
+
     const sock = new WebSocket(url);
     sock.binaryType = 'arraybuffer';
     ws = sock;
 
     return new Promise((resolve, reject) => {
       let settled = false;
+      // Watch for the auth (seq=0) reply so we can stamp t_auth_reply_ms.
+      // The dispatchCmd path swallows the seq=0 reply (no entry in
+      // pendingCmds, since auth is sent directly inside sock.onopen
+      // without going through cmd()), so we add a transient subscriber
+      // that peeks at every inbound message until it fires.
+      const onMessagePeek = (ev) => {
+        if (lastTimings.t_auth_reply_ms !== 0) return;
+        if (typeof ev.data !== 'string' || ev.data.length === 0) return;
+        if (ev.data.charCodeAt(0) !== CH_CMD) return;
+        // Cheap substring check before JSON.parse — the reply we want
+        // is the auth one, which is always `seq:0`.
+        if (ev.data.indexOf('"seq":0') < 0) return;
+        lastTimings.t_auth_reply_ms = +(performance.now() - t0).toFixed(2);
+        sock.removeEventListener('message', onMessagePeek);
+      };
+      sock.addEventListener('message', onMessagePeek);
       const onStatusOnce = () => {
         if (settled) return;
         settled = true;
         statusSubs.delete(onStatusOnce);
-        dlog('ready (got STATUS frame)');
+        try { sock.removeEventListener('message', onMessagePeek); } catch (_) {}
+        const nowMs = performance.now();
+        lastTimings.t_status_ms = +(nowMs - t0).toFixed(2);
+        lastTimings.total_ms    = lastTimings.t_status_ms;
+        lastTimings.ok = true;
+        // Push a shallow copy into the rolling history so the user can
+        // pull recent cycles via Conduit.stream.timingsHistory() without
+        // racing against the in-flight lastTimings struct.
+        timingsHistory.push({ ...lastTimings });
+        if (timingsHistory.length > TIMINGS_RING) timingsHistory.shift();
+        dlog(`ready: open=${lastTimings.t_open_ms.toFixed(1)}ms ` +
+             `auth=${lastTimings.t_auth_reply_ms.toFixed(1)}ms ` +
+             `status=${lastTimings.t_status_ms.toFixed(1)}ms`);
         streamConnected = true;
         everConnected = true;
-        connectedSinceMs = performance.now();
+        connectedSinceMs = nowMs;
         lastByteMs = connectedSinceMs;
         clearConnectTimer();
         // Start the browser-side TX heartbeat. See TX_PING_MS comment
@@ -453,6 +537,7 @@
       statusSubs.add(onStatusOnce);
 
       sock.onopen = () => {
+        lastTimings.t_open_ms = +(performance.now() - t0).toFixed(2);
         dlog('socket open; sending auth frame');
         const tok = getToken();
         const payload = `seq=0&name=auth&token=${encodeURIComponent(tok)}`;
@@ -501,16 +586,17 @@
 
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-  // Resolves once the document is fully loaded, all CSS-declared fonts
-  // are resolved, AND a settle delay has elapsed. Firefox's WebSocket
-  // layer emits "interrupted while the page was loading" if a WS is
-  // opened while ANY sub-resource the document references is still
-  // pending — and Google Fonts via `<link rel="stylesheet">` keeps
-  // that bookkeeping active well past `window.load`. `document.fonts.ready`
-  // is a Promise that resolves when every @font-face has either loaded
-  // or failed; it's the targeted signal here. The 100 ms post-fonts
-  // settle covers any other lingering sub-resources.
-  const POST_LOAD_SETTLE_MS = 1000;
+  // Resolves once the document is fully loaded and all CSS-declared
+  // fonts are resolved. Historically also waited POST_LOAD_SETTLE_MS
+  // (1 s) after that — a Firefox sub-resource-race workaround for
+  // its "interrupted while the page was loading" abort. With session
+  // tickets, any such abort recovers in ~50 ms via resumption — far
+  // below the threshold of visible UI disruption. So the explicit
+  // settle is now 0: as soon as `document.fonts.ready` resolves we
+  // attempt to open. Keeping the document-complete + fonts-ready
+  // waits because they're already met on the typical page-load
+  // critical path and cost nothing.
+  const POST_LOAD_SETTLE_MS = 0;
   // How often we send an EMPTY TEXT frame from browser → device to
   // keep the connection bidirectionally active. WebSocket.send('') is
   // a valid zero-length frame the firmware silently drops in
@@ -599,7 +685,18 @@
         const sessionMs = connectedSinceMs > 0
           ? Math.round(performance.now() - connectedSinceMs)
           : 0;
-        const isShort = sessionMs > 0 && sessionMs < SHORT_SESSION_MS;
+        // "Short" only counts when the session never proved itself
+        // useful (no log/data ever arrived) AND was brief. A session
+        // that streamed data — even for 50 ms — is HEALTHY by
+        // definition; killing it is the peer's problem, not ours,
+        // and we should not punish the next reconnect with multi-
+        // second backoff. The old `sessionMs < SHORT_SESSION_MS` rule
+        // misfired on rapid forced-close test patterns AND on real
+        // user flows where the user might disconnect/reconnect by
+        // toggling devices.
+        const isShort = sessionMs > 0
+                        && sessionMs < SHORT_SESSION_MS
+                        && !gotDataInSession;
         if (isShort) consecutiveShortSessions++; else consecutiveShortSessions = 0;
         connectedSinceMs = 0;
         // Pass isShort to teardown so the noisy "teardown after
@@ -745,9 +842,7 @@
   function defaultGetIp() {
     try {
       const sel = document.getElementById('ide-device-select');
-      if (sel && sel.value) return sel.value;
-      const fallback = document.getElementById('ide-quick-ip');
-      return fallback && fallback.value.trim() ? fallback.value.trim() : null;
+      return sel && sel.value ? sel.value : null;
     } catch (_) { return null; }
   }
 
@@ -794,6 +889,19 @@
           && (performance.now() - connectedSinceMs) >= STABLE_MS;
     },
     currentUrl()  { return lastUrl; },
+    // ws-probe-equivalent timings for the most recent openOnce().
+    // {t_open_ms, t_auth_reply_ms, t_status_ms, total_ms, ok, at}.
+    // .total_ms is the metric to diff against `conduit ws-probe`'s
+    // total_ms; the IDE's cycle should land in the same ballpark
+    // (~15 ms typical against a LAN device).
+    lastTimings() { return { ...lastTimings }; },
+    timingsHistory() { return timingsHistory.slice(); },
+    // Test-only: returns the underlying live WebSocket so a harness can
+    // ws.close() it to drive a reconnect cycle (matches the protocol-level
+    // close ws-probe sends at the end of each cycle). Not for app code —
+    // every other consumer should go through the cmd / onStatus / onData
+    // surfaces above. Underscore prefix flags "internal".
+    _socket() { return ws; },
     cmd,
     onLog(cb)    { if (typeof cb === 'function') logSubs.add(cb);    return () => logSubs.delete(cb); },
     onData(cb)   { if (typeof cb === 'function') dataSubs.add(cb);   return () => dataSubs.delete(cb); },

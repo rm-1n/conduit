@@ -388,14 +388,26 @@
 
     s.onLog((text) => {
       if (stopped || streamPaused) return;
-      // Suppress preliminary prints: drop log content while the WS
-      // session hasn't reached the stability gate yet. Pairs with
-      // the spinner-only 'connecting' indicator so the console pane
-      // stays empty during the page-load WS-cycling window instead
-      // of flashing a few lines that get cut off mid-stream. Loses
-      // any content emitted during the first ≤5 s of the
-      // eventually-stable session; acceptable trade for clean UX.
-      if (!s.isStable()) return;
+      // The pre-stability drop gate that used to live here (`if
+      // (!s.isStable()) return;`) was a workaround for the Firefox
+      // page-load 2.8 s WS-abort cycle: it would suppress the
+      // "first 2.5 s of data" that would otherwise flash on screen
+      // and then disappear when the WS got killed. Now that TLS
+      // session tickets are on, the reconnect cycle is ~50 ms — way
+      // below the threshold of visible flicker — and the legacy 5 s
+      // suppression was driving the "10/10 dis/reconnects in <2 s"
+      // metric to fail outright (data never showed for the first 5 s
+      // of every session). Drop it; deliver every log line as it
+      // arrives. The LED still gates "green" on `isStreaming()` —
+      // see the indicator state-machine below.
+      //
+      // Also nudge the LED green RIGHT NOW (the indicator
+      // setInterval below would otherwise lag up to 500 ms). The
+      // arrival of a real log frame is itself proof of streaming;
+      // we don't need the indicator's next poll tick to discover it.
+      if (currentStage !== 'connected' && !paused && !streamPaused) {
+        setStage('connected');
+      }
       ingestChunk(text).catch(() => {});
     });
 
@@ -418,15 +430,18 @@
       if (paused) return;                         // user pause owns the indicator
       if (streamPaused) { setStage('updating…'); return; }
       if (!getIp()) { setStage('no device'); return; }
-      // Binary indicator: green-'connected' only when the current
-      // session is stable AND data is flowing; otherwise spinner-
-      // 'connecting'. Collapses the old 'no data' / 'reconnecting'
-      // amber/red flicker through the WS-cycling window into a
-      // single calm spinner. A real outage produces a steady
-      // spinner; a real recovery produces one clean flip to green
-      // after the new session passes STABLE_MS. (See
-      // stream.isStable() — non-sticky.)
-      if (s.isStable() && s.isStreaming()) {
+      // Binary indicator: green-'connected' as soon as we're seeing
+      // recent frames (`isStreaming()` — WS open AND data within the
+      // last DATA_RECENT_MS); spinner-'connecting' otherwise.
+      // Previously also required `isStable()` (5 s of continuous
+      // connect time) to suppress flicker through the Firefox 2.8 s
+      // WS-abort cycle on page load — but with session tickets the
+      // reconnect cycle is ~50 ms and the LED-up budget can no
+      // longer absorb the extra 5 s. `isStreaming()` alone is
+      // self-throttling (any genuine outage stops data within
+      // DATA_RECENT_MS and the LED reverts to spinner) so the
+      // resulting transitions are still calm.
+      if (s.isStreaming()) {
         if (currentStage !== 'connected') setStage('connected');
       } else if (currentStage !== 'connecting') {
         setStage('connecting');
@@ -563,9 +578,7 @@
       getIp: () => {
         try {
           const sel = document.getElementById('ide-device-select');
-          if (sel && sel.value) return sel.value;
-          const fallback = document.getElementById('ide-quick-ip');
-          return fallback && fallback.value.trim() ? fallback.value.trim() : null;
+          return sel && sel.value ? sel.value : null;
         } catch (_) { return null; }
       },
     });

@@ -588,16 +588,12 @@ void conduit_loop(void) {
     const deviceSelect = document.getElementById('ide-device-select');
     const token = document.getElementById('ide-auth-token');
 
-    // Restore persisted token + last-typed IP so reload reconnects to
-    // the same device automatically. Without restoring quick_ip,
-    // returning to the page leaves the IP field blank → telemetry's
-    // getIp() returns null → no auto-reconnect, even though the
-    // device is reachable.
+    // Restore persisted token so reload reconnects with the same
+    // /api/upload + /api/cmd credentials. Device selection is restored
+    // separately by refreshDeviceList() below from s.ide_ip.
     try {
       const s = JSON.parse(localStorage.getItem('conduit') || '{}');
       if (s.token) token.value = s.token;
-      const ipInput = document.getElementById('ide-quick-ip');
-      if (ipInput && !ipInput.value && s.quick_ip) ipInput.value = s.quick_ip;
     } catch (_) {}
 
     const persist = () => {
@@ -605,16 +601,9 @@ void conduit_loop(void) {
         const s = JSON.parse(localStorage.getItem('conduit') || '{}');
         s.ide_ip = deviceSelect.value;
         s.token  = token.value;
-        const ipInput = document.getElementById('ide-quick-ip');
-        if (ipInput) s.quick_ip = ipInput.value.trim();
         localStorage.setItem('conduit', JSON.stringify(s));
       } catch (_) {}
     };
-    // Persist the quick-IP field on every edit so the next reload
-    // picks up wherever the user left off — even if they never
-    // clicked Add.
-    const ipInputForPersist = document.getElementById('ide-quick-ip');
-    if (ipInputForPersist) ipInputForPersist.addEventListener('input', persist);
     deviceSelect.addEventListener('change', () => {
       persist();
       // Let the console tear down its cursor so the next poll gets the
@@ -781,32 +770,9 @@ void conduit_loop(void) {
     refreshDeviceList();
     window.addEventListener('conduit:devices-updated', refreshDeviceList);
 
-    // Add-by-IP button: probe a single host. Devices broadcast their IP
-    // over UDP multicast (firmware/app/discovery.c) — find them via
-    // `conduit discover` on the CLI, then paste the IP here.
-    const quickBtn = document.getElementById('ide-quick-connect');
-    const quickInput = document.getElementById('ide-quick-ip');
-    quickBtn.addEventListener('click', async () => {
-      const ip = quickInput.value.trim();
-      if (!ip) { connStatus('enter an IP first', 'err'); return; }
-      quickBtn.disabled = true;
-      connStatus(`Probing ${ip}…`);
-      try {
-        const result = await window.Conduit.probeAndRemember(ip);
-        if (result) {
-          connStatus(`Added ${ip} (v${result.version}, ${result.partition})`, 'ok');
-          deviceSelect.value = ip;
-          persist();
-        } else {
-          connStatus(`no response from ${ip}`, 'err');
-        }
-      } catch (e) {
-        connStatus(`probe error: ${e.message || e}`, 'err');
-      } finally {
-        quickBtn.disabled = false;
-        refreshDeviceList();
-      }
-    });
+    // Add-by-IP lives in the Hardware Manager view now; the IDE
+    // topbar no longer has its own Add input. Devices flow into the
+    // picker via the 'conduit:devices-updated' event above.
 
     document.getElementById('ide-btn-build').addEventListener('click', onBuild);
     document.getElementById('ide-btn-build-upload').addEventListener('click', onBuildUpload);
@@ -834,9 +800,8 @@ void conduit_loop(void) {
     // otherwise leaves the panes silent even though the device is on
     // the LAN.
     async function reconnect() {
-      const ip = (deviceSelect.value || '').trim()
-              || (document.getElementById('ide-quick-ip').value || '').trim();
-      if (!ip) { connStatus('no device — Add an IP first', 'err'); return; }
+      const ip = (deviceSelect.value || '').trim();
+      if (!ip) { connStatus('no device — Add one in Hardware Manager', 'err'); return; }
 
       // Don't pause streams during the probe. The previous design did
       // — to avoid 3 simultaneous TLS handshakes on a single-threaded

@@ -63,14 +63,27 @@ function deviceUrl(ip, uniqueId, path) {
     const dashIp = String(ip).replaceAll('.', '-');
     return `https://${dashIp}.${uniqueId}.${tlsZone()}${path}`;
   }
-  // HTTP fallback DISABLED. Letting the IDE quietly drop to HTTP when a
-  // uniqueId is missing has masked real HTTPS regressions (e.g. cookies
-  // cleared → cached uniqueId lost → fallback → "looks like it works"
-  // → ships broken). Force every caller down the HTTPS-only path so any
-  // mbedtls / TLS-load issue gets surfaced loudly and we have to fix it
-  // here rather than working around it via plaintext. To re-enable for
-  // local-only dev, set window.Conduit.allowHttpFallback = true BEFORE
-  // any module reads a URL — but never commit a setter for it.
+  // Loopback escape hatch: real devices never have 127.0.0.1 / ::1 /
+  // localhost as their IP (they ship with DHCP IPs or static LAN IPs),
+  // so anything pointing at loopback is by construction the
+  // sim_server (web/tests/sim_server.mjs) or a developer-local test
+  // harness. Auto-allow plain HTTP there so the reconnect-handling
+  // tests can drive the IDE against the sim from a real browser
+  // without first wiring an unsafe "allow HTTP everywhere" toggle.
+  // Production deploys never trigger this branch.
+  const ipHost = String(ip).split(':')[0];
+  if (ipHost === '127.0.0.1' || ipHost === '::1' || ipHost === 'localhost') {
+    return `http://${ip}${path}`;
+  }
+  // HTTP fallback DISABLED for non-loopback. Letting the IDE quietly
+  // drop to HTTP when a uniqueId is missing has masked real HTTPS
+  // regressions (e.g. cookies cleared → cached uniqueId lost →
+  // fallback → "looks like it works" → ships broken). Force every
+  // caller down the HTTPS-only path so any mbedtls / TLS-load issue
+  // gets surfaced loudly and we have to fix it here rather than
+  // working around it via plaintext. To re-enable for ad-hoc dev,
+  // set window.Conduit.allowHttpFallback = true BEFORE any module
+  // reads a URL — but never commit a setter for it.
   if (window.Conduit && window.Conduit.allowHttpFallback) {
     return `http://${ip}${path}`;
   }
