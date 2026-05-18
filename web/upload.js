@@ -292,7 +292,30 @@
   // OK for plain HTTP but timed out before the TLS handshake finished
   // when called via the HTTPS path, causing post-OTA polling to fail
   // with "Device did not respond" even though the device was healthy.
-  async function getStatus(ip, timeoutMs = 6000) {
+  //
+  // Fast path: if the WS stream has already received a STATUS frame
+  // (same JSON shape, pushed by the firmware on auth — see
+  // ws_server.c::ws_push_status), we return THAT directly and skip
+  // the HTTPS fetch entirely. This is critical because Chrome doesn't
+  // share TLS session state between fetch() and WebSocket()
+  // connection pools, so a "warm WS + cold fetch" still pays a full
+  // ~3-9 s cold ECDHE+ECDSA handshake on the Cortex-M33 — and that
+  // was the regression that turned the upload precheck into a
+  // perceived spinner-forever. The precheck only reads `.partition`
+  // and `.ota_in_progress`; both change only on reboot/OTA, which
+  // themselves trigger a fresh STATUS push, so the WS-cached copy
+  // is fresh enough for the precheck's needs.
+  //
+  // The `allowCached` knob is true for the precheck and the post-OTA
+  // waitForDevice early-exit; false for the polling loop inside
+  // waitForDevice (which needs to detect the device coming back over
+  // a NEW connection, so it MUST do a real HTTPS fetch).
+  async function getStatus(ip, timeoutMs = 6000, { allowCached = true } = {}) {
+    if (allowCached) {
+      const s = window.Conduit && window.Conduit.stream;
+      const cached = s && typeof s.lastStatus === 'function' ? s.lastStatus() : null;
+      if (cached) return cached;
+    }
     const res = await fetch(window.Conduit.deviceUrlForIp(ip, '/api/status'), {
       mode: 'cors',
       signal: AbortSignal.timeout(timeoutMs),
@@ -336,9 +359,12 @@
           // The stream told us a transport is alive — confirm with one
           // /api/status fetch so we get the post-reboot uptime + partition
           // that the caller needs (and that lets the strict-uptime branch
-          // below stay coherent).
+          // below stay coherent). Force a live HTTPS fetch
+          // (allowCached: false) here: the WS-cached STATUS is from BEFORE
+          // the reboot we just survived; using it would tell us the old
+          // partition/uptime and break the strict-uptime advance below.
           try {
-            const s = await getStatus(ip);
+            const s = await getStatus(ip, 6000, { allowCached: false });
             if (resolved) return null;
             fastWinner = s;
             return s;
@@ -367,7 +393,10 @@
       // Did the stream signal land between the previous tick and now?
       if (fastWinner) { resolved = true; return fastWinner; }
       try {
-        const status = await getStatus(ip);
+        // Same reasoning as the fastReady-confirm fetch above: this is
+        // the post-OTA polling loop, so the WS-cached STATUS is from
+        // BEFORE the reboot we're waiting on. Force a live HTTPS fetch.
+        const status = await getStatus(ip, 6000, { allowCached: false });
         if (attempt <= STRICT_ATTEMPTS && preUptime != null
             && typeof status.uptime === 'number'
             && status.uptime >= preUptime
