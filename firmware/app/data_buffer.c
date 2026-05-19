@@ -37,6 +37,24 @@ static bool     g_inited = false;
 static volatile uint32_t g_evictions_total     = 0;
 static volatile uint32_t g_evicted_bytes_total = 0;
 
+// Monotonic schema-registry version. Incremented on each NEW slot
+// allocation in conduit_data_lookup_or_register (NOT on cache hits).
+// ws_server_poll() (Core 1) reads this and compares against its
+// per-conn last-seen value to know when to push a fresh STATUS frame
+// with the updated data_schema. The previous design tried to call
+// http_server_notify_event() directly from this file, but
+// conduit_data_lookup_or_register runs on Core 0 (user code) and
+// http_conn_pool is Core-1-owned state — the cross-core write was a
+// race that occasionally left status_dirty set on a half-torn-down
+// conn, producing intermittent WS death (chart blanks on every
+// reconnect that fell back to a cold TLS handshake).
+//
+// A bare volatile uint32_t is sufficient signal here: a single
+// 32-bit write is atomic on Cortex-M33, Core 1 only reads it (one
+// direction of cross-core sharing), and a missed-by-one tick is
+// fine because the next poll round will see the same delta.
+static volatile uint32_t g_schema_version = 0;
+
 static char     g_names[CONDUIT_DATA_MAX_NAMES][CONDUIT_DATA_NAME_MAX];
 
 // Per-session "already warned about this name" set. Bounded so a tight
@@ -128,6 +146,12 @@ int conduit_data_lookup_or_register(const char *name) {
             while (name[n] != '\0' && n < CONDUIT_DATA_NAME_MAX - 1) n++;
             memcpy(g_names[i], name, n);
             g_names[i][n] = '\0';
+            // Bump BEFORE releasing the lock so a Core 1 reader sees
+            // an updated registry by the time it sees the new
+            // version. Single atomic 32-bit write — no cross-core
+            // walk of http_conn_pool from here (the previous design
+            // did that and raced with Core 1's conn teardown).
+            g_schema_version++;
             spin_unlock(g_lock, irq);
             return (int)i;
         }
@@ -243,6 +267,10 @@ uint32_t data_buffer_evictions_total(void) {
 
 uint32_t data_buffer_evicted_bytes_total(void) {
     return g_evicted_bytes_total;
+}
+
+uint32_t data_buffer_schema_version(void) {
+    return g_schema_version;
 }
 
 size_t data_buffer_schema_json(char *out, size_t max) {

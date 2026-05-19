@@ -145,3 +145,12 @@ size_t data_buffer_schema_json(char *out, size_t max);
 // the device emit loop itself paused — investigate user code.
 uint32_t data_buffer_evictions_total(void);
 uint32_t data_buffer_evicted_bytes_total(void);
+
+// Monotonic version of the schema registry. Bumped on each NEW slot
+// allocation (not on cache-hit lookups). ws_server_poll() — running
+// on Core 1 — compares this against its per-conn last-seen value
+// and pushes a fresh STATUS frame (with the updated data_schema)
+// when they differ. This is the Core-safe replacement for the
+// earlier direct http_server_notify_event call from this module,
+// which was a Core 0 → http_conn_pool cross-core race.
+uint32_t data_buffer_schema_version(void);

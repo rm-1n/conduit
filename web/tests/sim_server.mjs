@@ -53,6 +53,11 @@ const HOST       = flag('--host', process.env.SIM_HOST || '127.0.0.1');
 const EMIT_HZ    = Number(flag('--rate', 200));   // combined samples-per-second
 const VERSION    = flag('--version', 'sim-1.0.0');
 const PARTITION  = flag('--partition', 'A');
+// Synthetic binary_version revision — counts up each time the sim
+// boots so a test that probes /api/status across restarts can tell
+// recordings apart. The real firmware burns this into the picobin
+// header via pico_set_binary_version().
+const BINARY_REVISION = Number(flag('--binary-rev', Math.floor(Date.now() / 1000) % 1000));
 
 // ---- WS test-mode knobs ---------------------------------------------------
 //
@@ -674,16 +679,20 @@ function handleWsUpgrade(req, sock /*, head */) {
         // dominant contributor to the "LED green, wait several seconds,
         // then chart fills" symptom).
         wsEmitText(sock, WS_CH_STATUS, JSON.stringify({
-          device:      'conduit',
-          version:     VERSION,
-          partition:   PARTITION,
-          mac:         '00:DE:AD:BE:EF:01',
-          board_id:    'sim',
-          ip:          `${HOST}:${PORT}`,
-          uptime_ms:   Date.now() - startWallMs,
-          link:        'up',
-          poe:         'unknown',
-          data_schema: SCHEMA,
+          device:         'conduit',
+          version:        VERSION,
+          // Mirror the real firmware's pico_set_binary_version field
+          // — used by the IDE's build-log [device] line + by OTA
+          // workflows to confirm which partition's image is live.
+          binary_version: `0.${BINARY_REVISION}`,
+          partition:      PARTITION,
+          mac:            '00:DE:AD:BE:EF:01',
+          board_id:       'sim',
+          ip:             `${HOST}:${PORT}`,
+          uptime_ms:      Date.now() - startWallMs,
+          link:           'up',
+          poe:            'unknown',
+          data_schema:    SCHEMA,
         }));
         // Reset cursors to live-tail and start the drain ticker.
         state.dataCursor = totalBytesGenerated;

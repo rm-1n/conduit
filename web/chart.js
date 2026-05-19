@@ -1294,14 +1294,39 @@
       const decimateThreshold = pxWidth * 2;
       const sliced = []; // [{ wallMs, values }]
       for (const [name, meta] of this.knownChannels) {
-        const slice = ds.slice(name, { fromWallMs: winMinMs, toWallMs: winMaxMs });
-        if (slice.count === 0) {
-          if (meta.n === 1) sliced.push({ wallMs: null, values: null });
-          else for (let k = 0; k < meta.n; k++) sliced.push({ wallMs: null, values: null });
+        // Scalar channels with a known-large range take the
+        // sliceMinMax fast path: dataStore walks chunks once and
+        // emits min/max per pixel-bucket WITHOUT concatenating the
+        // raw samples. For a 30-min recording at 1 kHz this drops
+        // per-frame memory traffic from ~22 MB to ~20 KB and is what
+        // stops heavy pan/zoom from stalling the main thread long
+        // enough for the WS stall watchdog to fire. Vector channels
+        // (n > 1) fall through to the regular slice path because
+        // sliceMinMax doesn't handle vectors yet — uncommon for
+        // long-running channels in practice.
+        if (meta.n === 1 && ds.sliceMinMax) {
+          // We don't know slice.count without doing some work, so we
+          // just always go through sliceMinMax for scalars. For tiny
+          // ranges (range that already fits in 2 × pxWidth points)
+          // sliceMinMax short-circuits to the bucketed walk which is
+          // already O(range), no worse than the regular slice.
+          const dec = ds.sliceMinMax(name, {
+            fromWallMs: winMinMs, toWallMs: winMaxMs, bucketCount: pxWidth,
+          });
+          if (!dec || dec.count === 0) {
+            sliced.push({ wallMs: null, values: null });
+          } else {
+            sliced.push({ wallMs: dec.wallMs, values: dec.values });
+          }
           continue;
         }
-        // Each per-component series gets its own optional pre-decimation
-        // pass. Decimation operates on (wallMs, valuesView) pairs.
+        const slice = ds.slice(name, { fromWallMs: winMinMs, toWallMs: winMaxMs });
+        if (slice.count === 0) {
+          for (let k = 0; k < meta.n; k++) sliced.push({ wallMs: null, values: null });
+          continue;
+        }
+        // Vector channels: each per-component series gets its own
+        // optional pre-decimation pass.
         if (meta.n === 1) {
           if (slice.count > decimateThreshold) {
             const dec = decimateSeries(slice.wallMs, slice.values, 1, 0, pxWidth);

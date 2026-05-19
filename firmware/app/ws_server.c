@@ -189,6 +189,10 @@ static void ws_push_status(struct altcp_pcb *pcb, ws_state_t *s) {
     if (n <= 0) return;
     if (!ws_emit_text(pcb, WS_CH_STATUS, body, (size_t)n)) return;
     s->status_dirty = false;
+    // The data_schema embedded in this STATUS body reflects the
+    // registry at THIS moment. Snapshot the version we just pushed so
+    // ws_server_poll() doesn't re-push immediately on a stale check.
+    s->schema_version_seen = data_buffer_schema_version();
     s->last_tx_at = get_absolute_time();
 }
 
@@ -670,6 +674,19 @@ void ws_server_poll(struct altcp_pcb *pcb, ws_state_t *s) {
         // Pre-auth: no streams flow. The browser sent its WebSocket
         // open, we sent need_auth; we're waiting for an auth CMD.
         return;
+    }
+
+    // Schema-version cross-core hook. data_buffer.c bumps the
+    // counter whenever a new (msg_id, name) slot is allocated. We
+    // read it here on Core 1 — the only side that touches the
+    // ws_state_t fields — and push a refreshed STATUS so the IDE's
+    // inlined data_schema picks up the new entry in-band, avoiding
+    // its unknown-msgId → cold-TLS HTTPS-refresh fallback. The
+    // Core-0 producer NEVER walks http_conn_pool from here, so the
+    // earlier race that left status_dirty set on a half-torn-down
+    // conn is gone.
+    if (data_buffer_schema_version() != s->schema_version_seen) {
+        s->status_dirty = true;
     }
 
     if (s->status_dirty) {

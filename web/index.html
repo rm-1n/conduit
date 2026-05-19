@@ -674,7 +674,7 @@
   // Account view's sidebar footer. CONDUIT_COMMIT is an 8-char prefix
   // of the git SHA the assets were built from; the deploy workflow
   // sed-replaces 'dev' with the real value at publish time.
-  window.CONDUIT_ASSET_VERSION = '2026-05-15-browser-side-drop';
+  window.CONDUIT_ASSET_VERSION = '2026-05-19-fw10.79-bundle';
   window.CONDUIT_COMMIT        = 'dev';
 </script>
 <!-- uPlot — high-performance time-series plotting via CDN. Pinned for
@@ -697,15 +697,15 @@
      telemetry.js, commands.js) so they can subscribe at init time. -->
 <script src="stream.js?v=30"></script>
 <script src="hardware.js?v=4"></script>
-<script src="ide.js?v=170"></script>
+<script src="ide.js?v=171"></script>
 <script src="log_store.js?v=121"></script>
 <script src="log_export.js?v=121"></script>
 <script src="console.js?v=142"></script>
-<script src="chart.js?v=149"></script>
+<script src="chart.js?v=150"></script>
 <!-- data_store.js: in-memory time-series store. Loaded before
      telemetry.js so the append target exists by the time the first
      record arrives. -->
-<script src="data_store.js?v=122"></script>
+<script src="data_store.js?v=123"></script>
 <script src="telemetry.js?v=157"></script>
 <!-- health.js was a periodic /api/status probe driving the device LED
      independently of the telemetry stream. Disabled: each extra HTTPS

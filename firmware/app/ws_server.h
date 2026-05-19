@@ -105,6 +105,13 @@ typedef struct {
     bool             frame_in_progress; // currently mid-message (FIN=0 history)
     uint32_t         log_since;         // cursor into log_buffer
     uint32_t         data_since;        // cursor into data_buffer
+    // Last value of data_buffer_schema_version() this conn pushed a
+    // STATUS frame for. ws_server_poll re-pushes STATUS (with the
+    // updated data_schema inline) whenever the global counter has
+    // advanced past this — the Core-safe schema-change notification
+    // path. Set once at auth time so the FIRST STATUS push already
+    // includes whatever schema entries exist at that moment.
+    uint32_t         schema_version_seen;
     absolute_time_t  last_tx_at;        // for WS_KEEPALIVE_MS PING throttle
     absolute_time_t  last_ping_at;      // for WS_PING_INTERVAL_MS app-layer ping
 

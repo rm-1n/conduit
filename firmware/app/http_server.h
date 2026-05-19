@@ -55,6 +55,14 @@ typedef enum {
     HTTP_EVT_OTA_DONE,
     HTTP_EVT_REBOOT_PENDING,
     HTTP_EVT_PARTITION_CHANGED,
+    // NOTE: schema-change events do NOT go through this enum. They
+    // can't — http_server_notify_event walks http_conn_pool (Core 1
+    // state), but conduit_data_lookup_or_register runs on Core 0,
+    // and the cross-core write was a race that occasionally left
+    // status_dirty set on a half-torn-down conn. The Core-safe
+    // path is the schema-version counter (see
+    // data_buffer.h::data_buffer_schema_version()) which
+    // ws_server_poll polls from Core 1.
 } http_event_t;
 
 // Walk the http_conn_pool and mark any CONN_STATE_WS slots so the next

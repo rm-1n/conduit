@@ -774,6 +774,30 @@ void conduit_loop(void) {
     // topbar no longer has its own Add input. Devices flow into the
     // picker via the 'conduit:devices-updated' event above.
 
+    // Surface the connected device's firmware version into the build
+    // log so OTA workflows have a glanceable "what's actually running"
+    // marker right where the user already looks for build output. Logs
+    // once on the first STATUS frame of a fresh page-load, then again
+    // only when binary_version or partition changes (e.g. after an
+    // OTA + commit cycle, or a TBYB rollback). Dedupes on (binary +
+    // partition + board) so steady-state STATUS pushes (schema events,
+    // link changes, etc.) don't spam the log.
+    const stream = window.Conduit && window.Conduit.stream;
+    if (stream && typeof stream.onStatus === 'function') {
+      let lastDeviceLine = null;
+      stream.onStatus((obj) => {
+        if (!obj || typeof obj !== 'object') return;
+        const bin = obj.binary_version || '?';
+        const ver = obj.version || '?';
+        const part = obj.partition || '?';
+        const board = obj.board_id ? String(obj.board_id).slice(0, 16) : '?';
+        const line = `[device] v${ver} (binary ${bin}) · partition ${part} · board ${board}`;
+        if (line === lastDeviceLine) return;
+        lastDeviceLine = line;
+        logLine(line);
+      });
+    }
+
     document.getElementById('ide-btn-build').addEventListener('click', onBuild);
     document.getElementById('ide-btn-build-upload').addEventListener('click', onBuildUpload);
 
