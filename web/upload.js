@@ -321,7 +321,38 @@
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) throw new Error(`GET /api/status → HTTP ${res.status}`);
-    return res.json();
+    // Tolerate a truncated/malformed body. Older firmwares (or any
+    // firmware whose status-builder added fields past its fixed
+    // response buffer) can return 200 OK with a body cut mid-string,
+    // which would otherwise throw inside res.json() and stall
+    // waitForDevice — the loop's catch swallows the throw and the
+    // device looks unreachable even though it's responding. Salvage
+    // the small subset of fields the rest of the upload flow actually
+    // reads (version / partition / uptime / tbyb_pending) via regex
+    // on the raw text. Those all appear early in the JSON, so they're
+    // present even when the tail is gone.
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      const pick = (re, conv) => {
+        const m = text.match(re); return m ? conv(m[1]) : undefined;
+      };
+      const salvaged = {
+        version:       pick(/"version":"([^"]*)"/,       (v) => v),
+        binary_version: pick(/"binary_version":"([^"]*)"/, (v) => v),
+        partition:     pick(/"partition":"([^"]*)"/,     (v) => v),
+        ip:            pick(/"ip":"([^"]*)"/,            (v) => v),
+        uptime:        pick(/"uptime":(\d+)/,            (v) => parseInt(v, 10)),
+        link:          pick(/"link":(true|false)/,       (v) => v === 'true'),
+        ota_in_progress: pick(/"ota_in_progress":(true|false)/, (v) => v === 'true'),
+        tbyb_pending:  pick(/"tbyb_pending":(true|false)/, (v) => v === 'true'),
+        _truncated:    true,
+      };
+      // Need at least version + partition to be useful downstream.
+      if (salvaged.version && salvaged.partition) return salvaged;
+      throw new Error(`GET /api/status: malformed body (${text.length} B)`);
+    }
   }
 
   // Poll /api/status repeatedly until the device responds or the overall

@@ -184,7 +184,10 @@ static bool ws_emit_binary(struct altcp_pcb *pcb, uint8_t channel,
 // place.
 
 static void ws_push_status(struct altcp_pcb *pcb, ws_state_t *s) {
-    char body[768];
+    // Must match HTTP_MAX_RESPONSE in http_server.c — same builder,
+    // same fields, same data_schema splice. 768 was silently truncating
+    // the body once the Phase 0 diag block landed; bumped in lockstep.
+    char body[2048];
     int n = http_server_build_status_json(body, sizeof(body));
     if (n <= 0) return;
     if (!ws_emit_text(pcb, WS_CH_STATUS, body, (size_t)n)) return;

@@ -44,8 +44,10 @@
 // reference it without dragging diag.c in). diag.h declares it extern.
 
 // Walk the three TCP-PCB lists and count entries. Cheap (lists are at
-// most a few items) and avoids allocating.
-static void count_tcp_pcbs(unsigned *active, unsigned *tw, unsigned *listen) {
+// most a few items) and avoids allocating. Non-static so the HTTP
+// status-JSON builder in http_server.c can fold the same census into
+// /api/status (declared in diag.h as conduit_diag_count_tcp_pcbs).
+void conduit_diag_count_tcp_pcbs(unsigned *active, unsigned *tw, unsigned *listen) {
     unsigned a = 0, t = 0, l = 0;
     for (struct tcp_pcb *p = tcp_active_pcbs; p; p = p->next) a++;
     for (struct tcp_pcb *p = tcp_tw_pcbs;     p; p = p->next) t++;
@@ -73,7 +75,7 @@ void diag_print_line(void) {
 
     // TCP PCB census.
     unsigned tcp_a = 0, tcp_tw = 0, tcp_l = 0;
-    count_tcp_pcbs(&tcp_a, &tcp_tw, &tcp_l);
+    conduit_diag_count_tcp_pcbs(&tcp_a, &tcp_tw, &tcp_l);
 
     // Link-layer RX/TX packet counters (cumulative since boot) + delta
     // since last print. recv = inbound passed up the stack; xmit = sent

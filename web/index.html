@@ -674,7 +674,7 @@
   // Account view's sidebar footer. CONDUIT_COMMIT is an 8-char prefix
   // of the git SHA the assets were built from; the deploy workflow
   // sed-replaces 'dev' with the real value at publish time.
-  window.CONDUIT_ASSET_VERSION = '2026-05-19-fw10.79-bundle';
+  window.CONDUIT_ASSET_VERSION = '2026-05-22-fw10.82-bundle';
   window.CONDUIT_COMMIT        = 'dev';
 </script>
 <!-- uPlot — high-performance time-series plotting via CDN. Pinned for
@@ -684,7 +684,7 @@
 <!-- Inline SVG icon helper. Loaded early so other scripts can call
      Conduit.icons.set(buttonEl, 'pause') without races. -->
 <script src="icons.js?v=127"></script>
-<script src="upload.js?v=141"></script>
+<script src="upload.js?v=142"></script>
 <script src="elf.js?v=121"></script>
 <script src="uf2.js?v=121"></script>
 <script src="finalize.js?v=121"></script>
@@ -695,11 +695,11 @@
      telemetry, cmd, and status. Must load AFTER app.js (uses
      deviceUrlForIp) but BEFORE the per-pane consumers (console.js,
      telemetry.js, commands.js) so they can subscribe at init time. -->
-<script src="stream.js?v=30"></script>
+<script src="stream.js?v=31"></script>
 <script src="hardware.js?v=4"></script>
 <script src="ide.js?v=171"></script>
 <script src="log_store.js?v=121"></script>
-<script src="log_export.js?v=121"></script>
+<script src="log_export.js?v=122"></script>
 <script src="console.js?v=142"></script>
 <script src="chart.js?v=150"></script>
 <!-- data_store.js: in-memory time-series store. Loaded before

@@ -115,11 +115,20 @@ export async function writeHdf5(channels, opts = {}) {
       if (!t || t.M === 0) continue;
       tlmRoot.create_group(t.name);
       const grp = f.get(`telemetry/${t.name}`);
-      const valsDtype = DTYPE_H5[t.dtype] || '<f8';
+      const valsDtype = DTYPE_H5[t.dtype] || '<d';
       const shape = (t.n === 1) ? [t.M] : [t.M, t.n];
       grp.create_dataset({ name: 'values',    data: t.values,   shape, dtype: valsDtype });
-      grp.create_dataset({ name: 'uptime_us', data: t.uptimeUs, shape: [t.M], dtype: '<f8' });
-      grp.create_dataset({ name: 'wall_ms',   data: t.wallMs,   shape: [t.M], dtype: '<f8' });
+      // F64 dtype is '<d', NOT '<f8'. h5wasm's parser reads ONLY the
+      // letter for floats (regex `^([<>|]?)([bhiqefdsBHIQS])([0-9]*)$`
+      // — see hdf5_hl.js:444-446, the `length` capture group is
+      // ignored for floats). So '<f8' is identical to '<f' = F32 (4
+      // bytes), NOT numpy-style F64. Writing it that way silently
+      // packed every timestamp as float32, which at epoch-ms scale
+      // (~1.78e12) has ULP ≈ 131 s, destroying ms-level granularity
+      // in overnight runs. The values-table at DTYPE_H5[9] gets this
+      // right ('<d'); these two lines were the inconsistency.
+      grp.create_dataset({ name: 'uptime_us', data: t.uptimeUs, shape: [t.M], dtype: '<d' });
+      grp.create_dataset({ name: 'wall_ms',   data: t.wallMs,   shape: [t.M], dtype: '<d' });
       try {
         grp.create_attribute('dtype',        dtypeLabel(t.dtype));
         grp.create_attribute('n',            t.n);

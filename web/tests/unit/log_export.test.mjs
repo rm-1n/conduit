@@ -61,10 +61,59 @@ test('writeHdf5: scalar F32 channel round-trips', async () => {
     const wall   = f.get('telemetry/X/wall_ms');
     assert.equal(uptime.value.length, N);
     assert.equal(wall.value.length,   N);
-    // (Don't assert wall.value's typed-array constructor — h5wasm reads
-    //  small <f8 datasets back as Float32Array on this version. The
-    //  bytes themselves are still F64 in the file; only the JS view
-    //  type changes. Length match is enough proof.)
+    // Storage dtype MUST be F64. The previous version of this assertion
+    // tolerated F32, with a comment claiming "bytes themselves are still
+    // F64 in the file; only the JS view type changes." That assumption
+    // was wrong — h5wasm parses dtype strings via
+    //   /^([<>|]?)([bhiqefdsBHIQS])([0-9]*)$/
+    // and for floats only the LETTER drives the size lookup (f=4, d=8).
+    // The trailing digits are silently dropped, so '<f8' has always
+    // been F32 (4 bytes), not F64. On overnight runs this collapsed
+    // wall_ms (epoch-ms magnitude) to ~131-second ULP — useless for
+    // gap analysis. Correct dtype is '<d'. Assert directly so a future
+    // regression to '<f8' / '<f4' fails loudly.
+    assert.equal(uptime.metadata.size, 8,
+      'uptime_us must be stored as 8-byte float (F64). h5wasm dtype string is <d, not <f8.');
+    assert.equal(wall.metadata.size, 8,
+      'wall_ms must be stored as 8-byte float (F64). h5wasm dtype string is <d, not <f8.');
+    // Round-trip a representative epoch-ms value through wall_ms; if
+    // storage silently fell back to F32 this would lose ms granularity
+    // (a single 1 ms increment near 1.7e12 lands inside one F32 ULP).
+    assert.equal(Number(wall.value[1]) - Number(wall.value[0]), 1,
+      'consecutive wall_ms values 1 ms apart must round-trip exactly (F32 would collapse them).');
+  } finally { cleanup(h5, vname, f); }
+});
+
+test('writeHdf5: wall_ms ULP at epoch scale (regression: F32 lost ~131 s of precision)', async () => {
+  // Without the '<d' fix, a single 1-ms increment in wall_ms near
+  // 1.7e12 disappeared inside the F32 ULP, so a 12-hour run had
+  // every timestamp collapsed to its nearest F32 representable value
+  // — about 131 s of granularity. Cover the failure mode explicitly
+  // with epoch-scale timestamps so the dtype fix can't silently regress.
+  const N = 8;
+  const values   = new Float32Array(N);
+  const uptimeUs = new Float64Array(N);
+  const wallMs   = new Float64Array(N);
+  const TBASE = 1_779_564_412_928;          // matches the bad overnight export
+  for (let i = 0; i < N; i++) {
+    values[i] = 0;
+    uptimeUs[i] = TBASE + i;
+    wallMs[i] = TBASE + i;                  // 1 ms apart, F32-indistinguishable
+  }
+  const { f, h5, vname } = await buildAndRead([{
+    name: 'EPOCH', dtype: 8, n: 1, M: N, values, uptimeUs, wallMs,
+  }]);
+  try {
+    const wall   = f.get('telemetry/EPOCH/wall_ms');
+    const uptime = f.get('telemetry/EPOCH/uptime_us');
+    assert.equal(wall.metadata.size,   8);
+    assert.equal(uptime.metadata.size, 8);
+    for (let i = 1; i < N; i++) {
+      assert.equal(Number(wall.value[i]) - Number(wall.value[i-1]), 1,
+        `wall_ms[${i}] − wall_ms[${i-1}] must be 1 (F32 would round both to the same value at this magnitude).`);
+      assert.equal(Number(uptime.value[i]) - Number(uptime.value[i-1]), 1,
+        `uptime_us[${i}] − uptime_us[${i-1}] must be 1.`);
+    }
   } finally { cleanup(h5, vname, f); }
 });
 

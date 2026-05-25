@@ -324,7 +324,72 @@
 
   function dispatchStatus(jsonText) {
     let obj;
-    try { obj = JSON.parse(jsonText); } catch (_) { return; }
+    try { obj = JSON.parse(jsonText); }
+    catch (_) {
+      // Truncated STATUS body — same root cause as the upload.js
+      // getStatus salvage path: ws_push_status uses a fixed buffer
+      // (`char body[N]` in ws_server.c), and adding fields to the
+      // shared JSON builder will silently produce a body cut
+      // mid-string. Dropping the frame silently here was breaking
+      // two visible things:
+      //   * the IDE's "[device] v… (binary …) · partition …" build-
+      //     log line stops updating after OTA (onStatus callbacks
+      //     never fire),
+      //   * telemetry's schema map never gets the inlined
+      //     data_schema, so the FIRST records of a fresh session
+      //     come in as unknown-msgId and the chart starts cycling
+      //     through the HTTPS /api/data_schema refresh path.
+      // Salvage the same field set as upload.js's getStatus so
+      // subscribers see the partial-but-correct head of the body.
+      // No data_schema in the salvage — the splice lives at the END
+      // of the body and is therefore the bytes most likely lost.
+      // Telemetry's HTTPS-fetch fallback handles that case.
+      const pick = (re, conv) => {
+        const m = jsonText.match(re); return m ? conv(m[1]) : undefined;
+      };
+      const pickStr  = (k) => pick(new RegExp(`"${k}":"([^"]*)"`), (v) => v);
+      const pickInt  = (k) => pick(new RegExp(`"${k}":(-?\\d+)`), (v) => parseInt(v, 10));
+      const pickBool = (k) => pick(new RegExp(`"${k}":(true|false)`), (v) => v === 'true');
+      obj = {
+        version:         pickStr('version'),
+        binary_version:  pickStr('binary_version'),
+        ip:              pickStr('ip'),
+        mac:             pickStr('mac'),
+        uptime:          pickInt('uptime'),
+        link:            pickBool('link'),
+        partition:       pickStr('partition'),
+        board_id:        pickStr('board_id'),
+        ota_in_progress: pickBool('ota_in_progress'),
+        tbyb_pending:    pickBool('tbyb_pending'),
+        _truncated:      true,
+      };
+      // Close-cause buckets + key diag fields. These all appear in
+      // the JSON BEFORE the data_schema splice (and before the new
+      // mbedtls/MEMP block on most firmwares), so they're recoverable
+      // from a 1023-byte truncated body. Required for the IDE's
+      // "[device] stream-close: <bucket>=<n>" diff line — without
+      // them every reconnect we get the warning but can't tell which
+      // bucket moved, which is exactly the diagnostic the user needs
+      // when the WS cycles unexplained.
+      for (const k of [
+        'streams_open', 'stream_last_close_err', 'stream_last_close_age_ms',
+        'stream_close_recv_eof', 'stream_close_recv_err',
+        'stream_close_err_rst', 'stream_close_err_abrt',
+        'stream_close_err_clsd', 'stream_close_err_other',
+        'stream_close_write_err', 'stream_close_ws_parse_fail',
+        'stream_close_link_down',
+        'core1_iter', 'http_poll_fires', 'http_accepts', 'http_streams_started',
+        'data_ring_evictions', 'data_ring_evicted_bytes',
+      ]) {
+        const v = pickInt(k);
+        if (v !== undefined) obj[k] = v;
+      }
+      // Need at least version + partition; otherwise the salvage is
+      // not informative enough to broadcast — every subscriber would
+      // treat the partial object as a real STATUS and overwrite
+      // their last-good cache.
+      if (!obj.version || !obj.partition) return;
+    }
     lastStatusObj  = obj;
     lastStatusAtMs = performance.now();
     for (const cb of statusSubs) { try { cb(obj); } catch (_) {} }

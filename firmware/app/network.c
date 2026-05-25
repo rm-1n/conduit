@@ -48,6 +48,18 @@ static void schedule_garp_burst(struct netif *netif) {
     sys_timeout(5000, announce_tick_cb, netif);
 }
 
+#ifndef CONDUIT_MINIMAL
+// Deferred streaming-PCB reaper. Scheduled on link-down, cancelled if
+// the link returns within CABLE_REPLUG_MIN_DOWN_MS. See link_callback
+// for the rationale (LAN8720A 0.6-1.3 s auto-neg flaps would otherwise
+// kill every active WS connection on every brief renegotiation event).
+static void link_down_sweep_cb(void *arg) {
+    (void)arg;
+    DEV_LOG("[net] link-down debounce expired — sweeping streaming PCBs\n");
+    http_server_on_link_down();
+}
+#endif
+
 static void link_callback(struct netif *netif) {
     bool up = netif_is_link_up(netif);
     // After a real replug the LAN8720A emits several brief (0.6-1.3 s)
@@ -58,6 +70,7 @@ static void link_callback(struct netif *netif) {
     #define CABLE_REPLUG_MIN_DOWN_MS  2000
     static absolute_time_t link_down_at;
     static bool            link_down_at_valid = false;
+    static bool            sweep_pending      = false;
     DEV_LOG("[net] link %s\n", up ? "up" : "down");
     if (up) {
         bool real_replug = false;
@@ -67,6 +80,25 @@ static void link_callback(struct netif *netif) {
             real_replug = (down_ms >= CABLE_REPLUG_MIN_DOWN_MS);
             link_down_at_valid = false;
         }
+#ifndef CONDUIT_MINIMAL
+        // The link came back inside the debounce window — cancel the
+        // pending sweep so the WS / streaming PCBs survive the flap.
+        // TCP retransmits ride out the brief gap (initial RTO ~1500 ms,
+        // doubled on miss), the browser sees a small latency spike
+        // instead of a full reconnect (cold TLS handshake ~2.6 s).
+        // Without this, every LAN8720A auto-neg blip reaps every
+        // streaming PCB even though the conn was about to be fine.
+        if (sweep_pending && !real_replug) {
+            sys_untimeout(link_down_sweep_cb, NULL);
+            sweep_pending = false;
+            DEV_LOG("[net] link flap < %dms — streams kept\n",
+                    CABLE_REPLUG_MIN_DOWN_MS);
+        } else if (sweep_pending && real_replug) {
+            // Real replug: the sweep timer is about to fire (or just
+            // fired). Either way clear our flag.
+            sweep_pending = false;
+        }
+#endif
         // Unconditional on every link-up. Any down→up phase-shifts the
         // PIO RX SM relative to the PHY's RX_DV; without a reinit every
         // subsequent frame fails FCS. ~50 µs, idempotent. MUST NOT also
@@ -92,11 +124,19 @@ static void link_callback(struct netif *netif) {
             link_down_at_valid = true;
         }
 #ifndef CONDUIT_MINIMAL
-        // Reap streaming PCBs immediately so the small MEMP_NUM_TCP_PCB
-        // pool is free for the browser's reconnect SYNs the moment the
-        // cable returns. Without this they sit in keepalive limbo for
-        // ~50 s and the reconnects time out.
-        http_server_on_link_down();
+        // Defer the streaming-PCB sweep instead of running it inline.
+        // Brief PHY flaps (auto-neg renegotiation, switch port settle)
+        // would otherwise kill every active WS even though TCP could
+        // ride out the sub-second gap. If the link is back within
+        // CABLE_REPLUG_MIN_DOWN_MS the up branch cancels this timer.
+        // Real disconnects (cable yank, switch reboot) keep the link
+        // down past the guard — the sweep fires on schedule and the
+        // PCB pool is freed for the browser's reconnect SYNs, same
+        // behaviour as before for the genuine-disconnect case.
+        if (!sweep_pending) {
+            sys_timeout(CABLE_REPLUG_MIN_DOWN_MS, link_down_sweep_cb, NULL);
+            sweep_pending = true;
+        }
 #endif
     }
 }

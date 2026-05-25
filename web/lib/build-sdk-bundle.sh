@@ -213,6 +213,35 @@ cat > "$OUT/manifest.json" <<EOF
 }
 EOF
 
+echo "=== Bumping CONDUIT_ASSET_VERSION ==="
+# Without this, the browser keeps fetching the previously cached bundle
+# from GitHub Pages (or even a local devserver via the SW cache) even
+# after a fresh harvest. The version string is a cache-bust suffix on
+# every bundle path; bumping it on every harvest is the only reliable
+# way to make sure a v10.81 firmware fix actually reaches the IDE-built
+# UF2 instead of silently linking against a stale v10.79 object tree.
+# Strategy: parse MAJOR.MINOR from firmware/app/CMakeLists.txt and
+# encode it into the string as "<datestamp>-fw<MAJOR>.<MINOR>-bundle".
+# Same shape the user has been seeing in the build log.
+INDEX_HTML="$REPO_ROOT/web/index.html"
+CMAKELISTS="$REPO_ROOT/firmware/app/CMakeLists.txt"
+if [ -f "$INDEX_HTML" ] && [ -f "$CMAKELISTS" ]; then
+    BIN_MAJOR=$(awk '/set\(CONDUIT_BINARY_VERSION_MAJOR/ {gsub(/[)(]/, ""); print $2; exit}' "$CMAKELISTS")
+    BIN_MINOR=$(awk '/set\(CONDUIT_BINARY_VERSION_MINOR/ {gsub(/[)(]/, ""); print $2; exit}' "$CMAKELISTS")
+    DATESTAMP=$(date +%Y-%m-%d)
+    NEW_VER="${DATESTAMP}-fw${BIN_MAJOR}.${BIN_MINOR}-bundle"
+    OLD_VER=$(awk -F"'" "/window\\.CONDUIT_ASSET_VERSION = '/ {print \$2; exit}" "$INDEX_HTML")
+    if [ "$OLD_VER" = "$NEW_VER" ]; then
+        echo "  CONDUIT_ASSET_VERSION already at $NEW_VER (no change)"
+    else
+        sed -i.bak -E "s|(window\.CONDUIT_ASSET_VERSION = ')[^']*(')|\\1${NEW_VER}\\2|" "$INDEX_HTML"
+        rm -f "$INDEX_HTML.bak"
+        echo "  $OLD_VER → $NEW_VER"
+    fi
+else
+    echo "  warning: skipped — index.html or CMakeLists.txt not found"
+fi
+
 echo
 echo "=== staged ==="
 du -sh "$OUT"/*

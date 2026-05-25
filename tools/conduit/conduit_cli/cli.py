@@ -40,12 +40,19 @@ def upload(device, token, filepath):
 
 @main.command()
 @click.option("-d", "--device", required=True, help="Device IP address")
-def status(device):
+@click.option("--json", "as_json", is_flag=True,
+              help="Emit the raw /api/status JSON instead of the formatted table")
+def status(device, as_json):
     """Get device status."""
     dev = ConduitDevice(device)
     try:
         s = dev.status()
-        click.echo(f"Version:   {s.get('version', '?')}")
+        if as_json:
+            click.echo(_json.dumps(s, indent=2))
+            return
+        bin_ver = s.get('binary_version')
+        click.echo(f"Version:   {s.get('version', '?')}"
+                   + (f" (binary {bin_ver})" if bin_ver else ""))
         click.echo(f"IP:        {s.get('ip', '?')}")
         click.echo(f"MAC:       {s.get('mac', '?')}")
         click.echo(f"Uptime:    {s.get('uptime', '?')}s")
@@ -53,6 +60,89 @@ def status(device):
         click.echo(f"PoE:       {'Yes' if s.get('poe') else 'No'}")
         click.echo(f"Partition: {s.get('partition', '?')}")
         click.echo(f"Board ID:  {s.get('board_id', '?')}")
+        # Ring-eviction telemetry — quiet when zero. Non-zero means the
+        # producer outran the consumer at some point and we silently
+        # dropped samples. data_buffer.c is the source of truth.
+        evictions = s.get('data_ring_evictions')
+        if evictions:
+            click.echo(f"Data ring: {evictions} evictions, "
+                       f"{s.get('data_ring_evicted_bytes', 0)} bytes lost")
+        # Streaming-conn close-cause attribution (firmware ≥ 10.80).
+        # Quiet when every bucket is zero so healthy boards stay terse.
+        # When non-zero, this is the primary diagnostic for "WS dropped
+        # after N minutes — why?" — every cause manifests in the
+        # browser as the same 1006 close, only the device knows which.
+        close_keys = [
+            ('stream_close_recv_eof',      'recv_eof'),
+            ('stream_close_recv_err',      'recv_err'),
+            ('stream_close_err_rst',       'err_rst'),
+            ('stream_close_err_abrt',      'err_abrt'),
+            ('stream_close_err_clsd',      'err_clsd'),
+            ('stream_close_err_other',     'err_other'),
+            ('stream_close_write_err',     'write_err'),
+            ('stream_close_ws_parse_fail', 'ws_parse_fail'),
+            ('stream_close_link_down',     'link_down'),
+        ]
+        present = [(label, s[key]) for key, label in close_keys if s.get(key)]
+        if present:
+            click.echo(f"Streams:   {s.get('streams_open', '?')} open")
+            click.echo("Closes:    " + ", ".join(f"{lbl}={n}" for lbl, n in present))
+            last_err = s.get('stream_last_close_err')
+            last_age_ms = s.get('stream_last_close_age_ms')
+            if last_err is not None and last_age_ms is not None:
+                click.echo(f"  last:    err={last_err}, age={last_age_ms / 1000:.1f}s")
+        elif s.get('streams_open') is not None:
+            click.echo(f"Streams:   {s['streams_open']} open")
+        # Phase 0 wedge-attribution counters (firmware ≥ 10.82). Only
+        # show when something is interesting: a pool near max, a drop
+        # counter non-zero, or an mbedtls slab exhaustion event. The
+        # raw counters always live in --json output for scripting.
+        diag_parts = []
+        pbuf_used = s.get('pbuf_used')
+        pbuf_max = s.get('pbuf_max')
+        if pbuf_used is not None and pbuf_max:
+            diag_parts.append(f"pbuf {pbuf_used}/{pbuf_max}")
+        tpcb_used = s.get('tcp_pcb_used')
+        tpcb_max = s.get('tcp_pcb_max')
+        if tpcb_used is not None and tpcb_max:
+            diag_parts.append(f"tcp_pcb {tpcb_used}/{tpcb_max}")
+        sto_used = s.get('sys_timeout_used')
+        sto_max = s.get('sys_timeout_max')
+        if sto_used is not None and sto_max:
+            diag_parts.append(f"sys_timeout {sto_used}/{sto_max}")
+        if diag_parts:
+            click.echo("Pools:     " + ", ".join(diag_parts))
+        pcbs_parts = []
+        for key, label in (('tcp_pcbs_active', 'active'),
+                           ('tcp_pcbs_timewait', 'tw'),
+                           ('tcp_pcbs_listen', 'listen')):
+            v = s.get(key)
+            if v is not None:
+                pcbs_parts.append(f"{label}={v}")
+        if pcbs_parts:
+            click.echo("TCP PCBs:  " + ", ".join(pcbs_parts))
+        drops = {
+            'ip_drops': s.get('ip_drops', 0),
+            'tcp_drops': s.get('tcp_drops', 0),
+            'tcp_errs': s.get('tcp_errs', 0),
+            'tcp_chkerrs': s.get('tcp_chkerrs', 0),
+        }
+        nz = {k: v for k, v in drops.items() if v}
+        if nz:
+            click.echo("Drops:     " + ", ".join(f"{k}={v}" for k, v in nz.items()))
+        slab_in = s.get('mbedtls_slab_exhausted_in', 0)
+        slab_out = s.get('mbedtls_slab_exhausted_out', 0)
+        if slab_in or slab_out:
+            click.echo(f"mbedtls:   slab exhausted in={slab_in} out={slab_out}")
+        # core1_iter + poll_fires + accepts: the "is anything still
+        # running?" triplet. Two successive `conduit status` calls
+        # should show all three advancing.
+        iter_val = s.get('core1_iter')
+        polls = s.get('http_poll_fires')
+        accepts = s.get('http_accepts')
+        if iter_val is not None and polls is not None and accepts is not None:
+            click.echo(f"Liveness:  core1_iter={iter_val} "
+                       f"poll_fires={polls} accepts={accepts}")
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -325,14 +415,41 @@ def flash_and_test(device, firmware_dir, sdk, toolchain, picotool, serial, seria
                    "Useful for benchmarking the TLS-stack throughput; requires the per-device "
                    "rm1n cert (loaded from the IDENTITY partition) and conduit-dns resolving the "
                    "hostname to the LAN IP.")
-def ota_upload(device, token, filepath, use_https):
+@click.option("--commit/--no-commit", "do_commit", default=True, show_default=True,
+              help="Call /api/commit after the new image boots so the next reboot "
+                   "(power cycle, /api/reboot, watchdog) keeps it instead of "
+                   "rolling back to the previous partition. Pass --no-commit to "
+                   "deliberately leave it TBYB-pending — used when validating "
+                   "the rollback path itself.")
+def ota_upload(device, token, filepath, use_https, do_commit):
     """Upload a UF2 file over the network (OTA update).
 
     Prints upload duration + averaged throughput so we can compare
     cipher / mbedtls-config experiments side by side.
     """
-    success = dev.ota_upload(device, token, filepath, use_https=use_https)
+    success = dev.ota_upload(device, token, filepath, use_https=use_https,
+                             commit=do_commit)
     sys.exit(0 if success else 1)
+
+
+@main.command(name="ota-commit")
+@click.option("-d", "--device", default=dev.DEFAULT_DEVICE_IP, help="Device IP address")
+@click.option("-t", "--token", default="changeme", help="Auth token")
+def ota_commit_cmd(device, token):
+    """Manually finalize a TBYB-pending image via POST /api/commit.
+
+    Useful when the last `conduit ota-upload --no-commit` ran in a
+    rollback-validation flow and you've now confirmed the new image is
+    healthy; without this, the next reboot lands back on the previous
+    partition.
+    """
+    try:
+        result = dev.ota_commit(device, token)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    click.echo(_json.dumps(result))
+    sys.exit(0 if result.get("ok") else 1)
 
 
 @main.command()

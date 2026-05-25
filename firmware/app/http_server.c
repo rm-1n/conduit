@@ -26,6 +26,7 @@
 #include "identity.h"
 #include "mbedtls_slab.h"
 #include "incident_log.h"
+#include "diag.h"
 #include "rmii_ethernet/netif.h"
 
 #include "mbedtls/platform.h"
@@ -40,6 +41,8 @@
 #include "lwip/altcp_tcp.h"
 #include "lwip/altcp_tls.h"
 #include "lwip/tcp.h"           // tcp_pcb fields for keepalive (walked via altcp inner_conn)
+#include "lwip/stats.h"         // MEMP_STATS pools for /api/status diag block
+#include "lwip/memp.h"          // MEMP_PBUF_POOL / MEMP_TCP_PCB / MEMP_SYS_TIMEOUT indices
 #include "lwip/pbuf.h"
 #include "pico/unique_id.h"
 #include "pico/stdlib.h"
@@ -50,8 +53,13 @@
 
 // Maximum HTTP header size we'll parse
 #define HTTP_MAX_HEADER  2048
-// Maximum response size
-#define HTTP_MAX_RESPONSE 1024
+// Maximum response size. Sized for /api/status — which is the largest
+// fixed-shape body we emit — with the Phase 0 wedge-attribution block
+// (core1_iter, http_poll_fires, the close-cause buckets, MEMP pool
+// stats, mbedtls slab stats) plus the spliced data_schema for up to
+// CONDUIT_DATA_MAX_NAMES channels. 1 KB was silently truncating the
+// body mid-string after the diag block landed.
+#define HTTP_MAX_RESPONSE 2048
 
 typedef enum {
     CONN_STATE_HEADER,     // Accumulating headers
@@ -121,6 +129,12 @@ typedef struct {
     // without this, a quiet device looks identical to a wedged TX
     // path and the indicator flaps "no data" forever.
     absolute_time_t last_tx_at;
+    // Wall-clock when the TCP/TLS accept fired for this conn. Used by
+    // note_stream_close() to compute and stash the age of the most
+    // recently closed streaming conn — a 22-min disconnect that lands
+    // in stream_close_err_abrt looks very different from a 30-s one,
+    // and the bucket alone doesn't carry that signal.
+    absolute_time_t opened_at;
     // Per-conn WebSocket state. Only meaningful when state == CONN_STATE_WS;
     // ws_server_on_open() initializes it post-Upgrade. The conn's
     // header_buf (2 KB) doubles as the WS frame reassembly buffer
@@ -214,13 +228,15 @@ static stream_reg_entry_t stream_registry[STREAM_REG_SIZE];
 // watchdog rebooted it. Fix: a fixed-size static pool. One slot per
 // MEMP_NUM_TCP_PCB; same peak usage as the malloc path but no
 // fragmentation, no allocation failure, no panic.
-// 5 covers the realistic worst case for one IDE session: 2 long-lived
-// streams (telemetry + console) + 1 OTA upload + 1 control request
-// (status/commit/cmd) + 1 transient handshake-overlap. Going larger
-// overflows BSS now that MEM_SIZE is back at 128 KB. Pool exhaustion
-// surfaces as ERR_MEM on the new accept, which lwIP handles by
-// RSTing the new SYN — peer retries cleanly.
-#define HTTP_CONN_POOL_SIZE  5
+// 5 covered the bare-minimum IDE session (2 streams + 1 OTA + 1
+// control + 1 handshake-overlap) but was being saturated in practice:
+// a second browser tab, an HTTPS status fetch racing with the IDE WS,
+// or a stuck post-link-down conn that lingered for ~50 s would push
+// us past 5 and start RSTing new SYNs. 7 leaves two slots of headroom
+// for those transient overlaps. Each slot ~2 KB → +4 KB BSS, comfortably
+// within MEM_SIZE=128 KB budget. Pool exhaustion still surfaces as
+// ERR_MEM on the new accept (RST'd SYN, peer retries cleanly).
+#define HTTP_CONN_POOL_SIZE  7
 static http_conn_t http_conn_pool[HTTP_CONN_POOL_SIZE];
 static bool        http_conn_in_use[HTTP_CONN_POOL_SIZE];
 
@@ -248,9 +264,57 @@ static void http_conn_free(http_conn_t *conn) {
 // cable cycle.
 static volatile uint32_t g_accepts_total         = 0;
 static volatile uint32_t g_streams_started_total = 0;
+// http_poll is the per-conn poll callback driven by lwIP's tcp_tmr.
+// If this counter stops advancing while core1_iter is still climbing,
+// it pins lwIP's slow-timer subsystem as the wedged piece (e.g. the
+// tcp_tmr() reschedule failed because MEMP_NUM_SYS_TIMEOUT was
+// exhausted). Visible in /api/status alongside accepts_total and
+// the close-cause counters so a post-wedge HTTPS fetch can attribute.
+static volatile uint32_t g_http_poll_fires       = 0;
 
 uint32_t http_server_accepts(void)         { return g_accepts_total; }
 uint32_t http_server_streams_started(void) { return g_streams_started_total; }
+uint32_t http_server_poll_fires(void)      { return g_http_poll_fires; }
+
+// Why a streaming connection (CONN_STATE_STREAMING / CONN_STATE_WS) ended.
+// The browser-side WS sees every one of these as the same 1006 "abnormal
+// close — no close frame". Without device-side attribution, "session lasted
+// 22 min, then died" is unbucketable: was it our retransmits exhausting
+// (ERR_ABRT from lwIP), the peer RSTing (ERR_RST), a TLS internal abort
+// (also ERR_ABRT — distinguishable only by other signals like stale TX),
+// a WS protocol error we hit, etc. Each path bumps exactly one bucket so
+// /api/status post-incident shows the cause.
+typedef enum {
+    STREAM_CLOSE_RECV_EOF      = 0,  // http_recv got NULL pbuf (clean peer FIN)
+    STREAM_CLOSE_RECV_ERR      = 1,  // http_recv called with err != ERR_OK
+    STREAM_CLOSE_ERR_RST       = 2,  // lwIP err_cb: ERR_RST  (peer RST or local RST)
+    STREAM_CLOSE_ERR_ABRT      = 3,  // lwIP err_cb: ERR_ABRT (RTO exhausted OR mbedtls internal abort)
+    STREAM_CLOSE_ERR_CLSD      = 4,  // lwIP err_cb: ERR_CLSD
+    STREAM_CLOSE_ERR_OTHER     = 5,  // lwIP err_cb: any other code
+    STREAM_CLOSE_WRITE_ERR     = 6,  // altcp_write returned non-MEM error
+    STREAM_CLOSE_WS_PARSE_FAIL = 7,  // ws_server_on_bytes returned false
+    STREAM_CLOSE_LINK_DOWN     = 8,  // http_server_on_link_down() swept
+    STREAM_CLOSE_COUNT         = 9,
+} stream_close_reason_t;
+
+static volatile uint32_t g_stream_closes[STREAM_CLOSE_COUNT];
+static volatile int32_t  g_stream_last_close_err    = 0;  // lwIP err code from the most recent err_cb
+static volatile uint32_t g_stream_last_close_age_ms = 0;  // wall-clock lifetime of the most recently closed streaming conn
+
+// Bump the close-cause counter for a streaming conn, plus stash the age
+// of the most recently closed streaming conn so a "22 min vs 30 s"
+// signal is visible without per-event logging. Safe to call with conn
+// == NULL (skips age update). Only counts conns in STREAMING / WS state
+// — short-lived requests (status/cmd/upload-finalize) close on a normal
+// path and aren't a reconnect-loss signal.
+static void note_stream_close(stream_close_reason_t reason, http_conn_t *conn) {
+    if (!conn) return;
+    if (conn->state != CONN_STATE_STREAMING && conn->state != CONN_STATE_WS) return;
+    if (reason >= STREAM_CLOSE_COUNT) return;
+    g_stream_closes[reason]++;
+    g_stream_last_close_age_ms =
+        (uint32_t)(absolute_time_diff_us(conn->opened_at, get_absolute_time()) / 1000);
+}
 
 static void register_streaming(struct altcp_pcb *pcb, http_conn_t *conn) {
     for (int i = 0; i < STREAM_REG_SIZE; i++) {
@@ -260,6 +324,18 @@ static void register_streaming(struct altcp_pcb *pcb, http_conn_t *conn) {
             return;
         }
     }
+}
+
+// Snapshot of how many streaming-state conns are live right now —
+// surfaced in /api/status so a 22-min disconnect can be cross-checked
+// against "did we still have N concurrent streams when this one died,
+// or did they all die together (link/wifi-side cause)".
+static int count_streaming_conns(void) {
+    int n = 0;
+    for (int i = 0; i < STREAM_REG_SIZE; i++) {
+        if (stream_registry[i].pcb != NULL) n++;
+    }
+    return n;
 }
 
 // Idempotent. Matches by pcb when available, otherwise by conn (http_err
@@ -367,6 +443,49 @@ int http_server_build_status_json(char *out, size_t out_max) {
         }
     }
 
+    // Snapshot Phase 0 diag fields up-front (cheap reads from BSS) so
+    // the long snprintf below has a flat list of values to plug in.
+    // Keeping the gather here rather than inlining avoids re-walking
+    // the TCP-PCB lists three times across the format string.
+    struct {
+        uint32_t core1_iter;
+        unsigned pbuf_used, pbuf_max;
+        unsigned tcp_pcb_used, tcp_pcb_max;
+        unsigned sys_timeout_used, sys_timeout_max;
+        unsigned tcp_pcbs_active, tcp_pcbs_tw, tcp_pcbs_listen;
+        uint32_t ip_drops, tcp_drops, tcp_errs, tcp_chkerrs;
+        unsigned mbedtls_exhausted_in, mbedtls_exhausted_out;
+    } diag_status = {0};
+
+    diag_status.core1_iter = __atomic_load_n(&g_core1_iter, __ATOMIC_RELAXED);
+
+    // lwIP MEMP_STATS — pinned ON in lwipopts.h:163 already. .memp[]
+    // entries are pointers, dereferenced for used + max. The pools we
+    // care about for wedge attribution:
+    //   PBUF_POOL      — leaked pbufs are the most common wedge cause
+    //   TCP_PCB        — listener fails to accept if this hits max
+    //   SYS_TIMEOUT    — tcp_tmr can't reschedule itself when full
+    const struct stats_mem *pbm = lwip_stats.memp[MEMP_PBUF_POOL];
+    if (pbm) { diag_status.pbuf_used = pbm->used; diag_status.pbuf_max = pbm->max; }
+    const struct stats_mem *tpm = lwip_stats.memp[MEMP_TCP_PCB];
+    if (tpm) { diag_status.tcp_pcb_used = tpm->used; diag_status.tcp_pcb_max = tpm->max; }
+    const struct stats_mem *stm = lwip_stats.memp[MEMP_SYS_TIMEOUT];
+    if (stm) { diag_status.sys_timeout_used = stm->used; diag_status.sys_timeout_max = stm->max; }
+
+    conduit_diag_count_tcp_pcbs(&diag_status.tcp_pcbs_active,
+                                &diag_status.tcp_pcbs_tw,
+                                &diag_status.tcp_pcbs_listen);
+
+    diag_status.ip_drops    = lwip_stats.ip.drop;
+    diag_status.tcp_drops   = lwip_stats.tcp.drop;
+    diag_status.tcp_errs    = lwip_stats.tcp.err;
+    diag_status.tcp_chkerrs = lwip_stats.tcp.chkerr;
+
+    conduit_mbedtls_slab_stats_t slab;
+    conduit_mbedtls_slab_stats(&slab);
+    diag_status.mbedtls_exhausted_in  = slab.exhausted_in;
+    diag_status.mbedtls_exhausted_out = slab.exhausted_out;
+
     // Build the body without the trailing `}` so we can splice in
     // the inlined data_schema below. The /api/data_schema endpoint
     // stays live for backwards compat, but the IDE no longer needs
@@ -409,6 +528,67 @@ int http_server_build_status_json(char *out, size_t out_max) {
         // itself paused.
         "\"data_ring_evictions\":%u,"
         "\"data_ring_evicted_bytes\":%u,"
+        // Streaming-conn close-cause attribution. Bumps live in
+        // note_stream_close(); see stream_close_reason_t for what each
+        // bucket means. All of these manifest as the same 1006
+        // "abnormal close, no close frame" in the browser — only the
+        // device knows which path actually fired. `last_close_err` is
+        // the lwIP err code (or write err) from whichever close most
+        // recently incremented one of these, and `last_close_age_ms`
+        // is how long that conn was alive — a 22-min lifetime in
+        // err_abrt looks very different from a 30-s one.
+        "\"streams_open\":%d,"
+        "\"stream_close_recv_eof\":%u,"
+        "\"stream_close_recv_err\":%u,"
+        "\"stream_close_err_rst\":%u,"
+        "\"stream_close_err_abrt\":%u,"
+        "\"stream_close_err_clsd\":%u,"
+        "\"stream_close_err_other\":%u,"
+        "\"stream_close_write_err\":%u,"
+        "\"stream_close_ws_parse_fail\":%u,"
+        "\"stream_close_link_down\":%u,"
+        "\"stream_last_close_err\":%d,"
+        "\"stream_last_close_age_ms\":%u,"
+        // Phase 0 wedge-attribution counters. Last incident: device
+        // ICMP-pingable, both TCP listeners refused SYN, USB CDC silent,
+        // LED blinking at unchanged 1 kHz cadence (so Core 0 healthy).
+        // Out-of-band /api/status fetch via HTTPS was the only way to
+        // see device state; these counters tell us which subsystem
+        // wedged so the next recurrence is attributable instead of
+        // guessable.
+        //   core1_iter      — bumped per Core 1 RMII poll iteration
+        //                     (after sys_check_timeouts). Stalled =
+        //                     poll loop wedged; Core 0's 3 s detector
+        //                     would have rebooted us already.
+        //   http_poll_fires — bumped on entry to the per-conn poll cb
+        //                     (driven by lwIP tcp_tmr/slow timer).
+        //                     Flat while core1_iter climbs = slow
+        //                     timer wedge (e.g. sys_timeout pool full
+        //                     so tcp_tmr can't reschedule itself).
+        //   http_accepts    — increments per http_accept call. Flat
+        //                     under inbound SYNs = SYNs not reaching
+        //                     the listen pcb (tcp_listen_input path
+        //                     broken or listen pcb gone).
+        //   pbuf_used/max, sys_timeout_used/max, tcp_pcb_used/max —
+        //     lwIP MEMP_STATS. `_used` at `_max` is direct pool
+        //     exhaustion; chain through what allocates each.
+        //   tcp_pcbs_active/timewait/listen — live PCB list census.
+        //   ip_drops, tcp_drops/errs/chkerrs — lwIP drop counters.
+        //     Climbing while http_accepts stays flat localizes the
+        //     packet rejection point.
+        //   mbedtls_slab_exhausted_{in,out} — TLS session-buffer
+        //     exhaustion (3-slot static slab); explains a wedge if
+        //     handshakes pile up and the slab leaks.
+        "\"core1_iter\":%u,"
+        "\"http_poll_fires\":%u,"
+        "\"http_accepts\":%u,"
+        "\"http_streams_started\":%u,"
+        "\"pbuf_used\":%u,\"pbuf_max\":%u,"
+        "\"tcp_pcb_used\":%u,\"tcp_pcb_max\":%u,"
+        "\"sys_timeout_used\":%u,\"sys_timeout_max\":%u,"
+        "\"tcp_pcbs_active\":%u,\"tcp_pcbs_timewait\":%u,\"tcp_pcbs_listen\":%u,"
+        "\"ip_drops\":%u,\"tcp_drops\":%u,\"tcp_errs\":%u,\"tcp_chkerrs\":%u,"
+        "\"mbedtls_slab_exhausted_in\":%u,\"mbedtls_slab_exhausted_out\":%u,"
         "\"device\":\"conduit\""
         ,
         CONDUIT_VERSION_STRING,
@@ -426,7 +606,29 @@ int http_server_build_status_json(char *out, size_t out_max) {
         ota_boot_type_str(),
         ota_commit_pending() ? "true" : "false",
         data_buffer_evictions_total(),
-        data_buffer_evicted_bytes_total());
+        data_buffer_evicted_bytes_total(),
+        count_streaming_conns(),
+        g_stream_closes[STREAM_CLOSE_RECV_EOF],
+        g_stream_closes[STREAM_CLOSE_RECV_ERR],
+        g_stream_closes[STREAM_CLOSE_ERR_RST],
+        g_stream_closes[STREAM_CLOSE_ERR_ABRT],
+        g_stream_closes[STREAM_CLOSE_ERR_CLSD],
+        g_stream_closes[STREAM_CLOSE_ERR_OTHER],
+        g_stream_closes[STREAM_CLOSE_WRITE_ERR],
+        g_stream_closes[STREAM_CLOSE_WS_PARSE_FAIL],
+        g_stream_closes[STREAM_CLOSE_LINK_DOWN],
+        (int)g_stream_last_close_err,
+        g_stream_last_close_age_ms,
+        diag_status.core1_iter,
+        g_http_poll_fires,
+        g_accepts_total,
+        g_streams_started_total,
+        diag_status.pbuf_used, diag_status.pbuf_max,
+        diag_status.tcp_pcb_used, diag_status.tcp_pcb_max,
+        diag_status.sys_timeout_used, diag_status.sys_timeout_max,
+        diag_status.tcp_pcbs_active, diag_status.tcp_pcbs_tw, diag_status.tcp_pcbs_listen,
+        diag_status.ip_drops, diag_status.tcp_drops, diag_status.tcp_errs, diag_status.tcp_chkerrs,
+        diag_status.mbedtls_exhausted_in, diag_status.mbedtls_exhausted_out);
     if (len < 0) return 0;
     if ((size_t)len >= out_max) return (int)(out_max - 1);
 
@@ -1308,12 +1510,33 @@ void http_server_on_link_down(void) {
         struct altcp_pcb *pcb = stream_registry[i].pcb;
         http_conn_t   *conn = stream_registry[i].conn;
         if (!pcb) continue;
-        // Belt-and-braces: only abort entries that are still in the
-        // streaming state OR the WebSocket state. Anything mid-OTA
-        // (CONN_STATE_BODY) or mid-header (CONN_STATE_HEADER) is
-        // intentionally left alone.
-        if (conn && conn->state != CONN_STATE_STREAMING
-                 && conn->state != CONN_STATE_WS) continue;
+        // Reap every long-lived conn-pool slot when the link drops past
+        // the debounce window. Previously only STREAMING / WS were
+        // touched, which meant an OTA mid-upload (CONN_STATE_BODY) or
+        // its drain phase (CONN_STATE_DRAINING) or a /api/log long-poll
+        // (CONN_STATE_WAITING) would stay in the pool until the TCP
+        // keepalive timed it out ~50 s later. The browser's reconnect
+        // SYNs got RST'd in that window because the pool was full.
+        // CONN_STATE_HEADER is left alone — those are mid-receive of a
+        // fresh request and either complete fast or get reaped by the
+        // recv-callback's NULL-pbuf path once the FIN/RST arrives.
+        // CONN_STATE_DONE is past the response and just waiting for
+        // close; also fine to abort but cheap to leave.
+        if (conn) {
+            if (conn->state != CONN_STATE_STREAMING &&
+                conn->state != CONN_STATE_WS &&
+                conn->state != CONN_STATE_BODY &&
+                conn->state != CONN_STATE_DRAINING &&
+                conn->state != CONN_STATE_WAITING) continue;
+            // If this slot was mid-upload, abort the OTA cleanly so the
+            // ring + flash state aren't left half-applied. Mirrors the
+            // same check in conn_close() and http_err().
+            if ((conn->state == CONN_STATE_BODY ||
+                 conn->state == CONN_STATE_DRAINING) && ota_in_progress()) {
+                ota_abort();
+            }
+        }
+        note_stream_close(STREAM_CLOSE_LINK_DOWN, conn);
         // Detach all callbacks BEFORE altcp_abort. lwIP fires the err
         // callback synchronously from inside altcp_abort, and we want
         // it to no-op since we're freeing the conn ourselves below.
@@ -1361,6 +1584,7 @@ static void conn_close(struct altcp_pcb *pcb, http_conn_t *conn) {
 //              connection stays open until the client closes (FIN/RST,
 //              detected by http_recv with a NULL pbuf).
 static err_t http_poll(void *arg, struct altcp_pcb *pcb) {
+    g_http_poll_fires++;
     http_conn_t *conn = (http_conn_t *)arg;
     if (!conn) return ERR_OK;
 
@@ -1464,6 +1688,8 @@ static err_t http_poll(void *arg, struct altcp_pcb *pcb) {
             err_t e = altcp_write(pcb, out, n, TCP_WRITE_FLAG_COPY);
             if (e == ERR_MEM) return ERR_OK;  // sndbuf race — retry next poll
             if (e != ERR_OK) {
+                note_stream_close(STREAM_CLOSE_WRITE_ERR, conn);
+                g_stream_last_close_err = e;
                 conn->state = CONN_STATE_DONE;
                 conn_close(pcb, conn);
                 return ERR_OK;
@@ -1508,6 +1734,8 @@ static err_t http_poll(void *arg, struct altcp_pcb *pcb) {
             err_t e = altcp_write(pcb, hdr, sizeof(hdr), TCP_WRITE_FLAG_COPY);
             if (e == ERR_MEM) return ERR_OK;
             if (e != ERR_OK) {
+                note_stream_close(STREAM_CLOSE_WRITE_ERR, conn);
+                g_stream_last_close_err = e;
                 conn->state = CONN_STATE_DONE;
                 conn_close(pcb, conn);
                 return ERR_OK;
@@ -1518,6 +1746,8 @@ static err_t http_poll(void *arg, struct altcp_pcb *pcb) {
             err_t e = altcp_write(pcb, &nl, 1, TCP_WRITE_FLAG_COPY);
             if (e == ERR_MEM) return ERR_OK;
             if (e != ERR_OK) {
+                note_stream_close(STREAM_CLOSE_WRITE_ERR, conn);
+                g_stream_last_close_err = e;
                 conn->state = CONN_STATE_DONE;
                 conn_close(pcb, conn);
                 return ERR_OK;
@@ -1534,6 +1764,8 @@ static err_t http_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t e
 
     if (!p || err != ERR_OK) {
         // Connection closed by client
+        note_stream_close(p ? STREAM_CLOSE_RECV_ERR : STREAM_CLOSE_RECV_EOF, conn);
+        if (err != ERR_OK) g_stream_last_close_err = err;
         conn_close(pcb, conn);
         return ERR_OK;
     }
@@ -1567,6 +1799,7 @@ static err_t http_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t e
         altcp_recved(pcb, p->tot_len);
         pbuf_free(p);
         if (!keep_open) {
+            note_stream_close(STREAM_CLOSE_WS_PARSE_FAIL, conn);
             conn->state = CONN_STATE_DONE;
             conn_close(pcb, conn);
         }
@@ -1745,6 +1978,25 @@ static void http_err(void *arg, err_t err) {
     // only match the registry entry by conn pointer.
     unregister_streaming(NULL, conn);
     if (conn) {
+        // Bucket by err code so /api/status can attribute "session
+        // lasted 22 min then died, no close frame" — every code lands
+        // as 1006 in the browser, only the device knows which.
+        // ERR_RST  = peer sent RST (router NAT eviction, peer crash)
+        // ERR_ABRT = lwIP gave up on its own (TCP retransmit limit hit
+        //            after RTO backoff exhausted, OR altcp_tls_mbedtls
+        //            internally called altcp_abort after a decrypt /
+        //            MAC failure — both pass through here as ERR_ABRT)
+        // ERR_CLSD = orderly close that took the err path (rare)
+        stream_close_reason_t reason;
+        switch (err) {
+            case ERR_RST:  reason = STREAM_CLOSE_ERR_RST;   break;
+            case ERR_ABRT: reason = STREAM_CLOSE_ERR_ABRT;  break;
+            case ERR_CLSD: reason = STREAM_CLOSE_ERR_CLSD;  break;
+            default:       reason = STREAM_CLOSE_ERR_OTHER; break;
+        }
+        note_stream_close(reason, conn);
+        g_stream_last_close_err = err;
+
         // Only abort the OTA if THIS conn is the one streaming it
         // (CONN_STATE_BODY = mid-upload). Without that guard, every
         // unrelated reset connection — failed TLS handshakes, stray
@@ -1776,6 +2028,7 @@ static err_t http_accept(void *arg, struct altcp_pcb *pcb, err_t err) {
     }
 
     conn->state = CONN_STATE_HEADER;
+    conn->opened_at = get_absolute_time();
 
     altcp_arg(pcb, conn);
     altcp_recv(pcb, http_recv);

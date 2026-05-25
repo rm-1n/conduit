@@ -785,6 +785,20 @@ void conduit_loop(void) {
     const stream = window.Conduit && window.Conduit.stream;
     if (stream && typeof stream.onStatus === 'function') {
       let lastDeviceLine = null;
+      // Diff the firmware's stream-close counters across STATUS frames
+      // so every reconnect surfaces "the previous /api/stream session
+      // ended via <bucket> (lwIP err=<n>) after <age>s alive" in the
+      // build log. Every cause manifests in the browser as the same
+      // 1006 "abnormal close, no close frame", so without this the
+      // user can't tell ERR_ABRT (RTO exhausted / mbedtls aborted) from
+      // ERR_RST (peer RST / router NAT) from WRITE_ERR (sndbuf failure)
+      // etc. Pulled off the inline STATUS frame — no extra HTTPS fetch.
+      const closeKeys = [
+        'recv_eof', 'recv_err',
+        'err_rst', 'err_abrt', 'err_clsd', 'err_other',
+        'write_err', 'ws_parse_fail', 'link_down',
+      ];
+      let lastCloseSnap = null;
       stream.onStatus((obj) => {
         if (!obj || typeof obj !== 'object') return;
         const bin = obj.binary_version || '?';
@@ -792,9 +806,26 @@ void conduit_loop(void) {
         const part = obj.partition || '?';
         const board = obj.board_id ? String(obj.board_id).slice(0, 16) : '?';
         const line = `[device] v${ver} (binary ${bin}) · partition ${part} · board ${board}`;
-        if (line === lastDeviceLine) return;
-        lastDeviceLine = line;
-        logLine(line);
+        if (line !== lastDeviceLine) {
+          lastDeviceLine = line;
+          logLine(line);
+        }
+        const snap = {};
+        for (const k of closeKeys) snap[k] = (obj['stream_close_' + k] | 0);
+        if (lastCloseSnap) {
+          const parts = [];
+          for (const k of closeKeys) {
+            const d = snap[k] - lastCloseSnap[k];
+            if (d > 0) parts.push(`${k}=${d}`);
+          }
+          if (parts.length > 0) {
+            const lastErr = obj.stream_last_close_err;
+            const lastAgeS = ((obj.stream_last_close_age_ms | 0) / 1000).toFixed(1);
+            const open = obj.streams_open != null ? `, streams_open=${obj.streams_open}` : '';
+            logLine(`[device] stream-close: ${parts.join(' ')} (last err=${lastErr}, last age=${lastAgeS}s${open})`);
+          }
+        }
+        lastCloseSnap = snap;
       });
     }
 

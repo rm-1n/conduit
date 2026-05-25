@@ -445,7 +445,7 @@ def validate_uf2(data: bytes):
     return num_blocks, family_id
 
 
-def ota_upload(ip, token, uf2_path, use_https=False):
+def ota_upload(ip, token, uf2_path, use_https=False, commit=True):
     """Upload a UF2 as a single POST over HTTP or HTTPS.
 
     Sends the entire UF2 in one request with both X-OTA-Start and
@@ -453,6 +453,15 @@ def ota_upload(ip, token, uf2_path, use_https=False):
     bytes from however many TCP packets lwIP delivers them in. With
     one POST: one TCP/TLS handshake, one in-flight HTTP request, no
     PCB churn.
+
+    commit=True (default): after the new image boots, POST /api/commit
+    so the next reboot (power cycle, /api/reboot, watchdog) doesn't
+    roll back to the previous partition. Without this, you can run
+    happily on the new image until anything reboots — at which point
+    the RP2350 ROM falls back. ab_cycle() also commits and exists for
+    test scaffolding; this flag puts the same safety on the everyday
+    update path. Pass commit=False only when validating the rollback
+    mechanism itself.
 
     Scheme selection (use_https=True):
       Pre-flight always hits http://<ip>/api/status to discover the
@@ -595,23 +604,59 @@ def ota_upload(ip, token, uf2_path, use_https=False):
 
     # Wait for device to come back
     time.sleep(8)
-    if wait_for_boot(ip, timeout=20):
-        # Check the new version
-        try:
-            req = urllib.request.Request(
-                f"http://{ip}/api/status",
-                headers={"Accept": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                new_status = json.loads(resp.read().decode())
-                ok(f"Device back online — v{new_status.get('version', '?')}, "
-                   f"partition {new_status.get('partition', '?')}")
-        except Exception:
-            ok("Device back online")
-        return True
-    else:
+    if not wait_for_boot(ip, timeout=20):
         fail("Device did not come back after OTA update")
         return False
+    try:
+        req = urllib.request.Request(
+            f"http://{ip}/api/status",
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            new_status = json.loads(resp.read().decode())
+            ok(f"Device back online — v{new_status.get('version', '?')}, "
+               f"partition {new_status.get('partition', '?')}")
+    except Exception:
+        new_status = {}
+        ok("Device back online")
+
+    # Finalize so the new image survives the next reboot. Legacy
+    # firmware (≤v1.0.14) committed on a 5 s timer and has no
+    # /api/commit endpoint — a 404 there means "nothing to do" and is
+    # treated as success. Any other failure is fatal: leaving a
+    # TBYB-pending image silently in place is exactly the trap the
+    # user just hit (status said the new version was up, then the
+    # next reboot fell back to the previous partition).
+    if commit:
+        info("Committing image via /api/commit ...")
+        try:
+            commit_result = ota_commit(ip, token)
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                warn("Device has no /api/commit endpoint — assuming legacy "
+                     "timer-based commit. Update flow cannot positively confirm.")
+                return True
+            fail(f"/api/commit HTTP {e.code}: "
+                 f"{e.read().decode(errors='replace')}")
+            return False
+        except Exception as e:
+            fail(f"/api/commit failed: {e}")
+            return False
+        if commit_result.get("committed") is True:
+            ok("Image committed — new firmware is now the durable boot choice.")
+        elif commit_result.get("ok") and commit_result.get("committed") is False:
+            # Pre-TBYB firmware just upgraded itself — there's no
+            # pending commit to confirm. Harmless.
+            warn(f"Device reported nothing to commit "
+                 f"({commit_result.get('message', '')})")
+        else:
+            fail(f"Commit refused: {commit_result}")
+            return False
+    else:
+        warn("Skipping /api/commit (--no-commit). The next reboot will "
+             "roll back to the previous partition unless `conduit ota-commit` "
+             "runs first.")
+    return True
 
 
 # ── picotool wrappers ────────────────────────────────────────────────────────

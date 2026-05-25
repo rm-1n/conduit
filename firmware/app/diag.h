@@ -26,4 +26,12 @@ extern volatile uint32_t g_core1_iter;
 // DIAG_PRINT_EVERY tick.
 void diag_print_line(void);
 
+// Walk lwIP's three TCP-PCB lists (active, time-wait, listen) and
+// fill `*active`, `*tw`, `*listen` with the counts. Cheap (lists are
+// at most a few items each), no allocation. Exposed so the HTTP
+// /api/status JSON builder can include the census in an out-of-band
+// fetch — USB serial isn't always available when a wedge is the
+// thing being diagnosed, so the same numbers must also live in JSON.
+void conduit_diag_count_tcp_pcbs(unsigned *active, unsigned *tw, unsigned *listen);
+
 #endif /* CONDUIT_DIAG_H */

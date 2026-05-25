@@ -37,6 +37,13 @@ void http_server_on_link_down(void);
 //          reaching the client, so the handshake never completes).
 uint32_t http_server_accepts(void);
 uint32_t http_server_streams_started(void);
+// Number of times the per-conn poll callback has fired since boot.
+// Driven by lwIP's tcp_tmr / slow timer (~500 ms cadence per active
+// pcb), so a flat value while core1_iter is still climbing is the
+// "slow timer wedged" smoking gun. See `note_stream_close` + the
+// stream_close_* counters for the close-attribution path that pairs
+// with this.
+uint32_t http_server_poll_fires(void);
 
 // Build the device-status JSON into `out`. Same bytes /api/status
 // returns. Used by both handle_status (HTTP path) and ws_server.c (WS
