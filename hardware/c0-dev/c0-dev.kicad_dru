@@ -1,0 +1,4 @@
+(version 1)
+(rule clearance_Isolated_to_Default
+	(condition "A.NetClass == 'Isolated' && B.NetClass == 'Default'")
+	(constraint clearance (min 1mm)))
