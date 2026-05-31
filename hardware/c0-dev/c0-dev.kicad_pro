@@ -508,6 +508,12 @@
       "+3.3VA": [
         "Isolated"
       ],
+      "+5V": [
+        "Isolated"
+      ],
+      "+5V_ISO": [
+        "Isolated"
+      ],
       "+POE": [
         "Isolated"
       ],
@@ -589,7 +595,28 @@
       "/Ethernet/~{RST}": [
         "Isolated"
       ],
+      "/Power/+5V_0": [
+        "Isolated"
+      ],
+      "/Power/+5V_1": [
+        "Isolated"
+      ],
+      "/Power/+5V_2": [
+        "Isolated"
+      ],
       "/Power/CDB": [
+        "Isolated"
+      ],
+      "/Power/FB": [
+        "Isolated"
+      ],
+      "/Power/GND_0": [
+        "Isolated"
+      ],
+      "/Power/GND_1": [
+        "Isolated"
+      ],
+      "/Power/GND_2": [
         "Isolated"
       ],
       "/Power/POE+12": [
@@ -622,16 +649,25 @@
       "Net-(C11-Pad2)": [
         "Isolated"
       ],
+      "Net-(C19-Pad1)": [
+        "Isolated"
+      ],
       "Net-(C8-Pad2)": [
         "Isolated"
       ],
       "Net-(C9-Pad2)": [
         "Isolated"
       ],
+      "Net-(D4-K)": [
+        "Isolated"
+      ],
       "Net-(J1-Pad11)": [
         "Isolated"
       ],
       "Net-(J1-Pad9)": [
+        "Isolated"
+      ],
+      "Net-(R23-Pad2)": [
         "Isolated"
       ],
       "Net-(R26-Pad2)": [
@@ -653,6 +689,15 @@
         "Isolated"
       ],
       "Net-(U1-XTAL1{slash}CLKIN)": [
+        "Isolated"
+      ],
+      "Net-(U2-BOOT)": [
+        "Isolated"
+      ],
+      "Net-(U2-COMP)": [
+        "Isolated"
+      ],
+      "Net-(U2-RT{slash}CLK)": [
         "Isolated"
       ],
       "Net-(U3-APD)": [
@@ -804,7 +849,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "PS1-3,TR1,D1-6,#PWR1-72,Y1,C1-35,FB1,U1-13,TP1,R1-35,L1-2,J1-2",
+    "used_designators": "U5-10,U13-14,#PWR69-92,C36-51",
     "variants": []
   },
   "sheets": [
