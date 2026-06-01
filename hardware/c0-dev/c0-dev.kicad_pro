@@ -849,7 +849,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "U5-10,U13-14,#PWR69-92,C36-51",
+    "used_designators": "C40-51,#PWR72-74,#PWR77-79,U6-7,U9-10,U13-15",
     "variants": []
   },
   "sheets": [
@@ -868,6 +868,10 @@
     [
       "b3a362d3-bb15-48bf-a1e5-1773c27a02b7",
       "MCU"
+    ],
+    [
+      "9211758b-1927-4f1b-ad15-6153b4ae272e",
+      "frontend"
     ]
   ],
   "text_variables": {},

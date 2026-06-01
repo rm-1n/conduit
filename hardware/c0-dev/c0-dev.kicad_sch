@@ -47,7 +47,7 @@
 	)
 	(sheet
 		(at 76.2 38.1)
-		(size 25.4 38.1)
+		(size 25.4 53.34)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -73,7 +73,7 @@
 			)
 		)
 		(property "Sheetfile" "power.kicad_sch"
-			(at 76.2 76.7846 0)
+			(at 76.2 92.0246 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -214,7 +214,7 @@
 			)
 		)
 		(pin "T2P" output
-			(at 101.6 73.66 0)
+			(at 101.6 88.9 0)
 			(uuid "56017b48-fceb-4e24-a362-5fb78f205691")
 			(effects
 				(font
@@ -227,6 +227,52 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
 					(page "3")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 203.2 50.8)
+		(size 25.4 12.7)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "9211758b-1927-4f1b-ad15-6153b4ae272e")
+		(property "Sheetname" "frontend"
+			(at 203.2 50.0884 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "frontend.kicad_sch"
+			(at 203.2 64.0846 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(page "5")
 				)
 			)
 		)
