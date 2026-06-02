@@ -7,7 +7,7 @@
 	(lib_symbols)
 	(wire
 		(pts
-			(xy 50.8 48.26) (xy 76.2 48.26)
+			(xy 63.5 38.1) (xy 88.9 38.1)
 		)
 		(stroke
 			(width 0)
@@ -17,7 +17,7 @@
 	)
 	(wire
 		(pts
-			(xy 50.8 40.64) (xy 76.2 40.64)
+			(xy 63.5 30.48) (xy 88.9 30.48)
 		)
 		(stroke
 			(width 0)
@@ -27,7 +27,7 @@
 	)
 	(wire
 		(pts
-			(xy 50.8 43.18) (xy 76.2 43.18)
+			(xy 63.5 33.02) (xy 88.9 33.02)
 		)
 		(stroke
 			(width 0)
@@ -37,7 +37,7 @@
 	)
 	(wire
 		(pts
-			(xy 50.8 45.72) (xy 76.2 45.72)
+			(xy 63.5 35.56) (xy 88.9 35.56)
 		)
 		(stroke
 			(width 0)
@@ -46,8 +46,8 @@
 		(uuid "8cf71abc-97d4-4191-9cad-7ddac9e43c53")
 	)
 	(sheet
-		(at 76.2 38.1)
-		(size 25.4 53.34)
+		(at 88.9 27.94)
+		(size 25.4 12.7)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -62,7 +62,7 @@
 		)
 		(uuid "478925be-12da-4cfa-9644-8a4b77bbc69d")
 		(property "Sheetname" "Power"
-			(at 76.2 37.3884 0)
+			(at 88.9 27.2284 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -73,7 +73,7 @@
 			)
 		)
 		(property "Sheetfile" "power.kicad_sch"
-			(at 76.2 92.0246 0)
+			(at 88.9 41.2246 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -83,98 +83,8 @@
 				(justify left top)
 			)
 		)
-		(pin "+3.3V_0" passive
-			(at 101.6 40.64 0)
-			(uuid "ad47f0b5-2b65-4954-813d-734f624df1d2")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "+3.3V_1" passive
-			(at 101.6 50.8 0)
-			(uuid "b46fdf4a-70bf-4d18-90f4-f5500fa69c3c")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "+3.3V_2" passive
-			(at 101.6 62.23 0)
-			(uuid "15540104-8eca-4ec7-8478-ed3f43523c5f")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "+5V_0" passive
-			(at 101.6 43.18 0)
-			(uuid "95b42ea4-eeda-4c91-9a0e-9a4ff504d614")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "+5V_1" passive
-			(at 101.6 53.34 0)
-			(uuid "c329c149-e668-4b38-bb89-9d9f6bcbac16")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "+5V_2" passive
-			(at 101.6 64.77 0)
-			(uuid "af3c2544-b4bf-4e62-90a8-58dd1bd8e0cd")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "GND_0" passive
-			(at 101.6 45.72 0)
-			(uuid "5502399a-50a0-4e58-a82b-386a6c5146ed")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "GND_1" passive
-			(at 101.6 55.88 0)
-			(uuid "8c63973f-870b-46ce-9f13-ea777ba372e3")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "GND_2" passive
-			(at 101.6 67.31 0)
-			(uuid "a5206b7c-ed2d-4db4-a0ea-920294b49ad4")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
 		(pin "POE+12" input
-			(at 76.2 40.64 180)
+			(at 88.9 30.48 180)
 			(uuid "9fa3deec-0abf-41cd-a927-6747660d94c1")
 			(effects
 				(font
@@ -184,7 +94,7 @@
 			)
 		)
 		(pin "POE+45" input
-			(at 76.2 43.18 180)
+			(at 88.9 33.02 180)
 			(uuid "aac0e680-684a-4320-b11b-8981f4cce6c0")
 			(effects
 				(font
@@ -194,7 +104,7 @@
 			)
 		)
 		(pin "POE-36" input
-			(at 76.2 45.72 180)
+			(at 88.9 35.56 180)
 			(uuid "64d29fec-baf2-4d22-9f3b-6e84ee0fa63b")
 			(effects
 				(font
@@ -204,7 +114,7 @@
 			)
 		)
 		(pin "POE-78" input
-			(at 76.2 48.26 180)
+			(at 88.9 38.1 180)
 			(uuid "83f30046-d820-49e6-aef8-12d432eb7179")
 			(effects
 				(font
@@ -214,7 +124,7 @@
 			)
 		)
 		(pin "T2P" output
-			(at 101.6 88.9 0)
+			(at 114.3 30.48 0)
 			(uuid "56017b48-fceb-4e24-a362-5fb78f205691")
 			(effects
 				(font
@@ -232,8 +142,8 @@
 		)
 	)
 	(sheet
-		(at 203.2 50.8)
-		(size 25.4 12.7)
+		(at 127 50.8)
+		(size 25.4 20.32)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -248,7 +158,7 @@
 		)
 		(uuid "9211758b-1927-4f1b-ad15-6153b4ae272e")
 		(property "Sheetname" "frontend"
-			(at 203.2 50.0884 0)
+			(at 127 50.0884 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -259,7 +169,7 @@
 			)
 		)
 		(property "Sheetfile" "frontend.kicad_sch"
-			(at 203.2 64.0846 0)
+			(at 127 71.7046 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -267,6 +177,116 @@
 					(size 1.27 1.27)
 				)
 				(justify left top)
+			)
+		)
+		(pin "+5V_ISO" passive
+			(at 127 53.34 180)
+			(uuid "81cde302-3cfd-479d-ad40-423b16591d79")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SDA" bidirectional
+			(at 127 66.04 180)
+			(uuid "ba365172-b402-41e0-a097-4fc0c4a57b7b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SCL" input
+			(at 127 68.58 180)
+			(uuid "9929b024-4201-406a-ba79-595e3826e01a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "GND_ISO" passive
+			(at 127 55.88 180)
+			(uuid "ae96433f-7f75-4351-9bd2-efc20e259024")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "AIN1" input
+			(at 152.4 58.42 0)
+			(uuid "7e24de71-e8be-4211-964c-a346edc60424")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "ADDR" passive
+			(at 152.4 66.04 0)
+			(uuid "474aa8bf-fef6-413b-9186-4d97accb5f8c")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "AIN0" input
+			(at 152.4 55.88 0)
+			(uuid "3ec802a1-0b1b-4592-97f4-a7ff967cc788")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "AIN2" input
+			(at 152.4 60.96 0)
+			(uuid "6044753c-379e-4933-a424-22b82d141fa6")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "AIN3" input
+			(at 152.4 63.5 0)
+			(uuid "657ca03d-2598-4cdf-9393-3b95a48b4ec9")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "GND" passive
+			(at 152.4 68.58 0)
+			(uuid "5466ffd3-8d68-4417-aaa2-ece7018dacbe")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "+5V" passive
+			(at 152.4 53.34 0)
+			(uuid "253159b8-a751-4afc-9e00-a8a76e2bbdae")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
 			)
 		)
 		(instances
@@ -278,8 +298,8 @@
 		)
 	)
 	(sheet
-		(at 38.1 38.1)
-		(size 12.7 152.4)
+		(at 21.59 27.94)
+		(size 41.91 35.56)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -294,7 +314,7 @@
 		)
 		(uuid "9c4bf4fa-f54f-41b6-aa34-920acf2f273a")
 		(property "Sheetname" "Ethernet"
-			(at 38.1 37.3884 0)
+			(at 21.59 27.2284 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -305,7 +325,7 @@
 			)
 		)
 		(property "Sheetfile" "ethernet.kicad_sch"
-			(at 38.1 191.0846 0)
+			(at 21.59 64.0846 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -316,7 +336,7 @@
 			)
 		)
 		(pin "POE+12" input
-			(at 50.8 40.64 0)
+			(at 63.5 30.48 0)
 			(uuid "29119a2a-b102-478e-a050-c59552f87bf2")
 			(effects
 				(font
@@ -326,7 +346,7 @@
 			)
 		)
 		(pin "POE+45" input
-			(at 50.8 43.18 0)
+			(at 63.5 33.02 0)
 			(uuid "2e7f5808-2343-4ea9-9787-b50a549a4010")
 			(effects
 				(font
@@ -336,7 +356,7 @@
 			)
 		)
 		(pin "POE-36" input
-			(at 50.8 45.72 0)
+			(at 63.5 35.56 0)
 			(uuid "5d5519fa-4743-46c6-8c11-f01d4802eef4")
 			(effects
 				(font
@@ -346,8 +366,48 @@
 			)
 		)
 		(pin "POE-78" input
-			(at 50.8 48.26 0)
+			(at 63.5 38.1 0)
 			(uuid "2a01f80f-4e9b-4a8c-aadd-ebc59d793f95")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "CLK" input
+			(at 63.5 58.42 0)
+			(uuid "62718a71-47fa-434d-b913-de23c4f7a04b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "~{RST}" input
+			(at 63.5 60.96 0)
+			(uuid "dc901003-2a05-414a-9f12-1ad93afd851f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "RMII{TXD0 TXD1 TXEN RXD0 RXD1 CRS}" bidirectional
+			(at 63.5 53.34 0)
+			(uuid "1b078ee9-9c91-436a-aa24-6834d758ed8a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "MDIO0{MDIO MDC}" bidirectional
+			(at 63.5 55.88 0)
+			(uuid "4a182034-24e3-4bba-bec7-07b7225e0582")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -364,7 +424,7 @@
 		)
 	)
 	(sheet
-		(at 76.2 127)
+		(at 88.9 45.72)
 		(size 25.4 63.5)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -380,7 +440,7 @@
 		)
 		(uuid "b3a362d3-bb15-48bf-a1e5-1773c27a02b7")
 		(property "Sheetname" "MCU"
-			(at 76.2 126.2884 0)
+			(at 88.9 45.0084 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -391,7 +451,7 @@
 			)
 		)
 		(property "Sheetfile" "mcu.kicad_sch"
-			(at 76.2 191.0846 0)
+			(at 88.9 109.8046 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects

@@ -634,6 +634,12 @@
       "/Power/T2P": [
         "Isolated"
       ],
+      "/frontend/SCL": [
+        "Isolated"
+      ],
+      "/frontend/SDA": [
+        "Isolated"
+      ],
       "Earth": [
         "Isolated"
       ],
@@ -849,7 +855,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "C40-51,#PWR72-74,#PWR77-79,U6-7,U9-10,U13-15",
+    "used_designators": "C48,#PWR72-74",
     "variants": []
   },
   "sheets": [
