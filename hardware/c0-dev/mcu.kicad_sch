@@ -2986,20 +2986,12 @@
 		(uuid "52e7e241-dc18-498c-9052-90e49df5b7c2")
 	)
 	(no_connect
-		(at 200.66 63.5)
-		(uuid "553b27bf-3a1f-4e24-9e94-9c3a2eed7846")
-	)
-	(no_connect
 		(at 200.66 68.58)
 		(uuid "6d021563-4c83-49c7-95f8-59f8f10a3811")
 	)
 	(no_connect
 		(at 200.66 121.92)
 		(uuid "7545ab1d-8902-4430-a115-c71edec4825b")
-	)
-	(no_connect
-		(at 200.66 66.04)
-		(uuid "802328a3-be2f-4547-813d-b8838b1a7933")
 	)
 	(no_connect
 		(at 106.68 147.32)
@@ -3126,6 +3118,16 @@
 			(type default)
 		)
 		(uuid "034fa982-729f-4aa1-8d0a-38ad103f05ae")
+	)
+	(wire
+		(pts
+			(xy 200.66 63.5) (xy 203.2 63.5)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0396b578-640d-4e56-bc90-2044f86a44e0")
 	)
 	(wire
 		(pts
@@ -4119,6 +4121,16 @@
 	)
 	(wire
 		(pts
+			(xy 200.66 66.04) (xy 203.2 66.04)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b08ba06f-779e-48d4-9d6a-d914ab11c00c")
+	)
+	(wire
+		(pts
 			(xy 119.38 106.68) (xy 149.86 106.68)
 		)
 		(stroke
@@ -4647,6 +4659,16 @@
 		)
 		(uuid "7c044264-9f97-491c-9a44-ad1fc8ddf69d")
 	)
+	(label "MDIO1.MDIO"
+		(at 203.2 63.5 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "7dff9663-f93d-41aa-bbc1-404e81106530")
+	)
 	(label "~{RST}"
 		(at 140.97 78.74 0)
 		(effects
@@ -4666,6 +4688,16 @@
 			(justify left bottom)
 		)
 		(uuid "94204007-a4b9-48df-afb3-edeb196ef550")
+	)
+	(label "MDIO1.MDC"
+		(at 203.2 66.04 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "95cf1b90-f8f4-4396-bd8a-84655b18839b")
 	)
 	(label "I2C0.SCL"
 		(at 203.2 76.2 0)

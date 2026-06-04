@@ -634,10 +634,16 @@
       "/Power/T2P": [
         "Isolated"
       ],
-      "/frontend/SCL": [
+      "/frontend_420/SCL": [
         "Isolated"
       ],
-      "/frontend/SDA": [
+      "/frontend_420/SDA": [
+        "Isolated"
+      ],
+      "/frontend_temp/SCL": [
+        "Isolated"
+      ],
+      "/frontend_temp/SDA": [
         "Isolated"
       ],
       "Earth": [
@@ -855,7 +861,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "C48,#PWR72-74",
+    "used_designators": "RFBb1,L3,RFBa1,U9-10,U13-14,U16-20,R36-74,D5-16,C42-43,C48-85,#PWR72-74,#PWR77",
     "variants": []
   },
   "sheets": [
@@ -877,7 +883,15 @@
     ],
     [
       "9211758b-1927-4f1b-ad15-6153b4ae272e",
-      "frontend"
+      "frontend_temp"
+    ],
+    [
+      "35647f67-fe66-4594-b053-34e69d9fd56d",
+      "frontend_420"
+    ],
+    [
+      "ad4094d0-ab7e-4abf-8811-376ff72ef3ce",
+      "frontend_bridge"
     ]
   ],
   "text_variables": {},

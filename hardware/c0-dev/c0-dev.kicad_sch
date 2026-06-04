@@ -46,6 +46,52 @@
 		(uuid "8cf71abc-97d4-4191-9cad-7ddac9e43c53")
 	)
 	(sheet
+		(at 127 88.9)
+		(size 25.4 25.4)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "35647f67-fe66-4594-b053-34e69d9fd56d")
+		(property "Sheetname" "frontend_420"
+			(at 127 88.1884 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "frontend_420.kicad_sch"
+			(at 127 114.8846 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(page "6")
+				)
+			)
+		)
+	)
+	(sheet
 		(at 88.9 27.94)
 		(size 25.4 12.7)
 		(exclude_from_sim no)
@@ -143,7 +189,7 @@
 	)
 	(sheet
 		(at 127 50.8)
-		(size 25.4 20.32)
+		(size 25.4 22.86)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -157,7 +203,7 @@
 			(color 0 0 0 0)
 		)
 		(uuid "9211758b-1927-4f1b-ad15-6153b4ae272e")
-		(property "Sheetname" "frontend"
+		(property "Sheetname" "frontend_temp"
 			(at 127 50.0884 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -169,7 +215,7 @@
 			)
 		)
 		(property "Sheetfile" "frontend.kicad_sch"
-			(at 127 71.7046 0)
+			(at 127 74.2446 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -219,9 +265,9 @@
 				(justify left)
 			)
 		)
-		(pin "AIN1" input
+		(pin "TC1+" passive
 			(at 152.4 58.42 0)
-			(uuid "7e24de71-e8be-4211-964c-a346edc60424")
+			(uuid "eb6ee9e2-42ab-45f7-9238-53d72ade8762")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -229,19 +275,9 @@
 				(justify right)
 			)
 		)
-		(pin "ADDR" passive
-			(at 152.4 66.04 0)
-			(uuid "474aa8bf-fef6-413b-9186-4d97accb5f8c")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "AIN0" input
+		(pin "TC0-" passive
 			(at 152.4 55.88 0)
-			(uuid "3ec802a1-0b1b-4592-97f4-a7ff967cc788")
+			(uuid "9120614f-0828-4a32-a87f-1238850625a8")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -249,9 +285,9 @@
 				(justify right)
 			)
 		)
-		(pin "AIN2" input
+		(pin "TC1-" passive
 			(at 152.4 60.96 0)
-			(uuid "6044753c-379e-4933-a424-22b82d141fa6")
+			(uuid "d29ebf0d-fcc2-460e-8e64-c9956fe15e74")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -259,29 +295,49 @@
 				(justify right)
 			)
 		)
-		(pin "AIN3" input
-			(at 152.4 63.5 0)
-			(uuid "657ca03d-2598-4cdf-9393-3b95a48b4ec9")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "GND" passive
-			(at 152.4 68.58 0)
-			(uuid "5466ffd3-8d68-4417-aaa2-ece7018dacbe")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "+5V" passive
+		(pin "TC0+" passive
 			(at 152.4 53.34 0)
-			(uuid "253159b8-a751-4afc-9e00-a8a76e2bbdae")
+			(uuid "feae5797-457c-4e53-853f-a2cf89adb981")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "TC2+" passive
+			(at 152.4 63.5 0)
+			(uuid "d8cd0815-91d9-4a22-b402-0945b59976f8")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "TC3+" passive
+			(at 152.4 68.58 0)
+			(uuid "9876a923-dc59-4e5c-bd00-2da8dd4db1e9")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "TC2-" passive
+			(at 152.4 66.04 0)
+			(uuid "2688cee1-6320-4c98-8be3-84c0c0b0f90d")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "TC3-" passive
+			(at 152.4 71.12 0)
+			(uuid "ba0abb7f-48e0-4092-9ad7-72a555b177d4")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -419,6 +475,52 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
 					(page "2")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 127 127)
+		(size 25.4 25.4)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "ad4094d0-ab7e-4abf-8811-376ff72ef3ce")
+		(property "Sheetname" "frontend_bridge"
+			(at 127 126.2884 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "frontend_bridge.kicad_sch"
+			(at 127 152.9846 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(page "7")
 				)
 			)
 		)
