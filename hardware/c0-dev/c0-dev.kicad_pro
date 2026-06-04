@@ -640,6 +640,18 @@
       "/frontend_420/SDA": [
         "Isolated"
       ],
+      "/frontend_bridge/CLK": [
+        "Isolated"
+      ],
+      "/frontend_bridge/DIN": [
+        "Isolated"
+      ],
+      "/frontend_bridge/DOUT": [
+        "Isolated"
+      ],
+      "/frontend_bridge/~{CS}": [
+        "Isolated"
+      ],
       "/frontend_temp/SCL": [
         "Isolated"
       ],
@@ -728,6 +740,9 @@
         "Isolated"
       ],
       "unconnected-(U1-~{INT}{slash}REFCLKO-Pad14)": [
+        "Isolated"
+      ],
+      "unconnected-(U22-EN1-Pad7)": [
         "Isolated"
       ]
     },
@@ -861,7 +876,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "RFBb1,L3,RFBa1,U9-10,U13-14,U16-20,R36-74,D5-16,C42-43,C48-85,#PWR72-74,#PWR77",
+    "used_designators": "F1-5,TR1,J1-2,RFBb1,L1-3,TP1,RFBa1,C1-85,FB1-2,U1-24,R1-74,Y1,D1-25,#PWR1-79",
     "variants": []
   },
   "sheets": [
