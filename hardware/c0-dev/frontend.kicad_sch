@@ -5596,7 +5596,7 @@
 		)
 		(uuid "fc0ed81f-4183-4b5b-8c97-01eb3ffa79ad")
 	)
-	(hierarchical_label "TC0+"
+	(hierarchical_label "TC1+"
 		(shape passive)
 		(at 252.73 74.93 0)
 		(effects
@@ -5607,7 +5607,7 @@
 		)
 		(uuid "16f29510-e4de-468d-bb5c-2fb2abee6995")
 	)
-	(hierarchical_label "TC0-"
+	(hierarchical_label "TC1-"
 		(shape passive)
 		(at 252.73 66.04 0)
 		(effects
@@ -5618,7 +5618,7 @@
 		)
 		(uuid "2e535027-3e92-4d87-9530-248bd9db8d57")
 	)
-	(hierarchical_label "TC0-"
+	(hierarchical_label "TC3-"
 		(shape passive)
 		(at 252.73 142.24 0)
 		(effects
@@ -5629,7 +5629,7 @@
 		)
 		(uuid "82c6e47c-c30c-4f4b-a57e-88e99dfb8481")
 	)
-	(hierarchical_label "TC0-"
+	(hierarchical_label "TC2-"
 		(shape passive)
 		(at 252.73 104.14 0)
 		(effects
@@ -5706,7 +5706,7 @@
 		)
 		(uuid "d312ffc1-d6c4-40db-8259-2136d9b45421")
 	)
-	(hierarchical_label "TC0+"
+	(hierarchical_label "TC2+"
 		(shape passive)
 		(at 252.73 113.03 0)
 		(effects
@@ -5717,7 +5717,7 @@
 		)
 		(uuid "d90078c7-6ccc-41a8-8b80-ef25d46f35fc")
 	)
-	(hierarchical_label "TC0+"
+	(hierarchical_label "TC3+"
 		(shape passive)
 		(at 252.73 151.13 0)
 		(effects

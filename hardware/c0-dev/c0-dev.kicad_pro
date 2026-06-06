@@ -640,16 +640,37 @@
       "/frontend_420/SDA": [
         "Isolated"
       ],
-      "/frontend_bridge/CLK": [
+      "/frontend_bridge/+5V": [
         "Isolated"
       ],
-      "/frontend_bridge/DIN": [
+      "/frontend_bridge/CLK_ISO": [
         "Isolated"
       ],
-      "/frontend_bridge/DOUT": [
+      "/frontend_bridge/DIN_ISO": [
         "Isolated"
       ],
-      "/frontend_bridge/~{CS}": [
+      "/frontend_bridge/DOUT_ISO": [
+        "Isolated"
+      ],
+      "/frontend_bridge/EN0": [
+        "Isolated"
+      ],
+      "/frontend_bridge/EN1": [
+        "Isolated"
+      ],
+      "/frontend_bridge/GND": [
+        "Isolated"
+      ],
+      "/frontend_bridge/~{CS0_ISO}": [
+        "Isolated"
+      ],
+      "/frontend_bridge/~{CS0}": [
+        "Isolated"
+      ],
+      "/frontend_bridge/~{CS1_ISO}": [
+        "Isolated"
+      ],
+      "/frontend_bridge/~{CS1}": [
         "Isolated"
       ],
       "/frontend_temp/SCL": [
@@ -724,6 +745,30 @@
       "Net-(U2-RT{slash}CLK)": [
         "Isolated"
       ],
+      "Net-(U22-EN2)": [
+        "Isolated"
+      ],
+      "Net-(U22-IND)": [
+        "Isolated"
+      ],
+      "Net-(U22-OUTA)": [
+        "Isolated"
+      ],
+      "Net-(U22-OUTB)": [
+        "Isolated"
+      ],
+      "Net-(U23-EN2)": [
+        "Isolated"
+      ],
+      "Net-(U23-IND)": [
+        "Isolated"
+      ],
+      "Net-(U23-OUTA)": [
+        "Isolated"
+      ],
+      "Net-(U23-OUTB)": [
+        "Isolated"
+      ],
       "Net-(U3-APD)": [
         "Isolated"
       ],
@@ -740,12 +785,6 @@
         "Isolated"
       ],
       "unconnected-(U1-~{INT}{slash}REFCLKO-Pad14)": [
-        "Isolated"
-      ],
-      "unconnected-(U22-EN1-Pad7)": [
-        "Isolated"
-      ],
-      "unconnected-(U23-EN1-Pad7)": [
         "Isolated"
       ]
     },
@@ -879,7 +918,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "F1-5,TR1,J1-2,RFBb1,L1-3,TP1,RFBa1,C1-98,FB1-6,U1-27,R1-84,Y1,D1-30,#PWR1-79",
+    "used_designators": "Q1-2,F1-7,TR1,J1-2,RFBb1,L1-3,TP1,RFBa1,C1-98,FB1-6,U1-27,R1-88,Y1,D1-33,#PWR1-79",
     "variants": []
   },
   "sheets": [
