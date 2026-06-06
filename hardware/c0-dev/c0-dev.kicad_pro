@@ -744,6 +744,9 @@
       ],
       "unconnected-(U22-EN1-Pad7)": [
         "Isolated"
+      ],
+      "unconnected-(U23-EN1-Pad7)": [
+        "Isolated"
       ]
     },
     "netclass_patterns": []
@@ -876,7 +879,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "F1-5,TR1,J1-2,RFBb1,L1-3,TP1,RFBa1,C1-85,FB1-2,U1-24,R1-74,Y1,D1-25,#PWR1-79",
+    "used_designators": "F1-5,TR1,J1-2,RFBb1,L1-3,TP1,RFBa1,C1-98,FB1-6,U1-27,R1-84,Y1,D1-30,#PWR1-79",
     "variants": []
   },
   "sheets": [
