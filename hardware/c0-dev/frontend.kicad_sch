@@ -1135,6 +1135,171 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "Diode:B140-E3"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "D"
+				(at 0 2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "B140-E3"
+				(at 0 -2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "Diode_SMD:D_SMA"
+				(at 0 -4.445 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" "http://www.vishay.com/docs/88946/b120.pdf"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "40V 1A Schottky Barrier Rectifier Diode, SMA(DO-214AC)"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "diode Schottky"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "D*SMA*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "B140-E3_0_1"
+				(polyline
+					(pts
+						(xy -1.905 0.635) (xy -1.905 1.27) (xy -1.27 1.27) (xy -1.27 -1.27) (xy -0.635 -1.27) (xy -0.635 -0.635)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 1.27 1.27) (xy 1.27 -1.27) (xy -1.27 0) (xy 1.27 1.27)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 1.27 0) (xy -1.27 0)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "B140-E3_1_1"
+				(pin passive line
+					(at -3.81 0 0)
+					(length 2.54)
+					(name "K"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 3.81 0 180)
+					(length 2.54)
+					(name "A"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "Diode:BAV199DW"
 			(pin_names
 				(offset 0.0254)
@@ -2587,6 +2752,12 @@
 		(uuid "3ea0d96d-5576-43ed-bf65-fd9bf2548954")
 	)
 	(junction
+		(at 76.2 36.83)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "4599aed6-5b24-4984-8163-85d397995b50")
+	)
+	(junction
 		(at 224.79 74.93)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2677,22 +2848,22 @@
 		(uuid "759f5f7c-deb9-45f9-9b40-fa970e5f98c8")
 	)
 	(junction
+		(at 76.2 27.94)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "7bea9eeb-651f-493c-9ac9-c9792e267100")
+	)
+	(junction
 		(at 236.22 121.92)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "7d158182-f94b-406b-bc2d-c765bc711adf")
 	)
 	(junction
-		(at 97.79 27.94)
+		(at 107.95 27.94)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "7fb2ebe9-0f68-4882-b1bc-9b731f247c9c")
-	)
-	(junction
-		(at 76.2 36.83)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "832203b2-4e51-464b-9a70-55ceb3c143dc")
 	)
 	(junction
 		(at 246.38 27.94)
@@ -2773,16 +2944,10 @@
 		(uuid "b52fef1d-9dda-49e6-8d64-7f35d9104007")
 	)
 	(junction
-		(at 88.9 36.83)
+		(at 99.06 36.83)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "c81ace22-9358-4622-8b44-7dee55ffe40c")
-	)
-	(junction
-		(at 76.2 27.94)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "ce413508-7fec-4f77-9444-b7815ea2b205")
 	)
 	(junction
 		(at 236.22 66.04)
@@ -3128,7 +3293,7 @@
 	)
 	(wire
 		(pts
-			(xy 88.9 35.56) (xy 88.9 36.83)
+			(xy 99.06 35.56) (xy 99.06 36.83)
 		)
 		(stroke
 			(width 0)
@@ -3768,7 +3933,7 @@
 	)
 	(wire
 		(pts
-			(xy 97.79 27.94) (xy 96.52 27.94)
+			(xy 107.95 27.94) (xy 106.68 27.94)
 		)
 		(stroke
 			(width 0)
@@ -4108,7 +4273,7 @@
 	)
 	(wire
 		(pts
-			(xy 97.79 36.83) (xy 88.9 36.83)
+			(xy 107.95 36.83) (xy 99.06 36.83)
 		)
 		(stroke
 			(width 0)
@@ -4388,7 +4553,7 @@
 	)
 	(wire
 		(pts
-			(xy 100.33 27.94) (xy 97.79 27.94)
+			(xy 110.49 27.94) (xy 107.95 27.94)
 		)
 		(stroke
 			(width 0)
@@ -4668,7 +4833,7 @@
 	)
 	(wire
 		(pts
-			(xy 97.79 27.94) (xy 97.79 29.21)
+			(xy 107.95 27.94) (xy 107.95 29.21)
 		)
 		(stroke
 			(width 0)
@@ -4678,7 +4843,7 @@
 	)
 	(wire
 		(pts
-			(xy 97.79 34.29) (xy 97.79 36.83)
+			(xy 107.95 34.29) (xy 107.95 36.83)
 		)
 		(stroke
 			(width 0)
@@ -4998,7 +5163,7 @@
 	)
 	(wire
 		(pts
-			(xy 76.2 36.83) (xy 88.9 36.83)
+			(xy 76.2 36.83) (xy 99.06 36.83)
 		)
 		(stroke
 			(width 0)
@@ -5048,7 +5213,17 @@
 	)
 	(wire
 		(pts
-			(xy 76.2 27.94) (xy 81.28 27.94)
+			(xy 87.63 27.94) (xy 91.44 27.94)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f7530523-3bd3-4e58-b507-90888b0e1377")
+	)
+	(wire
+		(pts
+			(xy 76.2 27.94) (xy 80.01 27.94)
 		)
 		(stroke
 			(width 0)
@@ -5287,7 +5462,7 @@
 		(uuid "596b37cb-bf6f-4d2f-aa52-1819997d70e3")
 	)
 	(label "+5V"
-		(at 76.2 27.94 0)
+		(at 87.63 27.94 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5497,7 +5672,7 @@
 		(uuid "daea38a1-c880-4a7d-a913-6ab1082bbf3e")
 	)
 	(label "+3.3V"
-		(at 100.33 27.94 0)
+		(at 110.49 27.94 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5876,7 +6051,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "07d4b5a9-90a7-48bd-bb64-2bfc6fdaa53a")
-		(property "Reference" "D10"
+		(property "Reference" "D11"
 			(at 248.92 39.3699 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5951,7 +6126,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D10")
+					(reference "D11")
 					(unit 1)
 				)
 			)
@@ -6225,7 +6400,7 @@
 	)
 	(symbol
 		(lib_id "Regulator_Linear:AMS1117-3.3")
-		(at 88.9 27.94 0)
+		(at 99.06 27.94 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -6236,7 +6411,7 @@
 		(fields_autoplaced yes)
 		(uuid "194271c7-7b33-4829-8db0-40d62fe80704")
 		(property "Reference" "U12"
-			(at 88.9 21.59 0)
+			(at 99.06 21.59 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -6246,7 +6421,7 @@
 			)
 		)
 		(property "Value" "AMS1117-3.3"
-			(at 88.9 24.13 0)
+			(at 99.06 24.13 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -6256,7 +6431,7 @@
 			)
 		)
 		(property "Footprint" "Package_TO_SOT_SMD:SOT-223-3_TabPin2"
-			(at 88.9 22.86 0)
+			(at 99.06 22.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6267,7 +6442,7 @@
 			)
 		)
 		(property "Datasheet" "http://www.advanced-monolithic.com/pdf/ds1117.pdf"
-			(at 91.44 34.29 0)
+			(at 101.6 34.29 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6278,7 +6453,7 @@
 			)
 		)
 		(property "Description" "1A Low Dropout regulator, positive, 3.3V fixed output, SOT-223"
-			(at 88.9 27.94 0)
+			(at 99.06 27.94 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6500,7 +6675,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "244dbb60-ef18-4e8f-a71b-b29991feaf65")
-		(property "Reference" "D12"
+		(property "Reference" "D13"
 			(at 248.92 77.4699 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6575,7 +6750,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D12")
+					(reference "D13")
 					(unit 1)
 				)
 			)
@@ -7158,7 +7333,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "38d83aac-e90c-4677-8e3d-7c82c967b75c")
-		(property "Reference" "D7"
+		(property "Reference" "D8"
 			(at 222.25 124.46 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7243,7 +7418,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D7")
+					(reference "D8")
 					(unit 1)
 				)
 			)
@@ -7607,6 +7782,96 @@
 		)
 	)
 	(symbol
+		(lib_id "Diode:B140-E3")
+		(at 83.82 27.94 180)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "48c8c570-01be-4f5f-a38b-b51bcae96136")
+		(property "Reference" "D5"
+			(at 86.36 21.59 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "SS14"
+			(at 86.36 24.13 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Diode_SMD:D_SMA"
+			(at 83.82 23.495 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "http://www.vishay.com/docs/88946/b120.pdf"
+			(at 83.82 27.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "40V 1A Schottky Barrier Rectifier Diode, SMA(DO-214AC)"
+			(at 83.82 27.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "JLCPCB Part" "C2480"
+			(at 83.82 27.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "1b279839-3d7c-45d1-87d5-9bd33a838bb5")
+		)
+		(pin "2"
+			(uuid "46c55961-dafd-45b4-9c2d-699a4e4eb362")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
+					(reference "D5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:D_TVS_Small")
 		(at 246.38 154.94 90)
 		(unit 1)
@@ -7618,7 +7883,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "4caa850a-4ca1-4aa7-9420-d14a930b1a8a")
-		(property "Reference" "D16"
+		(property "Reference" "D17"
 			(at 248.92 153.6699 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7693,7 +7958,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D16")
+					(reference "D17")
 					(unit 1)
 				)
 			)
@@ -7710,7 +7975,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "4ccb96d5-196b-4188-be78-189138738475")
-		(property "Reference" "D7"
+		(property "Reference" "D8"
 			(at 222.25 91.44 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7795,7 +8060,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D7")
+					(reference "D8")
 					(unit 2)
 				)
 			)
@@ -7895,7 +8160,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "5331e2b1-23d3-4390-bb81-32b789ad070f")
-		(property "Reference" "D15"
+		(property "Reference" "D16"
 			(at 248.92 137.1599 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7970,7 +8235,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D15")
+					(reference "D16")
 					(unit 1)
 				)
 			)
@@ -8371,7 +8636,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "627f26fd-29b5-4061-8ea8-61dd760e6109")
-		(property "Reference" "D5"
+		(property "Reference" "D6"
 			(at 222.25 15.24 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8456,7 +8721,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D5")
+					(reference "D6")
 					(unit 2)
 				)
 			)
@@ -8473,7 +8738,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "62b39c65-b929-4a8b-ba74-af5627f0ac0e")
-		(property "Reference" "D8"
+		(property "Reference" "D9"
 			(at 222.25 162.56 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8558,7 +8823,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D8")
+					(reference "D9")
 					(unit 1)
 				)
 			)
@@ -8739,7 +9004,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "67ebbefe-2810-4cd2-8a98-57280b5c638b")
-		(property "Reference" "D5"
+		(property "Reference" "D6"
 			(at 222.25 48.26 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8824,7 +9089,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D5")
+					(reference "D6")
 					(unit 1)
 				)
 			)
@@ -9107,7 +9372,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "7c58f165-a39e-4413-acd9-cb96e54902de")
-		(property "Reference" "D8"
+		(property "Reference" "D9"
 			(at 222.25 129.54 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -9192,7 +9457,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D8")
+					(reference "D9")
 					(unit 2)
 				)
 			)
@@ -9316,7 +9581,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "82f32df2-2815-4aa4-93f0-55056d9a0ba0")
-		(property "Reference" "D14"
+		(property "Reference" "D15"
 			(at 248.92 115.5699 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -9391,7 +9656,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D14")
+					(reference "D15")
 					(unit 1)
 				)
 			)
@@ -9990,7 +10255,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "9ad304af-41f9-473d-8c8d-e776081aa0e2")
-		(property "Reference" "D6"
+		(property "Reference" "D7"
 			(at 222.25 86.36 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -10075,7 +10340,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D6")
+					(reference "D7")
 					(unit 1)
 				)
 			)
@@ -10093,7 +10358,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "a36ce7d2-5442-4de8-8794-a4c3146cfeef")
-		(property "Reference" "D9"
+		(property "Reference" "D10"
 			(at 248.92 22.8599 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -10168,7 +10433,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D9")
+					(reference "D10")
 					(unit 1)
 				)
 			)
@@ -10706,7 +10971,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 97.79 31.75 0)
+		(at 107.95 31.75 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -10717,7 +10982,7 @@
 		(fields_autoplaced yes)
 		(uuid "bbf79931-094f-435a-8f4c-2bde8b24ea80")
 		(property "Reference" "C46"
-			(at 100.33 30.4862 0)
+			(at 110.49 30.4862 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -10728,7 +10993,7 @@
 			)
 		)
 		(property "Value" "10uF"
-			(at 100.33 33.0262 0)
+			(at 110.49 33.0262 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -10739,7 +11004,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
-			(at 97.79 31.75 0)
+			(at 107.95 31.75 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -10750,7 +11015,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 97.79 31.75 0)
+			(at 107.95 31.75 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -10761,7 +11026,7 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor, small symbol"
-			(at 97.79 31.75 0)
+			(at 107.95 31.75 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11242,7 +11507,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "d727ef74-1497-49d7-a4ec-85d3242feaa3")
-		(property "Reference" "D11"
+		(property "Reference" "D12"
 			(at 248.92 60.9599 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11317,7 +11582,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D11")
+					(reference "D12")
 					(unit 1)
 				)
 			)
@@ -11412,7 +11677,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "e9ed5793-8456-46e1-afbf-640f5e903419")
-		(property "Reference" "D6"
+		(property "Reference" "D7"
 			(at 222.25 53.34 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11497,7 +11762,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D6")
+					(reference "D7")
 					(unit 2)
 				)
 			)
@@ -11835,7 +12100,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "fd501287-a5fa-4825-b282-ceaa5d98c060")
-		(property "Reference" "D13"
+		(property "Reference" "D14"
 			(at 248.92 99.0599 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11910,7 +12175,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9211758b-1927-4f1b-ad15-6153b4ae272e"
-					(reference "D13")
+					(reference "D14")
 					(unit 1)
 				)
 			)

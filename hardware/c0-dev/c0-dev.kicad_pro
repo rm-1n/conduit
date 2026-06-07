@@ -520,6 +520,15 @@
       "-POE": [
         "Isolated"
       ],
+      "/CAN/RX": [
+        "Isolated"
+      ],
+      "/CAN/TERM_EN": [
+        "Isolated"
+      ],
+      "/CAN/TX": [
+        "Isolated"
+      ],
       "/Ethernet/CLK": [
         "Isolated"
       ],
@@ -716,6 +725,9 @@
         "Isolated"
       ],
       "Net-(R26-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(R91-Pad1)": [
         "Isolated"
       ],
       "Net-(U1-CRS_DV{slash}MODE2)": [
@@ -918,7 +930,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "Q1-2,F1-7,TR1,J1-2,RFBb1,L1-3,TP1,RFBa1,C1-98,FB1-6,U1-27,R1-88,Y1,D1-33,#PWR1-79",
+    "used_designators": "Q1-2,F1-7,TR1,J1-2,RFBb1,L1-3,TP1,RFBa1,C1-103,FB1-7,U1-28,R1-92,Y1,D1-35,#PWR1-84",
     "variants": []
   },
   "sheets": [
@@ -949,6 +961,10 @@
     [
       "ad4094d0-ab7e-4abf-8811-376ff72ef3ce",
       "frontend_bridge"
+    ],
+    [
+      "80e53efd-e5a4-4d09-bb57-828ee723d9b9",
+      "CAN"
     ]
   ],
   "text_variables": {},
