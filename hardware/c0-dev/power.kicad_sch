@@ -5824,6 +5824,17 @@
 				)
 			)
 		)
+		(property "JLCPCB Part" "C73839"
+			(at 191.77 43.18 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "ce3033a7-50c0-44b9-8fc1-75ccbcf78190")
 		)
