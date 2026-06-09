@@ -532,6 +532,15 @@
       "/CAN/TX": [
         "Isolated"
       ],
+      "/Digital Output/+3.3V_ISO": [
+        "Isolated"
+      ],
+      "/Digital Output/SCL": [
+        "Isolated"
+      ],
+      "/Digital Output/SDA": [
+        "Isolated"
+      ],
       "/Ethernet/CLK": [
         "Isolated"
       ],
@@ -906,7 +915,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "TR1,R1-112,L1-2,J1-2,Q1-2,Y1,D1-35,#PWR1-82,U1-32,C1-115,FB1-7,TP1,F1-6",
+    "used_designators": "TR1,R1-118,L1-2,J1-2,Q1-2,Y1,D1-36,#PWR1-84,U1-36,C1-124,FB1-8,TP1,F1-6",
     "variants": []
   },
   "sheets": [
@@ -945,6 +954,14 @@
     [
       "6b9f9807-723d-4367-9050-3aa7a42b0a05",
       "Digital Input"
+    ],
+    [
+      "680032e3-5da4-48ad-9c49-e468cbbeffb9",
+      "Digital Output"
+    ],
+    [
+      "de5f394e-c667-494d-8bed-692ca82c493c",
+      "Highside Switch"
     ]
   ],
   "text_variables": {},

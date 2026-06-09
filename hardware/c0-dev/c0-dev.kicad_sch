@@ -278,6 +278,52 @@
 		)
 	)
 	(sheet
+		(at 127 101.6)
+		(size 25.4 25.4)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "680032e3-5da4-48ad-9c49-e468cbbeffb9")
+		(property "Sheetname" "Digital Output"
+			(at 127 100.8884 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "digital_out.kicad_sch"
+			(at 127 127.5846 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(page "10")
+				)
+			)
+		)
+	)
+	(sheet
 		(at 76.2 139.7)
 		(size 25.4 35.56)
 		(exclude_from_sim no)
