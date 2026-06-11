@@ -616,6 +616,18 @@
       "/Ethernet/~{RST}": [
         "Isolated"
       ],
+      "/I2C1.SCL": [
+        "Isolated"
+      ],
+      "/I2C1.SDA": [
+        "Isolated"
+      ],
+      "/MCU/I2C0.SCL": [
+        "Isolated"
+      ],
+      "/MCU/I2C0.SDA": [
+        "Isolated"
+      ],
       "/Power/+5V_0": [
         "Isolated"
       ],
@@ -658,12 +670,6 @@
       "/frontend_420/+3.3V_ISO": [
         "Isolated"
       ],
-      "/frontend_420/SCL": [
-        "Isolated"
-      ],
-      "/frontend_420/SDA": [
-        "Isolated"
-      ],
       "/frontend_bridge/+3.3V_ISO": [
         "Isolated"
       ],
@@ -689,12 +695,6 @@
         "Isolated"
       ],
       "/frontend_temp/+3.3V_ISO": [
-        "Isolated"
-      ],
-      "/frontend_temp/SCL": [
-        "Isolated"
-      ],
-      "/frontend_temp/SDA": [
         "Isolated"
       ],
       "Earth": [
@@ -733,10 +733,16 @@
       "Net-(R23-Pad2)": [
         "Isolated"
       ],
+      "Net-(R24-Pad2)": [
+        "Isolated"
+      ],
       "Net-(R26-Pad2)": [
         "Isolated"
       ],
-      "Net-(R90-Pad1)": [
+      "Net-(R27-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(R91-Pad1)": [
         "Isolated"
       ],
       "Net-(U1-CRS_DV{slash}MODE2)": [
@@ -915,7 +921,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "D37-60,U37-43,C125-145,R119-174",
+    "used_designators": "TR1,L1-2,J1-2,Q1-2,U1-45,FB1-8,C1-146,Y1,#PWR1-89,D1-60,TP1,F1-6,R1-175",
     "variants": []
   },
   "sheets": [
@@ -990,6 +996,10 @@
     [
       "8516472b-662a-48dd-8a8a-0634dd0851f0",
       "Highside Switch7"
+    ],
+    [
+      "ac97ac68-ff77-464f-9293-e305751aedfa",
+      "screen"
     ]
   ],
   "text_variables": {},
