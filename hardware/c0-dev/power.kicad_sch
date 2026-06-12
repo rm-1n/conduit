@@ -4266,6 +4266,25 @@
 		(dnp no)
 		(polyline
 			(pts
+				(xy 194.31 17.78) (xy 194.31 88.9) (xy 279.4 88.9) (xy 279.4 17.78)
+			)
+			(stroke
+				(width 0)
+				(type dash)
+			)
+			(fill
+				(type none)
+			)
+			(uuid "91d19794-fcb2-4a77-bfd2-c9bf2bcafef7")
+		)
+	)
+	(rule_area
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(polyline
+			(pts
 				(xy 29.21 17.78) (xy 193.04 17.78) (xy 193.04 165.1) (xy 29.21 165.1)
 			)
 			(stroke
@@ -4303,6 +4322,41 @@
 		)
 		(property "Component Class" ""
 			(at -147.32 -15.24 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+			)
+		)
+	)
+	(netclass_flag ""
+		(length 2.54)
+		(shape round)
+		(at 194.31 17.78 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "4e82404c-2e19-41ae-b7b6-df06de970670")
+		(property "Net Class" "Isolated_MCU"
+			(at 195.0085 15.24 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Component Class" ""
+			(at 17.78 -15.24 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects

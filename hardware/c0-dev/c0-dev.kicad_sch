@@ -474,7 +474,7 @@
 		)
 	)
 	(sheet
-		(at 137.16 128.27)
+		(at 139.7 127)
 		(size 25.4 25.4)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -490,7 +490,7 @@
 		)
 		(uuid "680032e3-5da4-48ad-9c49-e468cbbeffb9")
 		(property "Sheetname" "Digital Output"
-			(at 137.16 127.5584 0)
+			(at 139.7 126.2884 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -501,7 +501,7 @@
 			)
 		)
 		(property "Sheetfile" "digital_out.kicad_sch"
-			(at 137.16 154.2546 0)
+			(at 139.7 152.9846 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -512,7 +512,7 @@
 			)
 		)
 		(pin "SCL" input
-			(at 137.16 133.35 180)
+			(at 139.7 132.08 180)
 			(uuid "50999f03-a890-4600-ad5f-68f252dd2d56")
 			(effects
 				(font
@@ -522,7 +522,7 @@
 			)
 		)
 		(pin "SDA" bidirectional
-			(at 137.16 135.89 180)
+			(at 139.7 134.62 180)
 			(uuid "c63e0bdf-b987-41c4-9fdd-1a098e51d125")
 			(effects
 				(font
@@ -532,7 +532,7 @@
 			)
 		)
 		(pin "GND_ISO" passive
-			(at 137.16 138.43 180)
+			(at 139.7 137.16 180)
 			(uuid "1f5e5896-f8a2-4222-ac2e-27eca9ef1aa5")
 			(effects
 				(font
@@ -542,7 +542,7 @@
 			)
 		)
 		(pin "OUT0" output
-			(at 162.56 133.35 0)
+			(at 165.1 132.08 0)
 			(uuid "17bb67c9-d709-42d4-b467-dd6520b632d4")
 			(effects
 				(font
@@ -552,7 +552,7 @@
 			)
 		)
 		(pin "24V" passive
-			(at 162.56 130.81 0)
+			(at 165.1 129.54 0)
 			(uuid "36d8a339-9b51-41f2-9041-48831b88048c")
 			(effects
 				(font
@@ -562,7 +562,7 @@
 			)
 		)
 		(pin "+3.3V_ISO" passive
-			(at 137.16 130.81 180)
+			(at 139.7 129.54 180)
 			(uuid "adb43022-0669-4b3c-8787-a216cdaad3f5")
 			(effects
 				(font
@@ -572,7 +572,7 @@
 			)
 		)
 		(pin "OUT3" output
-			(at 162.56 140.97 0)
+			(at 165.1 139.7 0)
 			(uuid "a770e02c-26be-494f-965d-7d203593e31e")
 			(effects
 				(font
@@ -582,7 +582,7 @@
 			)
 		)
 		(pin "OUT1" output
-			(at 162.56 135.89 0)
+			(at 165.1 134.62 0)
 			(uuid "d8159a58-e51c-4ba6-852b-3f9db06dccce")
 			(effects
 				(font
@@ -592,7 +592,7 @@
 			)
 		)
 		(pin "OUT2" output
-			(at 162.56 138.43 0)
+			(at 165.1 137.16 0)
 			(uuid "c3dead03-21c3-497e-9cec-c9a87ca6b35b")
 			(effects
 				(font
@@ -602,7 +602,7 @@
 			)
 		)
 		(pin "OUT5" output
-			(at 162.56 146.05 0)
+			(at 165.1 144.78 0)
 			(uuid "27ab797c-865d-472a-8e64-01e49bf652b9")
 			(effects
 				(font
@@ -612,7 +612,7 @@
 			)
 		)
 		(pin "OUT6" output
-			(at 162.56 148.59 0)
+			(at 165.1 147.32 0)
 			(uuid "3919c611-99ce-4579-9fa7-047f052b27f1")
 			(effects
 				(font
@@ -622,7 +622,7 @@
 			)
 		)
 		(pin "OUT4" output
-			(at 162.56 143.51 0)
+			(at 165.1 142.24 0)
 			(uuid "7408554f-cb90-468b-b3b7-ba57cb0a6f47")
 			(effects
 				(font
@@ -632,7 +632,7 @@
 			)
 		)
 		(pin "OUT7" output
-			(at 162.56 151.13 0)
+			(at 165.1 149.86 0)
 			(uuid "cd5aaccb-9fd9-4d93-b063-5f6751711152")
 			(effects
 				(font
@@ -1305,7 +1305,7 @@
 	)
 	(sheet
 		(at 139.7 101.6)
-		(size 12.7 12.7)
+		(size 12.7 10.16)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -1331,7 +1331,7 @@
 			)
 		)
 		(property "Sheetfile" "screen.kicad_sch"
-			(at 139.7 114.8846 0)
+			(at 139.7 112.3446 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -1339,6 +1339,26 @@
 					(size 1.27 1.27)
 				)
 				(justify left top)
+			)
+		)
+		(pin "SCL" input
+			(at 139.7 105.41 180)
+			(uuid "c3157f23-b7a2-4827-ad40-33dffa187f36")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SDA" bidirectional
+			(at 139.7 107.95 180)
+			(uuid "537d8b28-9819-4eb4-b0ef-9d181bfbc00b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
 			)
 		)
 		(instances
@@ -1626,6 +1646,26 @@
 		(pin "I2C0{SDA SCL}" bidirectional
 			(at 170.18 40.64 0)
 			(uuid "a20464b0-39b1-47b0-9cb6-ea166cb9ade5")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "POE_T2P" input
+			(at 125.73 30.48 180)
+			(uuid "1799f365-27eb-4a77-881c-0b67f0a8d4a5")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "I2C1{SDA SCL}" bidirectional
+			(at 170.18 43.18 0)
+			(uuid "7f3a5ea4-083e-4c39-bf93-b6f94afcc0be")
 			(effects
 				(font
 					(size 1.27 1.27)
