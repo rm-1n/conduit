@@ -2546,10 +2546,10 @@
 		)
 		(uuid "2cbffade-338c-4b7a-97b3-a6d1b36b3544")
 	)
-	(text_box "0x92\n"
+	(text_box "0x92; 3.4MHz\n"
 		(exclude_from_sim no)
 		(at 129.54 115.57 0)
-		(size 8.89 5.08)
+		(size 8.89 5.9929)
 		(margins 0.9525 0.9525 0.9525 0.9525)
 		(stroke
 			(width 0)
@@ -2566,10 +2566,10 @@
 		)
 		(uuid "3c99fd14-b61b-4312-8bbc-3a929b97aacc")
 	)
-	(text_box "0x90"
+	(text_box "0x90; 3.4MHz"
 		(exclude_from_sim no)
 		(at 129.54 52.07 0)
-		(size 8.89 5.08)
+		(size 8.89 5.9929)
 		(margins 0.9525 0.9525 0.9525 0.9525)
 		(stroke
 			(width 0)
@@ -2586,10 +2586,10 @@
 		)
 		(uuid "59fda829-e718-496a-abb1-ddec8fbdbcac")
 	)
-	(text_box "0x91"
+	(text_box "0x91; 3.4MHz"
 		(exclude_from_sim no)
 		(at 129.54 83.82 0)
-		(size 8.89 5.08)
+		(size 8.89 5.9929)
 		(margins 0.9525 0.9525 0.9525 0.9525)
 		(stroke
 			(width 0)
@@ -2626,10 +2626,10 @@
 		)
 		(uuid "cc04b0bd-e5e8-466b-80ba-0b874f78eded")
 	)
-	(text_box "0x93"
+	(text_box "0x93; 3.4MHz"
 		(exclude_from_sim no)
 		(at 129.54 147.32 0)
-		(size 8.89 5.08)
+		(size 8.89 5.9929)
 		(margins 0.9525 0.9525 0.9525 0.9525)
 		(stroke
 			(width 0)

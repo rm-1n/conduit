@@ -3006,7 +3006,7 @@
 		(uuid "4a90b3c3-11f8-4a4e-887e-be22897a1d16")
 	)
 	(hierarchical_label "TX"
-		(shape output)
+		(shape input)
 		(at 115.57 81.28 180)
 		(effects
 			(font
@@ -3028,7 +3028,7 @@
 		(uuid "a7e173f4-3df5-42a2-8a49-248d56d79e3a")
 	)
 	(hierarchical_label "RX"
-		(shape input)
+		(shape output)
 		(at 115.57 78.74 180)
 		(effects
 			(font

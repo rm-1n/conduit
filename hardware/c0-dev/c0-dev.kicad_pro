@@ -506,7 +506,6 @@
         "Isolated_MCU"
       ],
       "+3.3V": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "+3.3VA": [
@@ -525,15 +524,12 @@
         "Isolated"
       ],
       "/CAN/RX": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "/CAN/TERM_EN": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "/CAN/TX": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "/Digital Input/OUT0": [
@@ -673,6 +669,12 @@
       "/Ethernet/~{RST}": [
         "Isolated_MCU"
       ],
+      "/MCU/CAN_RX": [
+        "Isolated_MCU"
+      ],
+      "/MCU/CAN_TX": [
+        "Isolated_MCU"
+      ],
       "/MCU/DI0": [
         "Isolated_MCU"
       ],
@@ -698,28 +700,57 @@
         "Isolated_MCU"
       ],
       "/MCU/I2C0.SCL": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "/MCU/I2C0.SDA": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "/MCU/I2C0{SDA SCL}": [
         "Isolated_MCU"
       ],
       "/MCU/I2C1.SCL": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "/MCU/I2C1.SDA": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "/MCU/I2C1{SDA SCL}": [
         "Isolated_MCU"
       ],
+      "/MCU/I2C2.SCL": [
+        "Isolated_MCU"
+      ],
+      "/MCU/I2C2.SDA": [
+        "Isolated_MCU"
+      ],
+      "/MCU/I2C2{SDA SCL}": [
+        "Isolated_MCU"
+      ],
+      "/MCU/LANCLK": [
+        "Isolated_MCU"
+      ],
+      "/MCU/LAN~{RST}": [
+        "Isolated_MCU"
+      ],
       "/MCU/POE_T2P": [
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0.CS0": [
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0.CS1": [
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0.RX": [
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0.SCK": [
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0.TX": [
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0{SCK RX TX CS0 CS1}": [
         "Isolated_MCU"
       ],
       "/MCU/SWCLK": [
@@ -798,11 +829,9 @@
         "Isolated_MCU"
       ],
       "/frontend_bridge/EN0": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "/frontend_bridge/EN1": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "/frontend_bridge/~{CS0_ISO}": [
@@ -823,7 +852,6 @@
         "Isolated"
       ],
       "GND": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "GND_ISO": [
@@ -872,7 +900,6 @@
         "Isolated_MCU"
       ],
       "Net-(R91-Pad1)": [
-        "Isolated",
         "Isolated_MCU"
       ],
       "Net-(U1-CRS_DV{slash}MODE2)": [
@@ -891,6 +918,9 @@
         "Isolated_MCU"
       ],
       "Net-(U1-XTAL1{slash}CLKIN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U11-ADD0)": [
         "Isolated_MCU"
       ],
       "Net-(U2-BOOT)": [
@@ -924,6 +954,18 @@
         "Isolated_MCU"
       ],
       "Net-(U32-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U45-A0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U45-A1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U45-A2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U45-~{INT})": [
         "Isolated_MCU"
       ],
       "Net-(U7-CLK)": [
@@ -965,6 +1007,9 @@
       "unconnected-(U1-~{INT}{slash}REFCLKO-Pad14)": [
         "Isolated_MCU"
       ],
+      "unconnected-(U11-ALERT-Pad3)": [
+        "Isolated_MCU"
+      ],
       "unconnected-(U29-NC-Pad6)": [
         "Isolated_MCU"
       ],
@@ -989,37 +1034,43 @@
       "unconnected-(U32-NC-Pad7)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO0-Pad2)": [
+      "unconnected-(U45-P04-Pad8)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO1-Pad3)": [
+      "unconnected-(U45-P05-Pad9)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO13-Pad17)": [
+      "unconnected-(U45-P06-Pad10)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO16-Pad27)": [
+      "unconnected-(U45-P07-Pad11)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO18-Pad29)": [
+      "unconnected-(U45-P10-Pad13)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO19-Pad31)": [
+      "unconnected-(U45-P11-Pad14)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO2-Pad4)": [
+      "unconnected-(U45-P12-Pad15)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO3-Pad5)": [
+      "unconnected-(U45-P13-Pad16)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO4-Pad7)": [
+      "unconnected-(U45-P14-Pad17)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO5-Pad8)": [
+      "unconnected-(U45-P15-Pad18)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U8-GPIO9-Pad13)": [
+      "unconnected-(U45-P16-Pad19)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P17-Pad20)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U8-GPIO24-Pad36)": [
         "Isolated_MCU"
       ]
     },
@@ -1153,7 +1204,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "TR1,L1-2,J1-2,Q1-2,U1-45,FB1-8,C1-146,Y1,#PWR1-120,D1-60,TP1,F1-6,R1-175",
+    "used_designators": "#PWR84,#PWR87-89,#PWR121-132,U44-45,R176-187,C146-147",
     "variants": []
   },
   "sheets": [
@@ -1230,7 +1281,7 @@
       "Highside Switch7"
     ],
     [
-      "ac97ac68-ff77-464f-9293-e305751aedfa",
+      "8163fdfe-0ffb-4135-bb2a-8165bcb76d87",
       "screen"
     ]
   ],
