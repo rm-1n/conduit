@@ -816,6 +816,9 @@
       "/Power/T2P": [
         "Isolated_MCU"
       ],
+      "/Power/V+": [
+        "Isolated"
+      ],
       "/frontend_bridge/CLK_ISO": [
         "Isolated",
         "Isolated_MCU"
@@ -852,6 +855,7 @@
         "Isolated"
       ],
       "GND": [
+        "Isolated",
         "Isolated_MCU"
       ],
       "GND_ISO": [
@@ -869,6 +873,9 @@
       "Net-(C39-Pad2)": [
         "Isolated_MCU"
       ],
+      "Net-(C40-Pad2)": [
+        "Isolated_MCU"
+      ],
       "Net-(C8-Pad2)": [
         "Isolated"
       ],
@@ -884,6 +891,15 @@
       "Net-(J1-Pad9)": [
         "Isolated_MCU"
       ],
+      "Net-(J14-Pad11)": [
+        "Isolated_MCU"
+      ],
+      "Net-(J14-Pad9)": [
+        "Isolated_MCU"
+      ],
+      "Net-(R101-Pad1)": [
+        "Isolated_MCU"
+      ],
       "Net-(R23-Pad2)": [
         "Isolated"
       ],
@@ -897,6 +913,9 @@
         "Isolated"
       ],
       "Net-(R30-Pad1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(R34-Pad1)": [
         "Isolated_MCU"
       ],
       "Net-(R91-Pad1)": [
@@ -918,6 +937,9 @@
         "Isolated_MCU"
       ],
       "Net-(U1-XTAL1{slash}CLKIN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U10-ADD0)": [
         "Isolated_MCU"
       ],
       "Net-(U11-ADD0)": [
@@ -956,6 +978,9 @@
       "Net-(U32-EN)": [
         "Isolated_MCU"
       ],
+      "Net-(U33-EN)": [
+        "Isolated_MCU"
+      ],
       "Net-(U45-A0)": [
         "Isolated_MCU"
       ],
@@ -966,6 +991,15 @@
         "Isolated_MCU"
       ],
       "Net-(U45-~{INT})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-A0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-A1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-A2)": [
         "Isolated_MCU"
       ],
       "Net-(U7-CLK)": [
@@ -983,7 +1017,19 @@
       "Net-(U7-~{HOLD}{slash}~{RESET}{slash}IO_{3})": [
         "Isolated_MCU"
       ],
+      "Net-(U7-~{INT})": [
+        "Isolated_MCU"
+      ],
       "Net-(U7-~{WP}{slash}IO_{2})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U8-CLK)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U8-DI{slash}IO_{0})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U8-DO{slash}IO_{1})": [
         "Isolated_MCU"
       ],
       "Net-(U8-USB_DM)": [
@@ -998,6 +1044,30 @@
       "Net-(U8-XOUT)": [
         "Isolated_MCU"
       ],
+      "Net-(U8-~{CS})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U8-~{HOLD}{slash}~{RESET}{slash}IO_{3})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U8-~{WP}{slash}IO_{2})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U9-USB_DM)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U9-USB_DP)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U9-XIN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U9-XOUT)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(J15-SWO-Pad6)": [
+        "Isolated_MCU"
+      ],
       "unconnected-(J2-SWO-Pad6)": [
         "Isolated_MCU"
       ],
@@ -1005,6 +1075,9 @@
         "Isolated_MCU"
       ],
       "unconnected-(U1-~{INT}{slash}REFCLKO-Pad14)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U10-ALERT-Pad3)": [
         "Isolated_MCU"
       ],
       "unconnected-(U11-ALERT-Pad3)": [
@@ -1032,6 +1105,12 @@
         "Isolated_MCU"
       ],
       "unconnected-(U32-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U33-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U33-NC-Pad7)": [
         "Isolated_MCU"
       ],
       "unconnected-(U45-P04-Pad8)": [
@@ -1070,7 +1149,46 @@
       "unconnected-(U45-P17-Pad20)": [
         "Isolated_MCU"
       ],
+      "unconnected-(U7-P04-Pad8)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P05-Pad9)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P06-Pad10)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P07-Pad11)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P10-Pad13)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P11-Pad14)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P12-Pad15)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P13-Pad16)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P14-Pad17)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P15-Pad18)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P16-Pad19)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P17-Pad20)": [
+        "Isolated_MCU"
+      ],
       "unconnected-(U8-GPIO24-Pad36)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U9-GPIO24-Pad36)": [
         "Isolated_MCU"
       ]
     },
@@ -1092,7 +1210,7 @@
       "method": 0,
       "sort_order": 0
     },
-    "bom_export_filename": "${PROJECTNAME}.csv",
+    "bom_export_filename": "production/pico-poe_bom_extended.csv",
     "bom_fmt_presets": [],
     "bom_fmt_settings": {
       "field_delimiter": ",",
@@ -1154,12 +1272,54 @@
           "label": "Datasheet",
           "name": "Datasheet",
           "show": true
+        },
+        {
+          "group_by": false,
+          "label": "MPN",
+          "name": "MPN",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Sim.Device",
+          "name": "Sim.Device",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Sim.Pins",
+          "name": "Sim.Pins",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Voltage",
+          "name": "Voltage",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "JLCPCB Part",
+          "name": "JLCPCB Part",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Description",
+          "name": "Description",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "#",
+          "name": "${ITEM_NUMBER}",
+          "show": false
         }
       ],
       "filter_string": "",
       "group_symbols": true,
       "include_excluded_from_bom": true,
-      "name": "Default Editing",
+      "name": "",
       "sort_asc": true,
       "sort_field": "Reference"
     },
@@ -1204,7 +1364,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "J3,TP2-3",
+    "used_designators": "TR1,R1-186,L1-2,Q1-2,U1-46,C1-147,FB1-8,Y1,D1-53,#PWR1-135,J1-18,F1-6,TP1-3",
     "variants": []
   },
   "sheets": [
