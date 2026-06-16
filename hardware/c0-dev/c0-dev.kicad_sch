@@ -1257,6 +1257,16 @@
 	)
 	(wire
 		(pts
+			(xy 148.59 80.01) (xy 153.67 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d651a422-a098-48b6-a88b-0deb4e4568c7")
+	)
+	(wire
+		(pts
 			(xy 198.12 109.22) (xy 212.09 109.22)
 		)
 		(stroke
@@ -1485,6 +1495,16 @@
 		)
 		(uuid "fc24efe0-78a6-4448-83a0-416a8ad885a4")
 	)
+	(wire
+		(pts
+			(xy 172.72 93.98) (xy 177.8 93.98)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fe30c8ae-ee00-43af-b62f-f451e53f9561")
+	)
 	(bus
 		(pts
 			(xy 158.75 83.82) (xy 158.75 119.38)
@@ -1575,6 +1595,16 @@
 		)
 		(uuid "8870f751-4034-449d-8e89-6c64074f9d09")
 	)
+	(label "EN"
+		(at 172.72 93.98 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "88ef73dc-4963-47e3-ab09-310c161fad4f")
+	)
 	(label "I2C0.SCL"
 		(at 167.64 60.96 0)
 		(effects
@@ -1594,6 +1624,16 @@
 			(justify left bottom)
 		)
 		(uuid "9df01e3f-d3fb-48e4-b2ab-0281229adbab")
+	)
+	(label "EN"
+		(at 153.67 80.01 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "c0a5fa01-b03a-49fe-96b8-5738e9236081")
 	)
 	(label "I2C2.SCL"
 		(at 167.64 121.92 0)
@@ -3220,6 +3260,16 @@
 				(justify right)
 			)
 		)
+		(pin "ENABLE" input
+			(at 177.8 93.98 180)
+			(uuid "38e67a75-d147-4fb4-bcd2-1bebd2c8d753")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
@@ -4249,6 +4299,16 @@
 		(pin "I2C2{SDA SCL}" bidirectional
 			(at 148.59 83.82 0)
 			(uuid "450eae4f-40e5-4ba8-8e0d-1faa411acbea")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "ENABLE" output
+			(at 148.59 80.01 0)
+			(uuid "c3cfd660-6f64-4de3-b655-61729bcac2ad")
 			(effects
 				(font
 					(size 1.27 1.27)

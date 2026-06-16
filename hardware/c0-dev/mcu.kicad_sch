@@ -5016,6 +5016,16 @@
 	)
 	(wire
 		(pts
+			(xy 153.67 163.83) (xy 154.94 163.83)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "536a3296-f68c-4a1d-898b-b488049debec")
+	)
+	(wire
+		(pts
 			(xy 219.71 22.86) (xy 231.14 22.86)
 		)
 		(stroke
@@ -6564,6 +6574,16 @@
 		)
 		(uuid "2b5a854f-be0d-4136-af27-ebb71d393467")
 	)
+	(label "~{RST}"
+		(at 147.32 163.83 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "2c0d52b1-1d08-442f-a74d-09e488b480ab")
+	)
 	(label "I2C1.SCL"
 		(at 219.71 30.48 0)
 		(effects
@@ -6944,16 +6964,6 @@
 		)
 		(uuid "fa7fa729-f58f-45e4-af6a-3b1ad45cc756")
 	)
-	(label "~{RST}"
-		(at 148.59 163.83 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "fec23f30-a84a-4670-bc40-28d7a55f7426")
-	)
 	(hierarchical_label "MDIO0{MDIO MDC}"
 		(shape bidirectional)
 		(at 238.76 77.47 0)
@@ -7096,6 +7106,17 @@
 			(justify left)
 		)
 		(uuid "bc3fa9c4-eb1f-4d86-9cac-ece631062677")
+	)
+	(hierarchical_label "ENABLE"
+		(shape output)
+		(at 154.94 163.83 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "bfcf0690-f154-47fa-963d-462821f3749e")
 	)
 	(hierarchical_label "CAN_TERM_EN"
 		(shape output)
@@ -8803,6 +8824,85 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7"
 					(reference "#PWR060")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_Small")
+		(at 151.13 163.83 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "2fbf9dac-e4e2-4c1c-965a-de716c454eb9")
+		(property "Reference" "R189"
+			(at 151.13 166.37 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "1k"
+			(at 151.13 168.91 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+			(at 151.13 163.83 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 151.13 163.83 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor, small symbol"
+			(at 151.13 163.83 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "02710eb2-12df-456a-bd0b-7d6015b577cf")
+		)
+		(pin "1"
+			(uuid "4828eaa1-e6b0-42fd-8baf-f820c42ef5fd")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7"
+					(reference "R189")
 					(unit 1)
 				)
 			)

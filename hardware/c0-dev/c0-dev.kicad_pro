@@ -564,6 +564,9 @@
         "Isolated",
         "Isolated_MCU"
       ],
+      "/EN": [
+        "Isolated_MCU"
+      ],
       "/Ethernet/CLK": [
         "Isolated_MCU"
       ],
@@ -1367,7 +1370,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "TR1,R1-187,L1-2,Q1-2,U1-46,C1-148,FB1-8,Y1,D1-53,#PWR1-139,J1-18,F1-6,TP1-3",
+    "used_designators": "TR1,R1-190,L1-2,Q1-11,U1-48,C1-148,FB1-8,Y1,D1-53,#PWR1-151,J1-18,F1-6,TP1-3",
     "variants": []
   },
   "sheets": [
