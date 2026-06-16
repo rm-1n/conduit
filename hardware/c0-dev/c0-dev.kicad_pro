@@ -891,6 +891,18 @@
       "Net-(D4-K)": [
         "Isolated"
       ],
+      "Net-(D70-A)": [
+        "Isolated"
+      ],
+      "Net-(D71-A)": [
+        "Isolated_MCU"
+      ],
+      "Net-(D72-A)": [
+        "Isolated_MCU"
+      ],
+      "Net-(D73-A)": [
+        "Isolated_MCU"
+      ],
       "Net-(J1-Pad11)": [
         "Isolated_MCU"
       ],
@@ -1018,6 +1030,12 @@
         "Isolated_MCU"
       ],
       "Net-(U7-DO{slash}IO_{1})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-P04)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-P05)": [
         "Isolated_MCU"
       ],
       "Net-(U7-~{CS})": [
@@ -1156,12 +1174,6 @@
         "Isolated_MCU"
       ],
       "unconnected-(U45-P17-Pad20)": [
-        "Isolated_MCU"
-      ],
-      "unconnected-(U7-P04-Pad8)": [
-        "Isolated_MCU"
-      ],
-      "unconnected-(U7-P05-Pad9)": [
         "Isolated_MCU"
       ],
       "unconnected-(U7-P06-Pad10)": [
@@ -1370,7 +1382,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "TR1,R1-190,L1-2,Q1-11,U1-48,C1-148,FB1-8,Y1,D1-53,#PWR1-151,J1-18,F1-6,TP1-3",
+    "used_designators": "TR1,R1-209,L1-2,Q1-11,U1-48,C1-148,FB1-8,Y1,D1-73,#PWR1-151,J1-18,F1-6,TP1-3",
     "variants": []
   },
   "sheets": [
