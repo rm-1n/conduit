@@ -771,6 +771,9 @@
       "/MCU/VREG_LX": [
         "Isolated_MCU"
       ],
+      "/MCU/WDI": [
+        "Isolated_MCU"
+      ],
       "/MCU/~{QSPI_SS}": [
         "Isolated_MCU"
       ],
@@ -993,6 +996,9 @@
       "Net-(U45-~{INT})": [
         "Isolated_MCU"
       ],
+      "Net-(U45-~{MR})": [
+        "Isolated_MCU"
+      ],
       "Net-(U7-A0)": [
         "Isolated_MCU"
       ],
@@ -1182,9 +1188,6 @@
       "unconnected-(U7-P16-Pad19)": [
         "Isolated_MCU"
       ],
-      "unconnected-(U7-P17-Pad20)": [
-        "Isolated_MCU"
-      ],
       "unconnected-(U8-GPIO24-Pad36)": [
         "Isolated_MCU"
       ],
@@ -1364,7 +1367,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "TR1,R1-186,L1-2,Q1-2,U1-46,C1-147,FB1-8,Y1,D1-53,#PWR1-135,J1-18,F1-6,TP1-3",
+    "used_designators": "TR1,R1-187,L1-2,Q1-2,U1-46,C1-148,FB1-8,Y1,D1-53,#PWR1-139,J1-18,F1-6,TP1-3",
     "variants": []
   },
   "sheets": [
