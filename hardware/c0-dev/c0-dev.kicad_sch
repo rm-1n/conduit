@@ -379,6 +379,102 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "Mechanical:Fiducial"
+			(exclude_from_sim no)
+			(in_bom no)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "FID"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Fiducial"
+				(at 0 3.175 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Fiducial Marker"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "fiducial marker"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "Fiducial*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Fiducial_0_1"
+				(circle
+					(center 0 0)
+					(radius 1.27)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 	)
 	(junction
 		(at 209.55 129.54)
@@ -1666,94 +1762,6 @@
 		(uuid "f73c33f9-2e2f-4141-9d1c-ffb86bef5498")
 	)
 	(symbol
-		(lib_id "Connector_Generic:Conn_01x04")
-		(at 217.17 40.64 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "031b62c7-a4ec-4185-afc1-3b90794e85c7")
-		(property "Reference" "J3"
-			(at 219.71 40.6399 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "2913730000"
-			(at 219.71 43.1799 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" ""
-			(at 217.17 40.64 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
-			(at 217.17 40.64 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 217.17 40.64 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "fc3f3784-656f-4b57-aa2f-db7776c6dd68")
-		)
-		(pin "2"
-			(uuid "184dfa66-b04f-49ab-82df-e1b58634d4f0")
-		)
-		(pin "3"
-			(uuid "8b3e5695-6279-4f21-b26c-c8c9a225e13a")
-		)
-		(pin "4"
-			(uuid "fbd3084e-dcaf-4474-9934-1eef9915a024")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J3")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Connector_Generic:Conn_01x02")
 		(at 217.17 129.54 0)
 		(unit 1)
@@ -1765,7 +1773,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "3e7c8543-115e-47a2-bf44-a86b2ddfebd9")
-		(property "Reference" "J11"
+		(property "Reference" "J12"
 			(at 219.71 129.5399 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1829,7 +1837,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J11")
+					(reference "J12")
 					(unit 1)
 				)
 			)
@@ -1847,7 +1855,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "46ca3965-3a5e-44bb-a40f-835bd05fa1ed")
-		(property "Reference" "J16"
+		(property "Reference" "J2"
 			(at 69.85 16.51 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1909,447 +1917,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J16")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector_Generic:Conn_01x04")
-		(at 217.17 121.92 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "51c76c12-3d39-4369-8e1b-23db7df19eac")
-		(property "Reference" "J10"
-			(at 219.71 121.9199 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "2913730000"
-			(at 219.71 124.4599 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" ""
-			(at 217.17 121.92 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
-			(at 217.17 121.92 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 217.17 121.92 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "551ebaaf-9a09-4216-8706-eac06f2f4da9")
-		)
-		(pin "2"
-			(uuid "cb342b24-c9fe-4257-a9b4-2a87692b8f63")
-		)
-		(pin "3"
-			(uuid "994f6de1-e93a-40bd-b671-1325e865f0b9")
-		)
-		(pin "4"
-			(uuid "f799eada-a6d2-4d6b-be8b-7fe95a3d6247")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J10")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector_Generic:Conn_01x04")
-		(at 57.15 86.36 0)
-		(mirror y)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "608a685a-dbb6-422c-b1a4-98cdcd9fc19c")
-		(property "Reference" "J1"
-			(at 54.61 86.3599 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "2913730000"
-			(at 54.61 88.8999 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" ""
-			(at 57.15 86.36 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
-			(at 57.15 86.36 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 57.15 86.36 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "add6dfea-f535-4c0e-91ff-0d68d8924cd5")
-		)
-		(pin "2"
-			(uuid "46dc5d59-09b6-4572-8c02-1c0ab0c7179e")
-		)
-		(pin "3"
-			(uuid "4468a388-6ea2-44e2-8376-a5fd38060c39")
-		)
-		(pin "4"
-			(uuid "a257980a-c5a1-4fd7-9f64-2b3cec07d3f4")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J1")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector_Generic:Conn_01x04")
-		(at 217.17 142.24 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "65658494-838a-4d4e-bc81-f5801a98a852")
-		(property "Reference" "J12"
-			(at 219.71 142.2399 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "2913730000"
-			(at 219.71 144.7799 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" ""
-			(at 217.17 142.24 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
-			(at 217.17 142.24 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 217.17 142.24 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "2e1dfc07-0431-4247-9662-30d4dde29e80")
-		)
-		(pin "2"
-			(uuid "31439fd2-caea-4ee1-9acf-c9d89839c199")
-		)
-		(pin "3"
-			(uuid "39bc3b36-b6bf-4647-92d6-7f820a9a74ca")
-		)
-		(pin "4"
-			(uuid "bf0ef8cc-175a-430e-900b-f64c25a70850")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J12")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector_Generic:Conn_01x04")
-		(at 217.17 71.12 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "74101d47-a02d-4639-bbaf-79aa23e564da")
-		(property "Reference" "J6"
-			(at 219.71 71.1199 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "2913730000"
-			(at 219.71 73.6599 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" ""
-			(at 217.17 71.12 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
-			(at 217.17 71.12 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 217.17 71.12 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "b7553b67-bcd3-45af-a58c-26e6ebc7d53f")
-		)
-		(pin "2"
-			(uuid "1ac2a199-9309-41c4-a005-569a3e72b4e7")
-		)
-		(pin "3"
-			(uuid "a5adb4ed-0541-41f6-b2a6-49715cadcb5a")
-		)
-		(pin "4"
-			(uuid "d4e0402f-e460-4b3f-9e70-76ea700a0580")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J6")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector_Generic:Conn_01x04")
-		(at 217.17 104.14 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "7f69c147-9239-4704-b6b0-d2a1c54e57f5")
-		(property "Reference" "J9"
-			(at 219.71 104.1399 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "2913730000"
-			(at 219.71 106.6799 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" ""
-			(at 217.17 104.14 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
-			(at 217.17 104.14 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 217.17 104.14 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "777eb023-fa1c-4535-93d7-bef18a9e832b")
-		)
-		(pin "2"
-			(uuid "924131b6-70de-4646-91c0-fcab598428fd")
-		)
-		(pin "3"
-			(uuid "65e19d1c-7106-4269-ae52-65e7051ef2c2")
-		)
-		(pin "4"
-			(uuid "e70e5efc-1513-4bfd-bc15-c0d5f8acb96b")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J9")
+					(reference "J2")
 					(unit 1)
 				)
 			)
@@ -2366,8 +1934,8 @@
 		(in_pos_files yes)
 		(dnp no)
 		(fields_autoplaced yes)
-		(uuid "94af8a7b-2249-4501-abaa-63e50b9281c6")
-		(property "Reference" "J13"
+		(uuid "64ce7fe2-f8b1-42b0-ac26-0cf5f76a6c7c")
+		(property "Reference" "J14"
 			(at 219.71 154.9399 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2389,7 +1957,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "conduit:2913730000"
 			(at 217.17 154.94 0)
 			(hide yes)
 			(show_name no)
@@ -2423,16 +1991,104 @@
 			)
 		)
 		(pin "1"
-			(uuid "212b244c-a28f-4452-9880-724b879db1d8")
+			(uuid "9d31272b-c4fb-4664-a756-3e7ff18300d4")
 		)
 		(pin "2"
-			(uuid "48a5753f-220d-425d-9f30-175596085245")
+			(uuid "6dec9cab-d12d-4d29-ba4b-a0fd5325b10b")
 		)
 		(pin "3"
-			(uuid "6f091988-6b3a-4474-9067-4d29e4225577")
+			(uuid "ea191e32-db10-4ad5-b3f0-8c17ab7988d3")
 		)
 		(pin "4"
-			(uuid "8b80e8ea-bf9e-4de3-bbf6-b5eff73f8796")
+			(uuid "b4ba7977-6d5e-469b-86c7-5857036fde62")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(reference "J14")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x04")
+		(at 217.17 142.24 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "78173d99-921c-4775-937c-8c46dff6a2ac")
+		(property "Reference" "J13"
+			(at 219.71 142.2399 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "2913730000"
+			(at 219.71 144.7799 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "conduit:2913730000"
+			(at 217.17 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
+			(at 217.17 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 217.17 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "1547bacf-77c4-4899-b382-7c21b2f79e49")
+		)
+		(pin "2"
+			(uuid "503a848b-40f6-4021-a3cb-9816c9d3c3e2")
+		)
+		(pin "3"
+			(uuid "a0b1ecd1-cbac-49cf-a05f-b0a22f9943c0")
+		)
+		(pin "4"
+			(uuid "019c942e-3d60-412d-9060-11e34de977aa")
 		)
 		(instances
 			(project "c0-dev"
@@ -2445,7 +2101,7 @@
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x04")
-		(at 217.17 93.98 0)
+		(at 217.17 121.92 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -2454,9 +2110,9 @@
 		(in_pos_files yes)
 		(dnp no)
 		(fields_autoplaced yes)
-		(uuid "aa54d324-02e5-45fc-b54d-5ec2ba905258")
-		(property "Reference" "J8"
-			(at 219.71 93.9799 0)
+		(uuid "8d42bb6e-b65b-4569-80dc-24ec97fbf582")
+		(property "Reference" "J11"
+			(at 219.71 121.9199 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -2467,7 +2123,7 @@
 			)
 		)
 		(property "Value" "2913730000"
-			(at 219.71 96.5199 0)
+			(at 219.71 124.4599 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -2477,8 +2133,8 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
-			(at 217.17 93.98 0)
+		(property "Footprint" "conduit:2913730000"
+			(at 217.17 121.92 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2489,7 +2145,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
-			(at 217.17 93.98 0)
+			(at 217.17 121.92 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2500,7 +2156,7 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 217.17 93.98 0)
+			(at 217.17 121.92 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2511,21 +2167,21 @@
 			)
 		)
 		(pin "1"
-			(uuid "bcd56d00-baf4-49d2-96ae-f32fadbe0a19")
+			(uuid "180fb9ba-6af5-4129-99da-fd8ba43e6785")
 		)
 		(pin "2"
-			(uuid "c52947ae-068d-4714-a99a-1dc503f459fa")
+			(uuid "78845f3c-ec39-43cd-a73f-65db66a939c3")
 		)
 		(pin "3"
-			(uuid "ddd62292-2eb3-44b2-b19d-06ac0a0aef12")
+			(uuid "1a27aa0f-179b-4066-b14e-6e111f15609b")
 		)
 		(pin "4"
-			(uuid "3216c597-49e3-4f1e-bf8e-9748c567c387")
+			(uuid "e590e37d-6743-4fec-8453-9acffd4dca9e")
 		)
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J8")
+					(reference "J11")
 					(unit 1)
 				)
 			)
@@ -2542,8 +2198,8 @@
 		(in_pos_files yes)
 		(dnp no)
 		(fields_autoplaced yes)
-		(uuid "c8e8ea8f-24bd-493a-91ef-b3d935cfb8ed")
-		(property "Reference" "J5"
+		(uuid "9ef59942-d394-4eeb-b69d-5a8df107167a")
+		(property "Reference" "J6"
 			(at 219.71 60.9599 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2565,7 +2221,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "conduit:2913730000"
 			(at 217.17 60.96 0)
 			(hide yes)
 			(show_name no)
@@ -2599,21 +2255,97 @@
 			)
 		)
 		(pin "1"
-			(uuid "b4ccdf4c-88f8-4961-a511-6e622f576dd9")
+			(uuid "e4976c7a-e137-4fc6-99b6-566c114286ab")
 		)
 		(pin "2"
-			(uuid "0aa22571-fd79-42e3-8bf2-dcb3ebe7e8d9")
+			(uuid "92f9e89d-76b7-4b38-bab9-0badc379b90a")
 		)
 		(pin "3"
-			(uuid "147ae16f-425e-4c82-bdc7-64ac726b2ee1")
+			(uuid "c8b66087-9cf1-4592-b655-3e20ac49b6f9")
 		)
 		(pin "4"
-			(uuid "b599a951-6383-48c5-a887-322ae45d432b")
+			(uuid "31a6016f-c627-45fd-94c1-7dc2f7b83ad5")
 		)
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J5")
+					(reference "J6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:Fiducial")
+		(at 25.4 127 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "b5a79ad3-821a-46bf-b65a-5c74cb3824f2")
+		(property "Reference" "FID1"
+			(at 27.94 125.7299 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Fiducial"
+			(at 27.94 128.2699 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Fiducial:Fiducial_1mm_Mask2mm"
+			(at 25.4 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 25.4 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Fiducial Marker"
+			(at 25.4 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(reference "FID1")
 					(unit 1)
 				)
 			)
@@ -2631,7 +2363,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "caccab10-4909-47b8-9a66-d17c390f7098")
-		(property "Reference" "J2"
+		(property "Reference" "J3"
 			(at 219.71 30.4799 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2653,7 +2385,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "conduit:2913730000"
 			(at 217.17 30.48 0)
 			(hide yes)
 			(show_name no)
@@ -2701,7 +2433,95 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J2")
+					(reference "J3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x04")
+		(at 57.15 86.36 0)
+		(mirror y)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "ccd7bba8-9e22-4ede-aeab-88ce2166d8d8")
+		(property "Reference" "J1"
+			(at 54.61 86.3599 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "2913730000"
+			(at 54.61 88.8999 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "conduit:2913730000"
+			(at 57.15 86.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
+			(at 57.15 86.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 57.15 86.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "c8f03b5f-9e06-491e-aa1d-96f2b6eba402")
+		)
+		(pin "2"
+			(uuid "a36335e9-5eb7-4ed3-bbf0-47791791d12f")
+		)
+		(pin "3"
+			(uuid "f47c62d1-b453-4939-98da-af30166e5be9")
+		)
+		(pin "4"
+			(uuid "056b4196-3ec8-4d88-a52c-d4873a814839")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(reference "J1")
 					(unit 1)
 				)
 			)
@@ -2719,7 +2539,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "cd8bcab3-8d24-4e9a-9048-ec39a5548ab7")
-		(property "Reference" "J4"
+		(property "Reference" "J5"
 			(at 219.71 48.2599 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2783,7 +2603,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J4")
+					(reference "J5")
 					(unit 1)
 				)
 			)
@@ -2801,7 +2621,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "cf65fa3a-26bf-4b55-870b-9eb780bc8b9f")
-		(property "Reference" "J7"
+		(property "Reference" "J8"
 			(at 219.71 86.3599 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2865,7 +2685,511 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(reference "J8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x04")
+		(at 217.17 93.98 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "d94a1125-1a3d-4a97-ba12-4099322534dd")
+		(property "Reference" "J9"
+			(at 219.71 93.9799 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "2913730000"
+			(at 219.71 96.5199 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "conduit:2913730000"
+			(at 217.17 93.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
+			(at 217.17 93.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 217.17 93.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "3618b445-d17c-4b02-a933-255da8f3353b")
+		)
+		(pin "2"
+			(uuid "bf496e11-fff9-4640-8cd1-590d5045f893")
+		)
+		(pin "3"
+			(uuid "e86d5fa5-97d7-4a73-87f7-446572557e22")
+		)
+		(pin "4"
+			(uuid "d6bffd6a-214f-4bbb-8cb3-f45404da2385")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(reference "J9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:Fiducial")
+		(at 25.4 139.7 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "e0e09e4a-5d11-4386-9a18-6f11644a77c5")
+		(property "Reference" "FID2"
+			(at 27.94 138.4299 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Fiducial"
+			(at 27.94 140.9699 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Fiducial:Fiducial_1mm_Mask2mm"
+			(at 25.4 139.7 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 25.4 139.7 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Fiducial Marker"
+			(at 25.4 139.7 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(reference "FID2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x04")
+		(at 217.17 71.12 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "ef1cbc34-104f-41bb-a2e0-cca88a0aa7b1")
+		(property "Reference" "J7"
+			(at 219.71 71.1199 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "2913730000"
+			(at 219.71 73.6599 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "conduit:2913730000"
+			(at 217.17 71.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
+			(at 217.17 71.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 217.17 71.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f883a623-9057-418a-84e5-ad326ac15d64")
+		)
+		(pin "2"
+			(uuid "9740a951-6bfb-41ed-acf6-2912bb7ba8cb")
+		)
+		(pin "3"
+			(uuid "f812dec2-f0bd-4c51-93c8-0679e9376f96")
+		)
+		(pin "4"
+			(uuid "350eaf1a-3c48-4bb3-a762-8cf1b40e2a74")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
 					(reference "J7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:Fiducial")
+		(at 25.4 152.4 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "fc5da729-b472-4639-b572-db34ebc72413")
+		(property "Reference" "FID3"
+			(at 27.94 151.1299 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Fiducial"
+			(at 27.94 153.6699 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Fiducial:Fiducial_1mm_Mask2mm"
+			(at 25.4 152.4 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 25.4 152.4 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Fiducial Marker"
+			(at 25.4 152.4 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(reference "FID3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x04")
+		(at 217.17 104.14 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "ff6674e9-eff6-418a-ba02-49e2cf2239bf")
+		(property "Reference" "J10"
+			(at 219.71 104.1399 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "2913730000"
+			(at 219.71 106.6799 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "conduit:2913730000"
+			(at 217.17 104.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
+			(at 217.17 104.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 217.17 104.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "0ca2fa9a-9465-4f11-90b6-eb26a7bee33d")
+		)
+		(pin "2"
+			(uuid "9d696e99-fdb7-4c00-adcf-1b2aa4af7d38")
+		)
+		(pin "3"
+			(uuid "6a01a6aa-00e3-4478-b067-054ed0a9c05b")
+		)
+		(pin "4"
+			(uuid "d964dd33-89dc-427e-a6d3-56a48324d516")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(reference "J10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x04")
+		(at 217.17 40.64 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "ff920479-b98e-483d-af3a-2cbf3c8464b8")
+		(property "Reference" "J4"
+			(at 219.71 40.6399 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "2913730000"
+			(at 219.71 43.1799 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "conduit:2913730000"
+			(at 217.17 40.64 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://datasheet.weidmueller.com/pdf/en/2913730000/scope/2/"
+			(at 217.17 40.64 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 217.17 40.64 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "7c58658d-b748-422d-b53b-d78fe2543677")
+		)
+		(pin "2"
+			(uuid "375550b0-4176-42c7-87a3-f321c05084b2")
+		)
+		(pin "3"
+			(uuid "880d9721-68d5-47b9-978a-b9eaaf59d2fc")
+		)
+		(pin "4"
+			(uuid "35cff078-aefb-4e55-bdc0-72b20b14b2ea")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
+					(reference "J4")
 					(unit 1)
 				)
 			)
