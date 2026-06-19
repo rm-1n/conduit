@@ -3250,7 +3250,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "16eedffd-b8b4-427f-a149-0ff99a991c55")
-		(property "Reference" "D39"
+		(property "Reference" "D38"
 			(at 158.75 35.56 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -3323,7 +3323,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/80e53efd-e5a4-4d09-bb57-828ee723d9b9"
-					(reference "D39")
+					(reference "D38")
 					(unit 1)
 				)
 			)
@@ -3579,7 +3579,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "49ae1d2b-3d31-4813-b682-5e60aa9faed2")
-		(property "Reference" "D40"
+		(property "Reference" "D39"
 			(at 163.83 109.2199 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -3658,7 +3658,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/80e53efd-e5a4-4d09-bb57-828ee723d9b9"
-					(reference "D40")
+					(reference "D39")
 					(unit 1)
 				)
 			)

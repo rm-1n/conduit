@@ -5553,7 +5553,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "0f4af56a-072a-49d9-8177-49f830a25e4b")
-		(property "Reference" "D30"
+		(property "Reference" "D28"
 			(at 229.87 100.3299 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5628,7 +5628,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
-					(reference "D30")
+					(reference "D28")
 					(unit 1)
 				)
 			)
@@ -6491,7 +6491,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "345e04f2-0025-4487-8595-8baa7cfcf63b")
-		(property "Reference" "D29"
+		(property "Reference" "D27"
 			(at 229.87 68.5799 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6566,7 +6566,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
-					(reference "D29")
+					(reference "D27")
 					(unit 1)
 				)
 			)
@@ -6815,7 +6815,7 @@
 	(symbol
 		(lib_id "Diode:BAV199DW")
 		(at 212.09 128.27 0)
-		(unit 1)
+		(unit 2)
 		(body_style 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -6823,7 +6823,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "4e9dcfff-7a1a-4eb2-9d73-f4a2e93bb1bd")
-		(property "Reference" "D27"
+		(property "Reference" "D25"
 			(at 214.63 125.73 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6908,8 +6908,8 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
-					(reference "D27")
-					(unit 1)
+					(reference "D25")
+					(unit 2)
 				)
 			)
 		)
@@ -7089,7 +7089,7 @@
 	(symbol
 		(lib_id "Diode:BAV199DW")
 		(at 212.09 64.77 0)
-		(unit 1)
+		(unit 2)
 		(body_style 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -7097,7 +7097,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "69be0b70-caa6-4b1a-a6e2-bc2f9c73fe41")
-		(property "Reference" "D25"
+		(property "Reference" "D24"
 			(at 214.63 62.23 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7182,8 +7182,8 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
-					(reference "D25")
-					(unit 1)
+					(reference "D24")
+					(unit 2)
 				)
 			)
 		)
@@ -8831,7 +8831,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "cf96b76d-d8dc-4848-9cb6-d268055de41a")
-		(property "Reference" "D28"
+		(property "Reference" "D26"
 			(at 229.87 36.8299 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8906,7 +8906,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
-					(reference "D28")
+					(reference "D26")
 					(unit 1)
 				)
 			)
@@ -9762,7 +9762,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "f6119332-bdc6-4e0f-8529-c1b5081fa413")
-		(property "Reference" "D31"
+		(property "Reference" "D29"
 			(at 229.87 132.0799 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -9837,7 +9837,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
-					(reference "D31")
+					(reference "D29")
 					(unit 1)
 				)
 			)
@@ -9935,7 +9935,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "faf7b5d3-6ee8-47c9-ba7a-04f43a75a9e9")
-		(property "Reference" "D26"
+		(property "Reference" "D25"
 			(at 214.63 93.98 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -10020,7 +10020,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
-					(reference "D26")
+					(reference "D25")
 					(unit 1)
 				)
 			)

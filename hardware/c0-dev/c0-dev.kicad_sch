@@ -1773,7 +1773,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "2a3fc02a-0a7d-4270-9b05-5aa2ecd01050")
-		(property "Reference" "J18"
+		(property "Reference" "J2"
 			(at 67.31 22.8599 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1837,7 +1837,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e"
-					(reference "J18")
+					(reference "J2")
 					(unit 1)
 				)
 			)

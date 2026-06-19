@@ -1074,7 +1074,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "daaad1b6-bb1b-4463-b2b1-28adabc12e53")
-		(property "Reference" "U47"
+		(property "Reference" "U48"
 			(at 113.03 88.8999 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1144,7 +1144,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "U47")
+					(reference "U48")
 					(unit 1)
 				)
 			)
