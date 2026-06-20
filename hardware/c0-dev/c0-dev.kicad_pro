@@ -876,10 +876,28 @@
       "Net-(C19-Pad1)": [
         "Isolated"
       ],
+      "Net-(C208-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C209-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C210-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C211-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C308-Pad1)": [
+        "Isolated"
+      ],
       "Net-(C39-Pad2)": [
         "Isolated_MCU"
       ],
       "Net-(C41-Pad2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(C416-Pad2)": [
         "Isolated_MCU"
       ],
       "Net-(C8-Pad2)": [
@@ -888,8 +906,23 @@
       "Net-(C9-Pad2)": [
         "Isolated"
       ],
+      "Net-(D305-K)": [
+        "Isolated"
+      ],
+      "Net-(D306-A)": [
+        "Isolated"
+      ],
+      "Net-(D307-A)": [
+        "Isolated_MCU"
+      ],
       "Net-(D4-K)": [
         "Isolated"
+      ],
+      "Net-(D401-A)": [
+        "Isolated_MCU"
+      ],
+      "Net-(D402-A)": [
+        "Isolated_MCU"
       ],
       "Net-(D5-K)": [
         "Isolated"
@@ -918,6 +951,12 @@
       "Net-(J15-Pad9)": [
         "Isolated_MCU"
       ],
+      "Net-(J201-Pad11)": [
+        "Isolated_MCU"
+      ],
+      "Net-(J201-Pad9)": [
+        "Isolated_MCU"
+      ],
       "Net-(R108-Pad1)": [
         "Isolated_MCU"
       ],
@@ -942,7 +981,19 @@
       "Net-(R30-Pad1)": [
         "Isolated_MCU"
       ],
+      "Net-(R306-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(R309-Pad2)": [
+        "Isolated"
+      ],
       "Net-(R40-Pad1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(R409-Pad1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(R801-Pad1)": [
         "Isolated_MCU"
       ],
       "Net-(R91-Pad1)": [
@@ -1005,6 +1056,24 @@
       "Net-(U2-RT{slash}CLK)": [
         "Isolated"
       ],
+      "Net-(U201-CRS_DV{slash}MODE2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U201-RBIAS)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U201-RXD0{slash}MODE0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U201-RXD1{slash}MODE1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U201-RXER{slash}PHYAD0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U201-XTAL1{slash}CLKIN)": [
+        "Isolated_MCU"
+      ],
       "Net-(U29-EN)": [
         "Isolated_MCU"
       ],
@@ -1023,6 +1092,27 @@
       "Net-(U30-EN)": [
         "Isolated_MCU"
       ],
+      "Net-(U301-BOOT)": [
+        "Isolated"
+      ],
+      "Net-(U301-COMP)": [
+        "Isolated"
+      ],
+      "Net-(U301-RT{slash}CLK)": [
+        "Isolated"
+      ],
+      "Net-(U302-APD)": [
+        "Isolated"
+      ],
+      "Net-(U302-CLS)": [
+        "Isolated"
+      ],
+      "Net-(U302-DEN)": [
+        "Isolated"
+      ],
+      "Net-(U302-T2P)": [
+        "Isolated"
+      ],
       "Net-(U31-EN)": [
         "Isolated_MCU"
       ],
@@ -1035,6 +1125,57 @@
       "Net-(U34-EN)": [
         "Isolated_MCU"
       ],
+      "Net-(U401-A0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-A1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-A2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-P04)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-P05)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-~{INT})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-CLK)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-DI{slash}IO_{0})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-DO{slash}IO_{1})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-~{CS})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-~{HOLD}{slash}~{RESET}{slash}IO_{3})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-~{WP}{slash}IO_{2})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U403-~{MR})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U404-USB_DM)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U404-USB_DP)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U404-XIN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U404-XOUT)": [
+        "Isolated_MCU"
+      ],
       "Net-(U45-A0)": [
         "Isolated_MCU"
       ],
@@ -1045,6 +1186,9 @@
         "Isolated_MCU"
       ],
       "Net-(U45-~{INT})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U501-ADD0)": [
         "Isolated_MCU"
       ],
       "Net-(U7-A0)": [
@@ -1101,10 +1245,25 @@
       "Net-(U9-~{MR})": [
         "Isolated_MCU"
       ],
+      "Net-(U901-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U902-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U903-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U904-EN)": [
+        "Isolated_MCU"
+      ],
       "unconnected-(J16-SWO-Pad6)": [
         "Isolated_MCU"
       ],
       "unconnected-(J2-SWO-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(J401-SWO-Pad6)": [
         "Isolated_MCU"
       ],
       "unconnected-(U1-XTAL2-Pad4)": [
@@ -1117,6 +1276,12 @@
         "Isolated_MCU"
       ],
       "unconnected-(U11-ALERT-Pad3)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U201-XTAL2-Pad4)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U201-~{INT}{slash}REFCLKO-Pad14)": [
         "Isolated_MCU"
       ],
       "unconnected-(U29-NC-Pad6)": [
@@ -1155,6 +1320,36 @@
       "unconnected-(U34-NC-Pad7)": [
         "Isolated_MCU"
       ],
+      "unconnected-(U401-P06-Pad10)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P07-Pad11)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P10-Pad13)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P11-Pad14)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P12-Pad15)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P13-Pad16)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P14-Pad17)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P15-Pad18)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P16-Pad19)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U404-GPIO24-Pad36)": [
+        "Isolated_MCU"
+      ],
       "unconnected-(U45-P04-Pad8)": [
         "Isolated_MCU"
       ],
@@ -1191,6 +1386,9 @@
       "unconnected-(U45-P17-Pad20)": [
         "Isolated_MCU"
       ],
+      "unconnected-(U501-ALERT-Pad3)": [
+        "Isolated_MCU"
+      ],
       "unconnected-(U7-P06-Pad10)": [
         "Isolated_MCU"
       ],
@@ -1220,6 +1418,30 @@
       ],
       "unconnected-(U8-GPIO24-Pad36)": [
         "Isolated_MCU"
+      ],
+      "unconnected-(U901-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U901-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U902-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U902-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U903-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U903-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U904-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U904-NC-Pad7)": [
+        "Isolated_MCU"
       ]
     },
     "netclass_patterns": []
@@ -1237,7 +1459,7 @@
   "schematic": {
     "annotate_start_num": 0,
     "annotation": {
-      "method": 0,
+      "method": 1,
       "sort_order": 0
     },
     "bom_export_filename": "production/pico-poe_bom_extended.csv",
@@ -1394,7 +1616,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "TR1,TP1-3,R1-231,J1-17,L1-2,FID1-3,C1-148,FB1-8,U1-48,F1-6,Q1-10,Y1,D1-72,#PWR1-146",
+    "used_designators": "TR1,TR201,TP1-3,TP401-403,R1-231,R301-312,R401-422,R501-521,R601-615,R701-718,R801-803,R901-920,R1001-1029,R1101-1108,J1-17,J101-114,J201,J401-402,L1-2,L301,L401,L1101,FID1-3,FID101-103,C1-148,C201-211,C301-314,C401-416,C501-523,C601-617,C701-719,C801-805,C901-912,C1001-1006,C1101-1109,C1201,C1901,FB1-8,FB201,FB501,FB601,FB701-703,FB801,FB1001,U1-48,U201,U301-305,U401-404,U501-506,U601-606,U701-705,U801-803,U901-904,U1001-1006,U1101-1102,U1201,U1901,F1-6,F601-604,F701-702,Q1-10,Q701-702,Q1001-1008,Y1,Y401,D1-72,D301-307,D401-402,D501-513,D601-607,D701-708,D801-802,D1001,#PWR1-153,#PWR201-226,#PWR301-334,#PWR401-436,#PWR501-508,#PWR601-604,#PWR701-708,#PWR801-805,#PWR901-916,#PWR1001-1006,#PWR1101-1106,#PWR1201-1203,#PWR1901-1903",
     "variants": []
   },
   "sheets": [
@@ -1437,6 +1659,10 @@
     [
       "680032e3-5da4-48ad-9c49-e468cbbeffb9",
       "Digital Output"
+    ],
+    [
+      "b2c84169-d7d5-4727-b9af-d9931d6a9d2b",
+      "FlyBuck"
     ],
     [
       "8163fdfe-0ffb-4135-bb2a-8165bcb76d87",

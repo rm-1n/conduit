@@ -757,7 +757,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "2056799b-99be-4fea-96e5-852444bf2509")
-		(property "Reference" "#PWR0144"
+		(property "Reference" "#PWR01201"
 			(at 104.14 109.22 0)
 			(hide yes)
 			(show_name no)
@@ -818,7 +818,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR0144")
+					(reference "#PWR01201")
 					(unit 1)
 				)
 			)
@@ -836,7 +836,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "89e1c7bd-fc38-40cb-8926-9d67b33b8f08")
-		(property "Reference" "C148"
+		(property "Reference" "C1201"
 			(at 120.65 77.4762 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -900,7 +900,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "C148")
+					(reference "C1201")
 					(unit 1)
 				)
 			)
@@ -917,7 +917,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "ad99bd3d-f912-4f22-9434-896a1b6e4a14")
-		(property "Reference" "#PWR0146"
+		(property "Reference" "#PWR01203"
 			(at 118.11 88.9 0)
 			(hide yes)
 			(show_name no)
@@ -978,7 +978,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR0146")
+					(reference "#PWR01203")
 					(unit 1)
 				)
 			)
@@ -995,7 +995,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "cfbcc968-4710-4fd2-be5b-0984fab7cad6")
-		(property "Reference" "#PWR0145"
+		(property "Reference" "#PWR01202"
 			(at 118.11 76.2 0)
 			(hide yes)
 			(show_name no)
@@ -1056,7 +1056,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR0145")
+					(reference "#PWR01202")
 					(unit 1)
 				)
 			)
@@ -1074,7 +1074,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "daaad1b6-bb1b-4463-b2b1-28adabc12e53")
-		(property "Reference" "U48"
+		(property "Reference" "U1201"
 			(at 113.03 88.8999 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1144,7 +1144,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "U48")
+					(reference "U1201")
 					(unit 1)
 				)
 			)
