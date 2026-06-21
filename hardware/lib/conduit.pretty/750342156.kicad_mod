@@ -1,0 +1,172 @@
+(footprint "750342156"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(descr "WE-IBTI Isolated Buck Transformer")
+	(property "Datasheet" "https://www.we-online.com/components/products/datasheet/750342156.pdf"
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "7fa42737-9dc0-4c5f-990c-ead34843c6ac")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" "WE-IBTI Isolated Buck Transformer"
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "1b0ec267-072f-4a7a-aa8f-f24a066f26b2")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "750342156"
+		(at 6.7 -5.6 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "36ed5930-64a2-4c8d-be3c-52fd40f3ac31")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Reference" "REF**"
+		(at 6.7 -7.1 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(uuid "d9bb6bb8-57d6-4937-afc1-bcbe0901794c")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+		)
+	)
+	(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -1.95 7)
+		(end -1.95 8)
+		(stroke
+			(width 0.2)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "c5a05fc7-ea4d-4c41-af8f-db13bde10321")
+	)
+	(fp_line
+		(start -1.95 8)
+		(end -1.45 7.5)
+		(stroke
+			(width 0.2)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "bd8e584e-a295-4c16-a9ce-b9c4adfd6e9b")
+	)
+	(fp_line
+		(start -1.45 7.5)
+		(end -1.95 7)
+		(stroke
+			(width 0.2)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "1c38a54d-7be6-446b-b728-c8bc8d30b15f")
+	)
+	(fp_rect
+		(start -0.84 -2.935)
+		(end 14.4 10.405)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "fe1863d4-1a4e-4989-9de7-469dcb54d297")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 6.7 -4.1 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "400f94f1-c5e7-46da-b397-6ca8ec43ae07")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" smd rect
+		(at 0 7.47)
+		(size 2.08 1.07)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "276409bc-ea08-44db-9f8e-22d7a0b88cf2")
+	)
+	(pad "2" smd rect
+		(at 0 4.98)
+		(size 2.08 1.07)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "4b3daefd-c918-4029-a4de-c10a44ad4e9a")
+	)
+	(pad "3" smd rect
+		(at 0 2.49)
+		(size 2.08 1.07)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "4830eddc-82ac-40df-9528-6c3f5dbf76c5")
+	)
+	(pad "4" smd rect
+		(at 0 0)
+		(size 2.08 1.07)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "e294feff-cea3-445b-9664-784c849763c2")
+	)
+	(pad "5" smd rect
+		(at 13.56 0)
+		(size 2.08 1.07)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "73855bf2-11fa-4997-9117-4015e90150c2")
+	)
+	(pad "6" smd rect
+		(at 13.56 2.49)
+		(size 2.08 1.07)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "cec6299a-eb39-45d0-a623-4af3d564899d")
+	)
+	(pad "7" smd rect
+		(at 13.56 4.98)
+		(size 2.08 1.07)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "c19c6522-f1ed-479c-9758-675601a03748")
+	)
+	(pad "8" smd rect
+		(at 13.56 7.47)
+		(size 2.08 1.07)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "8e96444e-bb8f-4529-9879-823e9116d42b")
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/../lib/3d/070-6052.stp"
+		(offset
+			(xyz 14.4 -10.4 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz -90 -0 -0)
+		)
+	)
+)
