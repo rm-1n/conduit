@@ -7970,6 +7970,115 @@
 		)
 	)
 	(symbol
+		(lib_id "Transformer:PT61017PEL")
+		(at 187.96 72.39 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "8b7ef39d-6ebe-45cd-9953-ae354cf99f41")
+		(property "Reference" "TR201"
+			(at 187.96 57.15 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "TS8121CMHF"
+			(at 187.96 59.69 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "conduit:Transformer_Ethernet_Bourns_PT61017PEL"
+			(at 187.96 85.09 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.bourns.com/docs/Product-Datasheets/PT61017PEL.pdf"
+			(at 187.96 87.63 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Ethernet LAN 10/100 Base-Tx Transformer with Center Taps"
+			(at 187.96 72.39 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "16"
+			(uuid "3feea6f4-72f8-4bb3-9623-b981e55468df")
+		)
+		(pin "15"
+			(uuid "1f87ae90-bbac-4031-9b1b-6135c9b88505")
+		)
+		(pin "14"
+			(uuid "bb509875-a47f-484b-8ccd-d112521eeb02")
+		)
+		(pin "11"
+			(uuid "46f2c7ed-1c7a-4060-9bb8-edc5957ce1a8")
+		)
+		(pin "10"
+			(uuid "44c4dcea-29fa-4d3e-9223-43dc45ecf526")
+		)
+		(pin "9"
+			(uuid "b402910d-4291-411f-a35a-40226b41c768")
+		)
+		(pin "8"
+			(uuid "bc7cff54-ec2f-416a-b989-5537172c0929")
+		)
+		(pin "7"
+			(uuid "0a27ac57-3802-4773-babe-4563914a7741")
+		)
+		(pin "6"
+			(uuid "880369f4-d2ce-459e-af39-16a78947da54")
+		)
+		(pin "3"
+			(uuid "d4c71d2e-dbf8-466e-8b6d-09c9f557bd4d")
+		)
+		(pin "2"
+			(uuid "93fa37b3-90e0-4a41-a10e-1c691601fbc0")
+		)
+		(pin "1"
+			(uuid "689329fc-2109-46e4-878a-5a21e41d5c89")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9c4bf4fa-f54f-41b6-aa34-920acf2f273a"
+					(reference "TR201")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 30.48 118.11 0)
 		(unit 1)
@@ -9522,117 +9631,6 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9c4bf4fa-f54f-41b6-aa34-920acf2f273a"
 					(reference "R202")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Transformer:PT61017PEL")
-		(at 187.96 72.39 0)
-		(mirror x)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "e31e2d23-39ee-47fa-9fa9-45cdef502e85")
-		(property "Reference" "TR201"
-			(at 187.96 87.63 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "TS8121CMHF"
-			(at 187.96 85.09 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "conduit:Transformer_Ethernet_Bourns_PT61017PEL"
-			(at 187.96 59.69 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" "https://www.bourns.com/docs/Product-Datasheets/PT61017PEL.pdf"
-			(at 187.96 57.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Ethernet LAN 10/100 Base-Tx Transformer with Center Taps"
-			(at 187.96 72.39 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "16"
-			(uuid "8365be7b-e24b-416e-83e8-8eaac789a164")
-		)
-		(pin "15"
-			(uuid "ab830edd-7ed5-4bb7-88b2-45063b9b1eed")
-		)
-		(pin "14"
-			(uuid "11b6352d-ea89-4c37-a506-2fc55e060472")
-		)
-		(pin "11"
-			(uuid "d24249c3-9c0a-478d-9a52-7833a4514f2d")
-		)
-		(pin "10"
-			(uuid "0eed5741-9878-4bbb-a88d-32475d0b3514")
-		)
-		(pin "9"
-			(uuid "3b942b7b-3901-4c94-8384-9b292b5caffe")
-		)
-		(pin "8"
-			(uuid "537868de-77d5-42db-bd17-a871eabb30ca")
-		)
-		(pin "7"
-			(uuid "1658948f-1ec3-42ed-bd05-ea6c202b7feb")
-		)
-		(pin "6"
-			(uuid "218f5092-dc03-498a-b05a-a012628c08ef")
-		)
-		(pin "3"
-			(uuid "785d4836-e703-4568-b959-be53b8f41843")
-		)
-		(pin "2"
-			(uuid "25409fbb-599b-49f1-a076-ab4d14a12c23")
-		)
-		(pin "1"
-			(uuid "ad09e77d-6428-44cd-939a-feaa0d830a76")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/9c4bf4fa-f54f-41b6-aa34-920acf2f273a"
-					(reference "TR201")
 					(unit 1)
 				)
 			)

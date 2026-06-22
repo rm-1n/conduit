@@ -510,8 +510,7 @@
         "Isolated_POE"
       ],
       "+3.3V": [
-        "Isolated_MCU",
-        "Isolated_TC"
+        "Isolated_MCU"
       ],
       "+3.3VA": [
         "Isolated_MCU"
@@ -539,6 +538,9 @@
         "Isolated_CAN"
       ],
       "/CAN/CAN_L": [
+        "Isolated_CAN"
+      ],
+      "/CAN/GND": [
         "Isolated_CAN"
       ],
       "/CAN/RX": [
@@ -931,6 +933,12 @@
       "/frontend_bridge/EN1": [
         "Isolated_BR"
       ],
+      "/frontend_bridge/GND": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/GND_BR": [
+        "Isolated_BR"
+      ],
       "/frontend_bridge/~{CS0_ISO}": [
         "Isolated",
         "Isolated_MCU"
@@ -945,7 +953,16 @@
       "/frontend_bridge/~{CS1}": [
         "Isolated_BR"
       ],
+      "/frontend_temp/+3.3V": [
+        "Isolated_TC"
+      ],
       "/frontend_temp/+5V_ISO": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/GND": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/GND_TC": [
         "Isolated_TC"
       ],
       "/frontend_temp/SCL_400k": [
@@ -988,10 +1005,7 @@
         "Isolated_POE"
       ],
       "GND": [
-        "Isolated_BR",
-        "Isolated_CAN",
-        "Isolated_MCU",
-        "Isolated_TC"
+        "Isolated_MCU"
       ],
       "GND_ISO": [
         "Isolated",
@@ -1921,7 +1935,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "TR201,TP401-403,J101-114,J201,J401-402,F601-604,F701-702,C101-103,C201-211,C301-318,C401-416,C501-526,C601-612,C701-719,C801-805,C901-912,C1001,C1101-1116,C1201-1203,FB201,FB501,FB701-703,FB801,U201,U301-305,U401-406,U501-508,U601-604,U701-705,U801-803,U901-904,U1001-1003,U1101-1102,U1201,U1301,FID101-103,L301-302,L401,L1101,H101-107,R101-103,R201-219,R301-312,R401-423,R501-526,R601-614,R701-718,R801-803,R901-920,R1001-1030,R1101-1109,R1301-1310,Q701-702,Q1001-1009,Y401,D301-307,D401-403,D501-513,D601-606,D701-708,D801-802,D1101-1102,D1201-1204,#PWR101-119,#PWR201-226,#PWR301-327,#PWR401-436,#PWR501-506,#PWR601-625,#PWR701-708,#PWR801-805,#PWR901-916,#PWR1001-1026,#PWR1101-1102,#PWR1201-1212,#PWR1301-1308",
+    "used_designators": "TR201,TP401-403,J101-114,J201,J401-402,F601-604,F701-702,C101-103,C201-211,C301-318,C401-416,C501-526,C601-612,C701-719,C801-805,C901-912,C1001,C1101-1116,C1201-1203,FB201,FB501,FB701-703,FB801,U201,U301-305,U401-406,U501-508,U601-604,U701-705,U801-803,U901-904,U1001-1003,U1101-1102,U1201,U1301,FID101-103,L301-302,L401,L1101,H101-107,R101-103,R201-219,R301-312,R401-423,R501-527,R601-614,R701-719,R801-803,R901-920,R1001-1030,R1101-1109,R1301-1310,Q701-702,Q1001-1009,Y401,D301-307,D401-403,D501-513,D601-606,D701-708,D801-802,D1101-1102,D1201-1204,#PWR101-128,#PWR201-226,#PWR301-327,#PWR401-436,#PWR501-506,#PWR601-625,#PWR701-708,#PWR801-805,#PWR901-916,#PWR1001-1026,#PWR1101-1102,#PWR1201-1212,#PWR1301-1308",
     "variants": []
   },
   "sheets": [
