@@ -505,23 +505,41 @@
       "+1.1V": [
         "Isolated_MCU"
       ],
+      "+24V": [
+        "Isolated",
+        "Isolated_POE"
+      ],
       "+3.3V": [
-        "Isolated_MCU"
+        "Isolated_MCU",
+        "Isolated_TC"
       ],
       "+3.3VA": [
         "Isolated_MCU"
       ],
       "+5V": [
-        "Isolated_MCU"
+        "Isolated"
       ],
       "+5V_ISO": [
-        "Isolated"
+        "Isolated",
+        "Isolated_CAN"
       ],
       "+POE": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "-POE": [
-        "Isolated"
+        "Isolated_POE"
+      ],
+      "/CAN/+5V": [
+        "Isolated_CAN"
+      ],
+      "/CAN/CAN_GND": [
+        "Isolated_CAN"
+      ],
+      "/CAN/CAN_H": [
+        "Isolated_CAN"
+      ],
+      "/CAN/CAN_L": [
+        "Isolated_CAN"
       ],
       "/CAN/RX": [
         "Isolated_MCU"
@@ -595,16 +613,16 @@
         "Isolated_MCU"
       ],
       "/Ethernet/POE+12": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Ethernet/POE+45": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Ethernet/POE-36": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Ethernet/POE-78": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Ethernet/RMII.CRS": [
         "Isolated_MCU"
@@ -640,10 +658,10 @@
         "Isolated_MCU"
       ],
       "/Ethernet/RX_N": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Ethernet/RX_P": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Ethernet/TXD0": [
         "Isolated"
@@ -661,15 +679,18 @@
         "Isolated_MCU"
       ],
       "/Ethernet/TX_N": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Ethernet/TX_P": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Ethernet/VDDCR": [
         "Isolated_MCU"
       ],
       "/Ethernet/~{RST}": [
+        "Isolated_MCU"
+      ],
+      "/FAULT_420": [
         "Isolated_MCU"
       ],
       "/MCU/CAN_RX": [
@@ -703,10 +724,10 @@
         "Isolated_MCU"
       ],
       "/MCU/I2C0.SCL": [
-        "Isolated_MCU"
+        "Isolated_TC"
       ],
       "/MCU/I2C0.SDA": [
-        "Isolated_MCU"
+        "Isolated_TC"
       ],
       "/MCU/I2C0{SDA SCL}": [
         "Isolated_MCU"
@@ -736,21 +757,28 @@
         "Isolated_MCU"
       ],
       "/MCU/POE_T2P": [
-        "Isolated_MCU"
+        "Isolated",
+        "Isolated_MCU",
+        "Isolated_POE"
       ],
       "/MCU/SPI0.CS0": [
+        "Isolated_BR",
         "Isolated_MCU"
       ],
       "/MCU/SPI0.CS1": [
+        "Isolated_BR",
         "Isolated_MCU"
       ],
       "/MCU/SPI0.RX": [
+        "Isolated_BR",
         "Isolated_MCU"
       ],
       "/MCU/SPI0.SCK": [
+        "Isolated_BR",
         "Isolated_MCU"
       ],
       "/MCU/SPI0.TX": [
+        "Isolated_BR",
         "Isolated_MCU"
       ],
       "/MCU/SPI0{SCK RX TX CS0 CS1}": [
@@ -793,9 +821,21 @@
         "Isolated"
       ],
       "/Power/CDB": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Power/FB": [
+        "Isolated"
+      ],
+      "/Power/FB2": [
+        "Isolated"
+      ],
+      "/Power/FlyBuck/FB": [
+        "Isolated"
+      ],
+      "/Power/FlyBuck/SW": [
+        "Isolated"
+      ],
+      "/Power/FlyBuck/VCC": [
         "Isolated"
       ],
       "/Power/GND_0": [
@@ -806,6 +846,9 @@
       ],
       "/Power/GND_2": [
         "Isolated"
+      ],
+      "/Power/GND_ISO": [
+        "Isolated_POE"
       ],
       "/Power/POE+12": [
         "Isolated"
@@ -825,6 +868,51 @@
       "/Power/V+": [
         "Isolated"
       ],
+      "/frontend_bridge/+5V": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/+5V_SENSE0": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/+5V_SENSE1": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/AIN10": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/AIN11": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/AIN20": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/AIN21": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B0+": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B0-": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B0_5V+": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B0_GND": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B1+": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B1-": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B1_5V+": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B1_GND": [
+        "Isolated_BR"
+      ],
       "/frontend_bridge/CLK_ISO": [
         "Isolated",
         "Isolated_MCU"
@@ -838,18 +926,57 @@
         "Isolated_MCU"
       ],
       "/frontend_bridge/EN0": [
-        "Isolated_MCU"
+        "Isolated_BR"
       ],
       "/frontend_bridge/EN1": [
-        "Isolated_MCU"
+        "Isolated_BR"
       ],
       "/frontend_bridge/~{CS0_ISO}": [
         "Isolated",
         "Isolated_MCU"
       ],
+      "/frontend_bridge/~{CS0}": [
+        "Isolated_BR"
+      ],
       "/frontend_bridge/~{CS1_ISO}": [
         "Isolated",
         "Isolated_MCU"
+      ],
+      "/frontend_bridge/~{CS1}": [
+        "Isolated_BR"
+      ],
+      "/frontend_temp/+5V_ISO": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/SCL_400k": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/SDA_400k": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC0+": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC0-": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC1+": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC1-": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC2+": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC2-": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC3+": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC3-": [
+        "Isolated_TC"
       ],
       "/screen/SCL": [
         "Isolated_MCU"
@@ -858,14 +985,17 @@
         "Isolated_MCU"
       ],
       "Earth": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "GND": [
-        "Isolated",
-        "Isolated_MCU"
+        "Isolated_BR",
+        "Isolated_CAN",
+        "Isolated_MCU",
+        "Isolated_TC"
       ],
       "GND_ISO": [
-        "Isolated"
+        "Isolated",
+        "Isolated_CAN"
       ],
       "Net-(C10-Pad2)": [
         "Isolated"
@@ -877,18 +1007,18 @@
         "Isolated"
       ],
       "Net-(C208-Pad2)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(C209-Pad2)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(C210-Pad2)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(C211-Pad2)": [
-        "Isolated"
+        "Isolated_POE"
       ],
-      "Net-(C308-Pad1)": [
+      "Net-(C317-Pad1)": [
         "Isolated"
       ],
       "Net-(C39-Pad2)": [
@@ -906,14 +1036,18 @@
       "Net-(C9-Pad2)": [
         "Isolated"
       ],
-      "Net-(D305-K)": [
+      "Net-(D1101-A)": [
         "Isolated"
       ],
-      "Net-(D306-A)": [
+      "Net-(D1102-A)": [
         "Isolated"
       ],
-      "Net-(D307-A)": [
-        "Isolated_MCU"
+      "Net-(D307-K)": [
+        "Isolated",
+        "Isolated_POE"
+      ],
+      "Net-(D309-A)": [
+        "Isolated"
       ],
       "Net-(D4-K)": [
         "Isolated"
@@ -927,14 +1061,47 @@
       "Net-(D5-K)": [
         "Isolated"
       ],
+      "Net-(D501-A)": [
+        "Isolated_TC"
+      ],
+      "Net-(D502A-K3A4)": [
+        "Isolated_TC"
+      ],
+      "Net-(D502B-K1A2)": [
+        "Isolated_TC"
+      ],
+      "Net-(D503A-K3A4)": [
+        "Isolated_TC"
+      ],
+      "Net-(D503B-K1A2)": [
+        "Isolated_TC"
+      ],
+      "Net-(D504A-K3A4)": [
+        "Isolated_TC"
+      ],
+      "Net-(D504B-K1A2)": [
+        "Isolated_TC"
+      ],
+      "Net-(D505A-K3A4)": [
+        "Isolated_TC"
+      ],
+      "Net-(D505B-K1A2)": [
+        "Isolated_TC"
+      ],
       "Net-(D6-A)": [
         "Isolated"
       ],
       "Net-(D7-A)": [
         "Isolated_MCU"
       ],
+      "Net-(D701-A)": [
+        "Isolated_BR"
+      ],
       "Net-(D8-A)": [
         "Isolated_MCU"
+      ],
+      "Net-(D801-A)": [
+        "Isolated_CAN"
       ],
       "Net-(D9-A)": [
         "Isolated_MCU"
@@ -981,11 +1148,11 @@
       "Net-(R30-Pad1)": [
         "Isolated_MCU"
       ],
-      "Net-(R306-Pad2)": [
-        "Isolated"
+      "Net-(R307-Pad2)": [
+        "Isolated_POE"
       ],
       "Net-(R309-Pad2)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(R40-Pad1)": [
         "Isolated_MCU"
@@ -995,6 +1162,9 @@
       ],
       "Net-(R801-Pad1)": [
         "Isolated_MCU"
+      ],
+      "Net-(R802-Pad1)": [
+        "Isolated_CAN"
       ],
       "Net-(R91-Pad1)": [
         "Isolated_MCU"
@@ -1047,6 +1217,24 @@
       "Net-(U11-ADD0)": [
         "Isolated_MCU"
       ],
+      "Net-(U1101-BST)": [
+        "Isolated"
+      ],
+      "Net-(U1101-EN{slash}UVLO)": [
+        "Isolated"
+      ],
+      "Net-(U1101-FPWM)": [
+        "Isolated"
+      ],
+      "Net-(U1101-RON)": [
+        "Isolated"
+      ],
+      "Net-(U1101-SS)": [
+        "Isolated"
+      ],
+      "Net-(U1102-ADJ)": [
+        "Isolated"
+      ],
       "Net-(U2-BOOT)": [
         "Isolated"
       ],
@@ -1092,25 +1280,29 @@
       "Net-(U30-EN)": [
         "Isolated_MCU"
       ],
-      "Net-(U301-BOOT)": [
-        "Isolated"
-      ],
-      "Net-(U301-COMP)": [
-        "Isolated"
-      ],
-      "Net-(U301-RT{slash}CLK)": [
-        "Isolated"
-      ],
       "Net-(U302-APD)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(U302-CLS)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(U302-DEN)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(U302-T2P)": [
+        "Isolated_POE"
+      ],
+      "Net-(U303-BOOT)": [
+        "Isolated",
+        "Isolated_POE"
+      ],
+      "Net-(U303-COMP)": [
+        "Isolated"
+      ],
+      "Net-(U303-EN)": [
+        "Isolated"
+      ],
+      "Net-(U303-RT{slash}CLK)": [
         "Isolated"
       ],
       "Net-(U31-EN)": [
@@ -1134,10 +1326,10 @@
       "Net-(U401-A2)": [
         "Isolated_MCU"
       ],
-      "Net-(U401-P04)": [
+      "Net-(U401-P05)": [
         "Isolated_MCU"
       ],
-      "Net-(U401-P05)": [
+      "Net-(U401-P06)": [
         "Isolated_MCU"
       ],
       "Net-(U401-~{INT})": [
@@ -1188,8 +1380,27 @@
       "Net-(U45-~{INT})": [
         "Isolated_MCU"
       ],
+      "Net-(U501-+Vout)": [
+        "Isolated_TC"
+      ],
       "Net-(U501-ADD0)": [
-        "Isolated_MCU"
+        "Isolated_MCU",
+        "Isolated_TC"
+      ],
+      "Net-(U502-+Vout)": [
+        "Isolated_TC"
+      ],
+      "Net-(U505-ADD0)": [
+        "Isolated_TC"
+      ],
+      "Net-(U505-ADDR)": [
+        "Isolated_TC"
+      ],
+      "Net-(U506-ADDR)": [
+        "Isolated_TC"
+      ],
+      "Net-(U507-ADDR)": [
+        "Isolated_TC"
       ],
       "Net-(U7-A0)": [
         "Isolated_MCU"
@@ -1227,6 +1438,51 @@
       "Net-(U7-~{WP}{slash}IO_{2})": [
         "Isolated_MCU"
       ],
+      "Net-(U701-+Vout)": [
+        "Isolated_BR"
+      ],
+      "Net-(U702-EN2)": [
+        "Isolated_BR"
+      ],
+      "Net-(U702-IND)": [
+        "Isolated_BR"
+      ],
+      "Net-(U702-OUTA)": [
+        "Isolated_BR"
+      ],
+      "Net-(U702-OUTB)": [
+        "Isolated_BR"
+      ],
+      "Net-(U703-EN2)": [
+        "Isolated_BR"
+      ],
+      "Net-(U703-IND)": [
+        "Isolated_BR"
+      ],
+      "Net-(U703-OUTA)": [
+        "Isolated_BR"
+      ],
+      "Net-(U703-OUTB)": [
+        "Isolated_BR"
+      ],
+      "Net-(U704-AIN3{slash}REFN1)": [
+        "Isolated_BR"
+      ],
+      "Net-(U704-CLK)": [
+        "Isolated_BR"
+      ],
+      "Net-(U704-DVDD)": [
+        "Isolated_BR"
+      ],
+      "Net-(U705-AIN3{slash}REFN1)": [
+        "Isolated_BR"
+      ],
+      "Net-(U705-CLK)": [
+        "Isolated_BR"
+      ],
+      "Net-(U705-DVDD)": [
+        "Isolated_BR"
+      ],
       "Net-(U8-USB_DM)": [
         "Isolated_MCU"
       ],
@@ -1242,6 +1498,9 @@
       "Net-(U8-~{CS})": [
         "Isolated_MCU"
       ],
+      "Net-(U801-+Vout)": [
+        "Isolated_CAN"
+      ],
       "Net-(U9-~{MR})": [
         "Isolated_MCU"
       ],
@@ -1256,6 +1515,12 @@
       ],
       "Net-(U904-EN)": [
         "Isolated_MCU"
+      ],
+      "unconnected-(C503-Pad1)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(C504-Pad1)": [
+        "Isolated_TC"
       ],
       "unconnected-(J16-SWO-Pad6)": [
         "Isolated_MCU"
@@ -1318,9 +1583,6 @@
         "Isolated_MCU"
       ],
       "unconnected-(U34-NC-Pad7)": [
-        "Isolated_MCU"
-      ],
-      "unconnected-(U401-P06-Pad10)": [
         "Isolated_MCU"
       ],
       "unconnected-(U401-P07-Pad11)": [
@@ -1387,7 +1649,20 @@
         "Isolated_MCU"
       ],
       "unconnected-(U501-ALERT-Pad3)": [
-        "Isolated_MCU"
+        "Isolated_MCU",
+        "Isolated_TC"
+      ],
+      "unconnected-(U505-ALERT-Pad3)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(U505-ALERT{slash}RDY-Pad2)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(U506-ALERT{slash}RDY-Pad2)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(U507-ALERT{slash}RDY-Pad2)": [
+        "Isolated_TC"
       ],
       "unconnected-(U7-P06-Pad10)": [
         "Isolated_MCU"
@@ -1415,6 +1690,24 @@
       ],
       "unconnected-(U7-P16-Pad19)": [
         "Isolated_MCU"
+      ],
+      "unconnected-(U704-REFN0-Pad8)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U704-REFP0-Pad9)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U704-~{DRDY}-Pad14)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U705-REFN0-Pad8)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U705-REFP0-Pad9)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U705-~{DRDY}-Pad14)": [
+        "Isolated_BR"
       ],
       "unconnected-(U8-GPIO24-Pad36)": [
         "Isolated_MCU"
@@ -1616,7 +1909,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "TR1,TR201,TP1-3,TP401-403,R1-231,R301-312,R401-422,R501-521,R601-615,R701-718,R801-803,R901-920,R1001-1029,R1101-1108,J1-17,J101-114,J201,J401-402,L1-2,L301,L401,L1101,FID1-3,FID101-103,C1-148,C201-211,C301-314,C401-416,C501-523,C601-617,C701-719,C801-805,C901-912,C1001-1006,C1101-1115,C1201,C1901,FB1-8,FB201,FB501,FB601,FB701-703,FB801,FB1001,U1-48,U201,U301-305,U401-404,U501-506,U601-606,U701-705,U801-803,U901-904,U1001-1006,U1101-1102,U1201,U1901,F1-6,F601-604,F701-702,Q1-10,Q701-702,Q1001-1008,Y1,Y401,D1-72,D301-307,D401-402,D501-513,D601-607,D701-708,D801-802,D1001,D1101-1102,#PWR1-153,#PWR201-226,#PWR301-334,#PWR401-436,#PWR501-508,#PWR601-604,#PWR701-708,#PWR801-805,#PWR901-916,#PWR1001-1006,#PWR1101-1106,#PWR1201-1203,#PWR1901-1903",
+    "used_designators": "TR201,TP401-403,J101-114,J201,J401-402,F601-604,F701-702,C201-211,C301-318,C401-416,C501-525,C601-612,C701-719,C801-805,C901-912,C1001,C1101-1116,C1201,FB201,FB501,FB701-703,FB801,U201,U301-305,U401-404,U501-507,U601-604,U701-705,U801-803,U901-904,U1001-1003,U1101-1102,U1201,U1301,FID101-103,L301-302,L401,L1101,R201-219,R301-312,R401-422,R501-523,R601-614,R701-718,R801-803,R901-920,R1001-1030,R1101-1109,R1301-1310,Q701-702,Q1001-1009,Y401,D301-307,D401-402,D501-513,D601-606,D701-708,D801-802,D1101-1102,#PWR101-102,#PWR201-226,#PWR301-327,#PWR401-436,#PWR501-506,#PWR601-625,#PWR701-708,#PWR801-805,#PWR901-916,#PWR1001-1026,#PWR1101-1102,#PWR1201-1203,#PWR1301-1308",
     "variants": []
   },
   "sheets": [
@@ -1667,6 +1960,10 @@
     [
       "8163fdfe-0ffb-4135-bb2a-8165bcb76d87",
       "screen"
+    ],
+    [
+      "a8b92e4a-98cf-456e-8ef2-03c46ca743b1",
+      "Power Output"
     ]
   ],
   "text_variables": {},

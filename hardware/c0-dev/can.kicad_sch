@@ -3056,7 +3056,7 @@
 		(dnp no)
 		(polyline
 			(pts
-				(xy 88.9 31.75) (xy 127 31.75) (xy 127 58.42) (xy 88.9 58.42)
+				(xy 127 25.4) (xy 127 127) (xy 203.2 127) (xy 203.2 25.4)
 			)
 			(stroke
 				(width 0)
@@ -3065,67 +3065,13 @@
 			(fill
 				(type none)
 			)
-			(uuid "114b0e37-e48d-4a84-aa68-278fba4576ac")
-		)
-	)
-	(rule_area
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(polyline
-			(pts
-				(xy 127 66.04) (xy 127 114.3) (xy 88.9 114.3) (xy 88.9 66.04)
-			)
-			(stroke
-				(width 0)
-				(type dash)
-			)
-			(fill
-				(type none)
-			)
-			(uuid "c01c01cb-868f-47b7-883c-ab6bbdc23eda")
+			(uuid "38bfb545-b672-422c-8013-d57afb4d7037")
 		)
 	)
 	(netclass_flag ""
 		(length 2.54)
 		(shape round)
-		(at 88.9 66.04 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "2aa02650-639c-4eb4-bbc2-df0ea3edeeca")
-		(property "Net Class" "Isolated_MCU"
-			(at 89.5985 63.5 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Component Class" ""
-			(at -87.63 33.02 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-					(italic yes)
-				)
-			)
-		)
-	)
-	(netclass_flag ""
-		(length 2.54)
-		(shape round)
-		(at 88.9 31.75 0)
+		(at 127 25.4 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -3134,8 +3080,8 @@
 			(justify left bottom)
 		)
 		(uuid "e84c2030-19c8-4e91-98e1-2719da6efc41")
-		(property "Net Class" "Isolated"
-			(at 89.5985 29.21 0)
+		(property "Net Class" "Isolated_CAN"
+			(at 127.6985 22.86 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -3146,7 +3092,7 @@
 			)
 		)
 		(property "Component Class" ""
-			(at -87.63 -1.27 0)
+			(at -49.53 -7.62 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects

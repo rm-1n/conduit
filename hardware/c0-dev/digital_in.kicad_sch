@@ -2627,28 +2627,6 @@
 		)
 		(uuid "16519c22-3b41-48f7-945b-521fc15e6db5")
 	)
-	(hierarchical_label "GND_IN"
-		(shape passive)
-		(at 217.17 60.96 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "171147da-7354-4a2e-8f41-6a90bd560448")
-	)
-	(hierarchical_label "GND_IN"
-		(shape passive)
-		(at 113.03 125.73 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "20c43221-db73-461d-9d17-959940e047e0")
-	)
 	(hierarchical_label "OUT3"
 		(shape output)
 		(at 45.72 133.35 180)
@@ -2681,28 +2659,6 @@
 			(justify left)
 		)
 		(uuid "2c04da4c-d63d-413a-b9f2-71b92e0a694b")
-	)
-	(hierarchical_label "GND_IN"
-		(shape passive)
-		(at 217.17 139.7 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "2c75f7ca-b0b0-408f-9b89-eb3561d284cb")
-	)
-	(hierarchical_label "GND_IN"
-		(shape passive)
-		(at 113.03 73.66 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "2e46507f-39a3-4f5e-8b9d-6e1b8c072987")
 	)
 	(hierarchical_label "OUT0"
 		(shape output)
@@ -2737,18 +2693,7 @@
 		)
 		(uuid "455068a2-dd65-41eb-a376-b53f7a088db7")
 	)
-	(hierarchical_label "GND_IN"
-		(shape passive)
-		(at 217.17 73.66 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "48d2b458-9a11-4f7d-8005-c514143e35ff")
-	)
-	(hierarchical_label "GND_IN"
+	(hierarchical_label "GND"
 		(shape passive)
 		(at 113.03 138.43 0)
 		(effects
@@ -2757,7 +2702,7 @@
 			)
 			(justify left)
 		)
-		(uuid "4a857af6-d631-4997-ac46-89028e99b987")
+		(uuid "4bc2daf5-af2a-4d94-90be-fa0b96dbb21a")
 	)
 	(hierarchical_label "IN6"
 		(shape input)
@@ -2770,7 +2715,18 @@
 		)
 		(uuid "53b3d26e-b658-4647-aea6-0ea2ecafc6fd")
 	)
-	(hierarchical_label "GND_IN"
+	(hierarchical_label "GND"
+		(shape passive)
+		(at 113.03 125.73 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "60a4fc92-94c0-4884-b02e-a52eae43e38a")
+	)
+	(hierarchical_label "GND"
 		(shape passive)
 		(at 113.03 60.96 0)
 		(effects
@@ -2780,17 +2736,6 @@
 			(justify left)
 		)
 		(uuid "6a805508-d36d-474d-b313-d4d9246aa596")
-	)
-	(hierarchical_label "GND_IN"
-		(shape passive)
-		(at 217.17 127 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "7d02dd0d-9b25-44f0-bf63-3562060d2b64")
 	)
 	(hierarchical_label "IN5"
 		(shape input)
@@ -2802,6 +2747,28 @@
 			(justify left)
 		)
 		(uuid "982c10cc-d605-44cc-85b1-71f767c34845")
+	)
+	(hierarchical_label "GND"
+		(shape passive)
+		(at 217.17 60.96 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "9fa13817-39de-4704-bfbf-93ab0dfa9457")
+	)
+	(hierarchical_label "GND"
+		(shape passive)
+		(at 113.03 73.66 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "a3700df1-254a-4473-967d-31cb48492c92")
 	)
 	(hierarchical_label "OUT6"
 		(shape output)
@@ -2825,6 +2792,17 @@
 		)
 		(uuid "bcef3e6e-5fbe-4c64-9551-2123572e348f")
 	)
+	(hierarchical_label "GND"
+		(shape passive)
+		(at 217.17 139.7 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "c0c8601d-5e0d-4c06-b438-ad161b3dd4a5")
+	)
 	(hierarchical_label "IN4"
 		(shape input)
 		(at 217.17 53.34 0)
@@ -2835,6 +2813,17 @@
 			(justify left)
 		)
 		(uuid "c7489e86-78b7-4d32-8a56-30f4bdb6ac73")
+	)
+	(hierarchical_label "GND"
+		(shape passive)
+		(at 217.17 73.66 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "d0e1fb15-065a-4a5c-ab63-ff1688b7ed39")
 	)
 	(hierarchical_label "OUT2"
 		(shape output)
@@ -2858,221 +2847,16 @@
 		)
 		(uuid "f85f1dac-d57b-4a2a-b7fa-2c5fcf4f3196")
 	)
-	(rule_area
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(polyline
-			(pts
-				(xy 165.1 30.48) (xy 165.1 88.9) (xy 127 88.9) (xy 127 30.48)
-			)
-			(stroke
-				(width 0)
-				(type dash)
-			)
-			(fill
-				(type none)
-			)
-			(uuid "4cd8e1f1-6b32-4937-871d-ac76318eb326")
-		)
-	)
-	(rule_area
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(polyline
-			(pts
-				(xy 60.96 95.25) (xy 60.96 153.67) (xy 22.86 153.67) (xy 22.86 95.25)
-			)
-			(stroke
-				(width 0)
-				(type dash)
-			)
-			(fill
-				(type none)
-			)
-			(uuid "6b804233-e8aa-43fd-ba99-aa2756e6b999")
-		)
-	)
-	(rule_area
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(polyline
-			(pts
-				(xy 165.1 96.52) (xy 165.1 154.94) (xy 127 154.94) (xy 127 96.52)
-			)
-			(stroke
-				(width 0)
-				(type dash)
-			)
-			(fill
-				(type none)
-			)
-			(uuid "bc3865ba-73c0-413c-adb6-9e9d3853c128")
-		)
-	)
-	(rule_area
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(polyline
-			(pts
-				(xy 60.96 30.48) (xy 60.96 88.9) (xy 22.86 88.9) (xy 22.86 30.48)
-			)
-			(stroke
-				(width 0)
-				(type dash)
-			)
-			(fill
-				(type none)
-			)
-			(uuid "c82f668f-7fa5-4869-b143-f40dd0a70448")
-		)
-	)
-	(netclass_flag ""
-		(length 2.54)
-		(shape round)
-		(at 22.86 95.25 0)
-		(fields_autoplaced yes)
+	(hierarchical_label "GND"
+		(shape passive)
+		(at 217.17 127 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify left)
 		)
-		(uuid "2d3c7c88-488f-4652-ac98-0cc0bd08a8a2")
-		(property "Net Class" "Isolated_MCU"
-			(at 23.5585 92.71 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Component Class" ""
-			(at -153.67 62.23 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-					(italic yes)
-				)
-			)
-		)
-	)
-	(netclass_flag ""
-		(length 2.54)
-		(shape round)
-		(at 127 96.52 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "42b5577f-803d-4772-8fe7-ce1f991fa2b3")
-		(property "Net Class" "Isolated_MCU"
-			(at 127.6985 93.98 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Component Class" ""
-			(at -49.53 63.5 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-					(italic yes)
-				)
-			)
-		)
-	)
-	(netclass_flag ""
-		(length 2.54)
-		(shape round)
-		(at 22.86 30.48 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "97e7ac57-f611-4fd9-b382-471556b8a8d7")
-		(property "Net Class" "Isolated_MCU"
-			(at 23.5585 27.94 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Component Class" ""
-			(at -153.67 -2.54 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-					(italic yes)
-				)
-			)
-		)
-	)
-	(netclass_flag ""
-		(length 2.54)
-		(shape round)
-		(at 127 30.48 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "fb26bc27-0b11-44af-9f51-f0a3596a19fb")
-		(property "Net Class" "Isolated_MCU"
-			(at 127.6985 27.94 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Component Class" ""
-			(at -49.53 -2.54 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-					(italic yes)
-				)
-			)
-		)
+		(uuid "fb36d6c1-dc41-4ec9-898a-7e514b50b7f4")
 	)
 	(symbol
 		(lib_id "power:+3.3V")
