@@ -6452,6 +6452,17 @@
 		)
 		(uuid "dc3f220b-2907-46c2-a86d-56f0a3488e72")
 	)
+	(hierarchical_label "GND"
+		(shape passive)
+		(at 68.58 151.13 270)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "dea982ae-5f73-48c8-b832-9f222f5907d6")
+	)
 	(hierarchical_label "CLK_ISO"
 		(shape input)
 		(at 50.8 80.01 180)
