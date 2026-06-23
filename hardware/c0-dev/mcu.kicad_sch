@@ -5157,6 +5157,16 @@
 	)
 	(wire
 		(pts
+			(xy 265.43 149.86) (xy 267.97 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4b8bd502-068e-4300-a33d-154f9759b0d2")
+	)
+	(wire
+		(pts
 			(xy 218.44 57.15) (xy 233.68 57.15)
 		)
 		(stroke
@@ -5237,7 +5247,7 @@
 	)
 	(wire
 		(pts
-			(xy 275.59 149.86) (xy 276.86 149.86)
+			(xy 273.05 149.86) (xy 275.59 149.86)
 		)
 		(stroke
 			(width 0)
@@ -6637,16 +6647,6 @@
 	)
 	(wire
 		(pts
-			(xy 265.43 149.86) (xy 270.51 149.86)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "e801a6da-eb84-40c3-a607-f369d0b2a67c")
-	)
-	(wire
-		(pts
 			(xy 241.3 27.94) (xy 242.57 27.94)
 		)
 		(stroke
@@ -6896,7 +6896,7 @@
 		(uuid "2b5a854f-be0d-4136-af27-ebb71d393467")
 	)
 	(label "~{RST}"
-		(at 269.24 149.86 180)
+		(at 267.97 149.86 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7462,7 +7462,7 @@
 	)
 	(hierarchical_label "ENABLE"
 		(shape output)
-		(at 276.86 149.86 0)
+		(at 275.59 149.86 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -9271,7 +9271,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 273.05 149.86 270)
+		(at 270.51 149.86 270)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -9281,7 +9281,7 @@
 		(dnp no)
 		(uuid "2fbf9dac-e4e2-4c1c-965a-de716c454eb9")
 		(property "Reference" "R423"
-			(at 273.05 152.4 90)
+			(at 270.51 152.4 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -9291,7 +9291,7 @@
 			)
 		)
 		(property "Value" "1k"
-			(at 273.05 154.94 90)
+			(at 270.51 154.94 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -9301,7 +9301,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 273.05 149.86 0)
+			(at 270.51 149.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -9312,7 +9312,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 273.05 149.86 0)
+			(at 270.51 149.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -9323,7 +9323,7 @@
 			)
 		)
 		(property "Description" "Resistor, small symbol"
-			(at 273.05 149.86 0)
+			(at 270.51 149.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15230,26 +15230,6 @@
 					(size 1.27 1.27)
 				)
 				(justify left top)
-			)
-		)
-		(pin "SCL" input
-			(at 118.11 38.1 180)
-			(uuid "0b7545e9-c088-4bf8-b5e8-45b26d4a625e")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(pin "SDA" bidirectional
-			(at 118.11 40.64 180)
-			(uuid "1659aebf-8666-42b5-a45d-c6f87052621a")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
 			)
 		)
 		(pin "LED" input

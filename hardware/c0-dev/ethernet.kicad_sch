@@ -5297,7 +5297,7 @@
 		(dnp no)
 		(polyline
 			(pts
-				(xy 184.15 36.83) (xy 255.905 36.83) (xy 256.54 139.7) (xy 184.15 139.7) (xy 184.15 127)
+				(xy 184.15 36.83) (xy 255.905 36.83) (xy 256.54 114.3) (xy 184.15 114.3) (xy 184.15 110.49)
 			)
 			(stroke
 				(width 0)
@@ -5333,6 +5333,40 @@
 		)
 		(property "Component Class" ""
 			(at 143.51 55.88 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+			)
+		)
+	)
+	(netclass_flag ""
+		(length 2.54)
+		(shape round)
+		(at 208.28 116.84 90)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "b8135176-d7ae-4d28-947a-8cfa656e0df0")
+		(property "Net Class" "Isolated"
+			(at 204.47 116.84 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Component Class" ""
+			(at 227.33 157.48 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects

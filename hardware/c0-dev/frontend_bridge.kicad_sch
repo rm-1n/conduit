@@ -2949,8 +2949,20 @@
 		(uuid "f5bcf114-47df-4b3a-a9ac-5e621c372a33")
 	)
 	(no_connect
+		(at 143.51 36.83)
+		(uuid "21e7572c-d141-447f-bda8-4c286e79ffb2")
+	)
+	(no_connect
 		(at 125.73 95.25)
 		(uuid "257c7b9d-f1f7-4a2e-9cb4-9c8b62ad1cec")
+	)
+	(no_connect
+		(at 146.05 57.15)
+		(uuid "2eb122d7-a7c4-481c-8063-f233ff2f2767")
+	)
+	(no_connect
+		(at 138.43 62.23)
+		(uuid "3075c25a-8610-48b8-8995-04cbbcd7ef1b")
 	)
 	(no_connect
 		(at 90.17 92.71)
@@ -2961,8 +2973,16 @@
 		(uuid "4f0b72dc-b065-4310-916b-b5ae9fc41d7e")
 	)
 	(no_connect
+		(at 128.27 36.83)
+		(uuid "59b1146b-819a-45ee-968f-79c985e98705")
+	)
+	(no_connect
 		(at 125.73 128.27)
 		(uuid "6313ba9b-bb35-4a40-9b18-62d0311eddc9")
+	)
+	(no_connect
+		(at 130.81 57.15)
+		(uuid "b4b143fe-deed-4da7-849f-bce9bd35ca39")
 	)
 	(no_connect
 		(at 125.73 80.01)
@@ -9698,6 +9718,108 @@
 		)
 	)
 	(symbol
+		(lib_id "Diode:BAV199DW")
+		(at 135.89 36.83 0)
+		(unit 2)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "abf5c827-8328-49db-b9b9-3bed5516b302")
+		(property "Reference" "D702"
+			(at 133.35 31.75 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "BAV199DW"
+			(at 135.89 34.29 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Package_TO_SOT_SMD:SOT-363_SC-70-6"
+			(at 135.89 49.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.diodes.com/assets/Datasheets/ds30417.pdf"
+			(at 135.89 36.83 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Quad Surface Mount Low Leakage Diode, SOT-363"
+			(at 135.89 36.83 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "JLCPCB Part" "C459846"
+			(at 135.89 36.83 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "5"
+			(uuid "78a85c78-024f-41f8-bf04-a623bd03b8b2")
+		)
+		(pin "6"
+			(uuid "a74f6818-bf8d-4389-acde-766030d9dd89")
+		)
+		(pin "2"
+			(uuid "5bddb1ee-edef-47f4-b207-e7d9bb47ec24")
+		)
+		(pin "1"
+			(uuid "d9daf99b-240f-494c-895d-a03e31432ebf")
+		)
+		(pin "3"
+			(uuid "d2ea2f38-583a-417d-909e-794b527a417b")
+		)
+		(pin "4"
+			(uuid "afae1c01-e607-4c07-b65b-3c45b361a3bd")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/ad4094d0-ab7e-4abf-8811-376ff72ef3ce"
+					(reference "D702")
+					(unit 2)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:C_Small")
 		(at 36.83 72.39 0)
 		(unit 1)
@@ -10572,6 +10694,108 @@
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/ad4094d0-ab7e-4abf-8811-376ff72ef3ce"
 					(reference "D708")
 					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Diode:BAV199DW")
+		(at 138.43 57.15 0)
+		(unit 2)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "cc514c84-475d-4623-b5df-2bb6a24e3909")
+		(property "Reference" "D703"
+			(at 135.89 52.07 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "BAV199DW"
+			(at 138.43 54.61 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Package_TO_SOT_SMD:SOT-363_SC-70-6"
+			(at 138.43 69.85 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.diodes.com/assets/Datasheets/ds30417.pdf"
+			(at 138.43 57.15 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Quad Surface Mount Low Leakage Diode, SOT-363"
+			(at 138.43 57.15 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "JLCPCB Part" "C459846"
+			(at 138.43 57.15 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "5"
+			(uuid "78a85c78-024f-41f8-bf04-a623bd03b8b2")
+		)
+		(pin "6"
+			(uuid "ec7aa6f3-15c0-420d-89d3-3ee766ee15b4")
+		)
+		(pin "2"
+			(uuid "100bdf46-cabb-41ee-b0a7-0be8784761cf")
+		)
+		(pin "1"
+			(uuid "06809a4a-4341-4989-863c-9b4a95492b29")
+		)
+		(pin "3"
+			(uuid "d2ea2f38-583a-417d-909e-794b527a417b")
+		)
+		(pin "4"
+			(uuid "afae1c01-e607-4c07-b65b-3c45b361a3bd")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/ad4094d0-ab7e-4abf-8811-376ff72ef3ce"
+					(reference "D703")
+					(unit 2)
 				)
 			)
 		)

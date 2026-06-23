@@ -1112,6 +1112,16 @@
 	)
 	(wire
 		(pts
+			(xy 1.4288 2.0957) (xy 0.1588 2.0957)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "155a3532-c993-46a3-95e5-cf9d63981ffd")
+	)
+	(wire
+		(pts
 			(xy 74.93 64.77) (xy 78.74 64.77)
 		)
 		(stroke
@@ -1439,6 +1449,16 @@
 			(justify left bottom)
 		)
 		(uuid "069db9be-d9b3-4562-adfb-c10ae1d1b133")
+	)
+	(label "FAULT_PWR"
+		(at 0.1588 2.0957 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "16641b96-ff93-48fe-aad2-b2c54df68907")
 	)
 	(label "OUT1"
 		(at 101.6 46.99 0)

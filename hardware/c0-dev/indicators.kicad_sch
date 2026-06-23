@@ -694,16 +694,16 @@
 		(uuid "8e401c52-ef56-4f73-b23b-28cd8fbf54b3")
 	)
 	(junction
+		(at 101.6 121.92)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "ad5740c3-750b-4aea-b822-88c98be2c2f1")
+	)
+	(junction
 		(at 149.86 121.92)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "b90e70c0-4e53-44b7-804c-71e1cbf7d604")
-	)
-	(junction
-		(at 101.6 121.92)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "cb2da3f5-66e0-43c8-8c09-0b5ae3fc4ed4")
 	)
 	(junction
 		(at 125.73 121.92)
@@ -730,16 +730,6 @@
 			(type default)
 		)
 		(uuid "022c69bf-32ea-481b-8147-3f51a0292f76")
-	)
-	(wire
-		(pts
-			(xy 101.6 121.92) (xy 101.6 127)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "0ee633ba-9970-4781-99f2-013b77505721")
 	)
 	(wire
 		(pts
@@ -783,6 +773,16 @@
 	)
 	(wire
 		(pts
+			(xy 101.6 121.92) (xy 125.73 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "52a5949f-751a-428f-aa9b-6ad04ac5005f")
+	)
+	(wire
+		(pts
 			(xy 88.9 123.19) (xy 88.9 121.92)
 		)
 		(stroke
@@ -810,16 +810,6 @@
 			(type default)
 		)
 		(uuid "64cd3b0b-fc94-4265-930e-2e96a3a45b0a")
-	)
-	(wire
-		(pts
-			(xy 125.73 121.92) (xy 101.6 121.92)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "73d915b1-76e8-4ff6-b06e-bba98bc2acf4")
 	)
 	(wire
 		(pts
@@ -870,6 +860,16 @@
 			(type default)
 		)
 		(uuid "c219a5fa-c13f-4e44-82e0-72aaa53ecaeb")
+	)
+	(wire
+		(pts
+			(xy 101.6 121.92) (xy 101.6 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c289ad3d-c76f-462f-80a1-384752b049a0")
 	)
 	(wire
 		(pts
@@ -951,6 +951,94 @@
 			(justify right)
 		)
 		(uuid "15d1793f-82f6-4715-916d-869e197a2c34")
+	)
+	(symbol
+		(lib_id "LED:WS2812B")
+		(at 149.86 134.62 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "06c8e8a4-a064-4a41-a180-4c0bbc39ac20")
+		(property "Reference" "D1203"
+			(at 161.29 128.1998 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "WS2812B"
+			(at 161.29 130.7398 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "conduit:LED_WS2812B-Mini_PLCC4_3.5x3.5mm"
+			(at 151.13 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(property "Datasheet" "https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf"
+			(at 152.4 144.145 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(property "Description" "RGB LED with integrated controller"
+			(at 149.86 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "e5aeb1ec-fc54-4671-8825-7e07a53b35f7")
+		)
+		(pin "1"
+			(uuid "acbf0d1e-6ec3-485d-b3e1-e3f127f8ec6b")
+		)
+		(pin "4"
+			(uuid "53b0090b-c400-4386-9405-663a55bf66e5")
+		)
+		(pin "3"
+			(uuid "0512af14-e35f-4ade-b5eb-39a5cc2d15c3")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
+					(reference "D1203")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "power:GND")
@@ -1269,94 +1357,6 @@
 		)
 	)
 	(symbol
-		(lib_id "LED:WS2812B")
-		(at 149.86 134.62 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "6ee6fa01-87c0-42a7-80ac-59f124cebd1f")
-		(property "Reference" "D1203"
-			(at 161.29 128.1998 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "WS2812B"
-			(at 161.29 130.7398 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
-			(at 151.13 142.24 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-			)
-		)
-		(property "Datasheet" "https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf"
-			(at 152.4 144.145 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-			)
-		)
-		(property "Description" "RGB LED with integrated controller"
-			(at 149.86 134.62 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "2"
-			(uuid "2c6d1778-0ee6-4a35-a626-2dd53b6ffaf2")
-		)
-		(pin "1"
-			(uuid "8b7eebca-1c25-43c7-a53d-4d3eebbed047")
-		)
-		(pin "4"
-			(uuid "251792d2-3175-4eb6-a007-f555c9d9b2df")
-		)
-		(pin "3"
-			(uuid "b429b9cb-38f4-4b3f-a76d-63e7b6596b1d")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "D1203")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "power:GND")
 		(at 101.6 143.51 0)
 		(unit 1)
@@ -1429,6 +1429,94 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
 					(reference "#PWR01204")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:WS2812B")
+		(at 125.73 134.62 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "8a028d2e-88ad-4a66-8e32-c4d8aabf118e")
+		(property "Reference" "D1202"
+			(at 137.16 128.1998 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "WS2812B"
+			(at 137.16 130.7398 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "conduit:LED_WS2812B-Mini_PLCC4_3.5x3.5mm"
+			(at 127 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(property "Datasheet" "https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf"
+			(at 128.27 144.145 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(property "Description" "RGB LED with integrated controller"
+			(at 125.73 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "cd26651c-6fa7-4056-abae-5b1c30590632")
+		)
+		(pin "1"
+			(uuid "9d78881d-1d70-4449-a291-9577ffcce45d")
+		)
+		(pin "4"
+			(uuid "cb28ac75-7815-4f5e-9a3f-cbc3551d8817")
+		)
+		(pin "3"
+			(uuid "369dfb0c-f8be-4f11-90da-77c57f630810")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
+					(reference "D1202")
 					(unit 1)
 				)
 			)
@@ -1514,94 +1602,6 @@
 	)
 	(symbol
 		(lib_id "LED:WS2812B")
-		(at 125.73 134.62 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "94e12cf2-1235-4bda-8643-c675b5b37a1a")
-		(property "Reference" "D1202"
-			(at 137.16 128.1998 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "WS2812B"
-			(at 137.16 130.7398 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
-			(at 127 142.24 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-			)
-		)
-		(property "Datasheet" "https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf"
-			(at 128.27 144.145 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-			)
-		)
-		(property "Description" "RGB LED with integrated controller"
-			(at 125.73 134.62 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "2"
-			(uuid "8d9814c3-bb39-43cd-a0a1-9934d1a8c137")
-		)
-		(pin "1"
-			(uuid "9c41faff-74c9-4832-84f7-05aa4ce2737c")
-		)
-		(pin "4"
-			(uuid "4bf58035-ce5b-4ca8-b04a-3cbd971a5494")
-		)
-		(pin "3"
-			(uuid "c920d2c4-7081-4582-899e-6a2ecdac77e3")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "D1202")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "LED:WS2812B")
 		(at 101.6 134.62 0)
 		(unit 1)
 		(body_style 1)
@@ -1632,7 +1632,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
+		(property "Footprint" "conduit:LED_WS2812B-Mini_PLCC4_3.5x3.5mm"
 			(at 102.87 142.24 0)
 			(hide yes)
 			(show_name no)
@@ -1683,94 +1683,6 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
 					(reference "D1201")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "LED:WS2812B")
-		(at 173.99 134.62 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "a19c24a5-0e63-4f87-b413-aafdc27eb780")
-		(property "Reference" "D1204"
-			(at 185.42 128.1998 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "WS2812B"
-			(at 185.42 130.7398 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
-			(at 175.26 142.24 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-			)
-		)
-		(property "Datasheet" "https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf"
-			(at 176.53 144.145 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-			)
-		)
-		(property "Description" "RGB LED with integrated controller"
-			(at 173.99 134.62 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "2"
-			(uuid "b1344442-7b91-4fda-93f9-c32cab6167f2")
-		)
-		(pin "1"
-			(uuid "3d55021b-cf41-44e1-a9a1-a053c3982d4b")
-		)
-		(pin "4"
-			(uuid "7618ff3a-7f51-4247-b507-c9446f06871c")
-		)
-		(pin "3"
-			(uuid "b2244677-9ae7-4301-a6b3-e3a4dcbd2579")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "D1204")
 					(unit 1)
 				)
 			)
@@ -1849,6 +1761,94 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
 					(reference "#PWR01208")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:WS2812B")
+		(at 173.99 134.62 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "ca74ad01-4df6-45e2-ae24-34afd7183bbf")
+		(property "Reference" "D1204"
+			(at 185.42 128.1998 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "WS2812B"
+			(at 185.42 130.7398 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "conduit:LED_WS2812B-Mini_PLCC4_3.5x3.5mm"
+			(at 175.26 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(property "Datasheet" "https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf"
+			(at 176.53 144.145 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(property "Description" "RGB LED with integrated controller"
+			(at 173.99 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "24dbf98e-7967-4474-9024-2176046af5e9")
+		)
+		(pin "1"
+			(uuid "130a9171-6cfc-4f80-aba0-51bfb527a229")
+		)
+		(pin "4"
+			(uuid "37102b8b-c462-4e56-bd05-d1a18e08f1b5")
+		)
+		(pin "3"
+			(uuid "6cda3e16-014d-44c4-b57a-484dbd839cea")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
+					(reference "D1204")
 					(unit 1)
 				)
 			)

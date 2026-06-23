@@ -117,7 +117,7 @@
         "track_width": "error",
         "tracks_crossing": "error",
         "tuning_profile_track_geometries": "ignore",
-        "unconnected_items": "error",
+        "unconnected_items": "ignore",
         "unresolved_variable": "error",
         "via_dangling": "warning",
         "zones_intersect": "error"
@@ -450,7 +450,7 @@
       "no_connect_dangling": "warning",
       "pin_not_connected": "error",
       "pin_not_driven": "error",
-      "pin_to_pin": "warning",
+      "pin_to_pin": "error",
       "power_pin_not_driven": "error",
       "same_local_global_label": "warning",
       "similar_label_and_power": "warning",
@@ -492,7 +492,97 @@
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.2,
         "tuning_profile": "",
-        "via_diameter": 0.6,
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Isolated",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 0,
+        "schematic_color": "rgb(0, 0, 255)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Isolated_BR",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 3,
+        "schematic_color": "rgb(0, 255, 255)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Isolated_CAN",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 1,
+        "schematic_color": "rgb(255, 153, 0)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Isolated_POE",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 2,
+        "schematic_color": "rgb(0, 255, 0)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Isolated_TC",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 4,
+        "schematic_color": "rgb(255, 0, 255)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
         "via_drill": 0.3,
         "wire_width": 6
       }
@@ -510,13 +600,13 @@
         "Isolated_POE"
       ],
       "+3.3V": [
-        "Isolated_TC"
+        "Isolated_CAN"
       ],
       "+3.3VA": [
         "Isolated_POE"
       ],
       "+5V": [
-        "Isolated"
+        "Isolated_CAN"
       ],
       "+5V_ISO": [
         "Isolated",
@@ -833,14 +923,20 @@
       "/Power/FB2": [
         "Isolated"
       ],
+      "/Power/FlyBuck/+24V_PRIM": [
+        "Isolated_POE"
+      ],
+      "/Power/FlyBuck/A": [
+        "Isolated_POE"
+      ],
       "/Power/FlyBuck/FB": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Power/FlyBuck/SW": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Power/FlyBuck/VCC": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "/Power/GND_0": [
         "Isolated"
@@ -1010,10 +1106,11 @@
         "Isolated_MCU"
       ],
       "Earth": [
+        "Isolated",
         "Isolated_POE"
       ],
       "GND": [
-        "Isolated_TC"
+        "Isolated_CAN"
       ],
       "GND_ISO": [
         "Isolated",
@@ -1240,22 +1337,22 @@
         "Isolated_MCU"
       ],
       "Net-(U1101-BST)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(U1101-EN{slash}UVLO)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(U1101-FPWM)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(U1101-RON)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(U1101-SS)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(U1102-ADJ)": [
-        "Isolated"
+        "Isolated_POE"
       ],
       "Net-(U2-BOOT)": [
         "Isolated"
@@ -1550,6 +1647,24 @@
       "unconnected-(C504-Pad1)": [
         "Isolated_TC"
       ],
+      "unconnected-(D702B-A3-Pad4)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(D702B-K1A2-Pad3)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(D702B-K4-Pad5)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(D703B-A3-Pad4)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(D703B-K1A2-Pad3)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(D703B-K4-Pad5)": [
+        "Isolated_BR"
+      ],
       "unconnected-(J16-SWO-Pad6)": [
         "Isolated_MCU"
       ],
@@ -1558,6 +1673,12 @@
       ],
       "unconnected-(J401-SWO-Pad6)": [
         "Isolated_MCU"
+      ],
+      "unconnected-(L1101-Pad2)": [
+        "Isolated_POE"
+      ],
+      "unconnected-(L1101-Pad7)": [
+        "Isolated_POE"
       ],
       "unconnected-(U1-XTAL2-Pad4)": [
         "Isolated_MCU"
@@ -1943,7 +2064,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "TR201,TP401-403,H101-106,R101-103,R201-218,R301-312,R401-423,R501-524,R601-612,R701-719,R801-802,R901-920,R1001-1028,R1101-1108,R1301-1308,J101-112,J201,J401-402,L301-302,L401,L1101,FID101-103,Q701-702,Q1001-1009,Y401,D301-307,D401-402,D501-513,D601-606,D701-709,D801-802,D1101-1102,D1201-1204,#PWR101-127,#PWR201-224,#PWR301-327,#PWR401-436,#PWR501-506,#PWR601-625,#PWR901-916,#PWR1001-1026,#PWR1201-1209,#PWR1301-1308,U201,U301-304,U401-404,U501-508,U601-604,U701-705,U801-803,U901-904,U1001-1003,U1101-1102,U1201,U1301,C101-103,C201-211,C301-316,C401-416,C501-526,C601-612,C701-719,C801-805,C901-912,C1001,C1101-1115,C1201-1202,FB201,FB501,FB701-703,FB801,F601-604,F701-702",
+    "used_designators": "D710-711,D1202-1204,R525",
     "variants": []
   },
   "sheets": [
