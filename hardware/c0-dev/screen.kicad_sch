@@ -1415,9 +1415,9 @@
 		(body_style 1)
 		(exclude_from_sim no)
 		(in_bom yes)
-		(on_board yes)
+		(on_board no)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(fields_autoplaced yes)
 		(uuid "89e1c7bd-fc38-40cb-8926-9d67b33b8f08")
 		(property "Reference" "C1202"
@@ -1907,9 +1907,9 @@
 		(body_style 1)
 		(exclude_from_sim no)
 		(in_bom yes)
-		(on_board yes)
+		(on_board no)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(fields_autoplaced yes)
 		(uuid "daaad1b6-bb1b-4463-b2b1-28adabc12e53")
 		(property "Reference" "U1201"

@@ -1978,12 +1978,6 @@
 		(uuid "ec9cebf2-70e4-4204-9c6e-db08228d9900")
 	)
 	(junction
-		(at 68.58 69.85)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "12445694-fef3-4cb8-b58d-772eb7239a88")
-	)
-	(junction
 		(at 248.92 53.34)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2038,12 +2032,6 @@
 		(uuid "9a53bf16-8651-4833-8df9-834f40eadc88")
 	)
 	(junction
-		(at 64.77 67.31)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "a279ed18-4e85-48c5-a700-11304391180c")
-	)
-	(junction
 		(at 35.56 175.26)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2060,12 +2048,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "d64c4c88-59e8-44b3-8c70-3ac496345ad2")
-	)
-	(junction
-		(at 68.58 54.61)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "dd152238-8888-462c-9d2d-59c229ae2cc2")
 	)
 	(junction
 		(at 250.19 121.92)
@@ -2165,16 +2147,6 @@
 	)
 	(wire
 		(pts
-			(xy 68.58 57.15) (xy 68.58 54.61)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "0e208f6f-c6c7-4791-8069-170ff3f9fd7a")
-	)
-	(wire
-		(pts
 			(xy 247.65 102.87) (xy 252.7263 102.87)
 		)
 		(stroke
@@ -2212,16 +2184,6 @@
 			(type default)
 		)
 		(uuid "13f6bae4-d6c2-49f3-8266-270b09f1fe52")
-	)
-	(wire
-		(pts
-			(xy 68.58 69.85) (xy 74.93 69.85)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "14a35279-a5e2-40ef-ac40-391a5f1f2050")
 	)
 	(wire
 		(pts
@@ -2332,16 +2294,6 @@
 			(type default)
 		)
 		(uuid "2eaba9e5-7f69-4521-a3a5-7f29cfa6c4c5")
-	)
-	(wire
-		(pts
-			(xy 68.58 62.23) (xy 68.58 69.85)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "2ef32be1-9fda-4c1e-b34b-9f2218609fa9")
 	)
 	(wire
 		(pts
@@ -2655,7 +2607,7 @@
 	)
 	(wire
 		(pts
-			(xy 64.77 67.31) (xy 74.93 67.31)
+			(xy 59.69 67.31) (xy 74.93 67.31)
 		)
 		(stroke
 			(width 0)
@@ -2895,16 +2847,6 @@
 	)
 	(wire
 		(pts
-			(xy 64.77 62.23) (xy 64.77 67.31)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "77af75a1-97e4-4b0c-8d69-afa1d4d18711")
-	)
-	(wire
-		(pts
 			(xy 86.36 54.61) (xy 86.36 55.88)
 		)
 		(stroke
@@ -3015,16 +2957,6 @@
 	)
 	(wire
 		(pts
-			(xy 68.58 54.61) (xy 86.36 54.61)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "89570aca-b95e-4418-b0a5-5ff17913682f")
-	)
-	(wire
-		(pts
 			(xy 106.68 166.37) (xy 106.68 171.45)
 		)
 		(stroke
@@ -3085,7 +3017,7 @@
 	)
 	(wire
 		(pts
-			(xy 59.69 69.85) (xy 68.58 69.85)
+			(xy 59.69 69.85) (xy 74.93 69.85)
 		)
 		(stroke
 			(width 0)
@@ -3245,16 +3177,6 @@
 	)
 	(wire
 		(pts
-			(xy 59.69 67.31) (xy 64.77 67.31)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "aa6fe819-90b3-4aba-acf0-4b6888a6e772")
-	)
-	(wire
-		(pts
 			(xy 228.6 29.21) (xy 241.3 29.21)
 		)
 		(stroke
@@ -3355,16 +3277,6 @@
 	)
 	(wire
 		(pts
-			(xy 64.77 57.15) (xy 64.77 54.61)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c3c4c388-19d6-40f2-9443-e5fc46791390")
-	)
-	(wire
-		(pts
 			(xy 215.9 74.93) (xy 215.9 76.2)
 		)
 		(stroke
@@ -3392,16 +3304,6 @@
 			(type default)
 		)
 		(uuid "c6599bfc-1a95-4f69-bd04-7a06df99a195")
-	)
-	(wire
-		(pts
-			(xy 64.77 54.61) (xy 68.58 54.61)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c7172f61-c92e-49ba-b9d4-5bd78d0a3cb0")
 	)
 	(wire
 		(pts
@@ -5322,86 +5224,6 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/680032e3-5da4-48ad-9c49-e468cbbeffb9"
 					(reference "R1001")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R_Small")
-		(at 68.58 59.69 0)
-		(mirror x)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "2a98c8b7-2761-44dc-af13-348dfd5a5513")
-		(property "Reference" "R1004"
-			(at 72.39 57.15 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "1k"
-			(at 72.39 59.69 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 68.58 59.69 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 68.58 59.69 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor, small symbol"
-			(at 68.58 59.69 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "222c9430-62a5-4c03-b7fd-cc6d30d99442")
-		)
-		(pin "2"
-			(uuid "69f5ebc1-ddbb-4514-855e-e42bcb3f5a92")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/680032e3-5da4-48ad-9c49-e468cbbeffb9"
-					(reference "R1004")
 					(unit 1)
 				)
 			)
@@ -9031,86 +8853,6 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/680032e3-5da4-48ad-9c49-e468cbbeffb9"
 					(reference "#PWR01001")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R_Small")
-		(at 64.77 59.69 0)
-		(mirror x)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "c96feb75-a428-4e95-b6ad-25103912a7fd")
-		(property "Reference" "R1003"
-			(at 60.96 57.15 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "1k"
-			(at 60.96 59.69 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 64.77 59.69 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 64.77 59.69 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor, small symbol"
-			(at 64.77 59.69 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "de6c6c7b-21b7-4c75-8b89-40fa70118f29")
-		)
-		(pin "2"
-			(uuid "3dac4d80-fb17-4d34-bbf9-9802e0ac8b4b")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/680032e3-5da4-48ad-9c49-e468cbbeffb9"
-					(reference "R1003")
 					(unit 1)
 				)
 			)

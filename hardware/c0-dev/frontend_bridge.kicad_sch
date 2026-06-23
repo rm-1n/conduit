@@ -6540,108 +6540,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Diode:BAV199DW")
-		(at 170.18 36.83 0)
-		(unit 2)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "1054cc14-bc7d-4cfc-ae8d-7d70f299f1fc")
-		(property "Reference" "D702"
-			(at 167.64 31.75 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "BAV199DW"
-			(at 170.18 34.29 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Package_TO_SOT_SMD:SOT-363_SC-70-6"
-			(at 170.18 49.53 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" "https://www.diodes.com/assets/Datasheets/ds30417.pdf"
-			(at 170.18 36.83 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Quad Surface Mount Low Leakage Diode, SOT-363"
-			(at 170.18 36.83 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "JLCPCB Part" "C459846"
-			(at 170.18 36.83 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "5"
-			(uuid "6c87769f-f80b-4c4c-99d9-63f5e0a3dd18")
-		)
-		(pin "6"
-			(uuid "293b41f0-96e5-44cd-a43a-cfe9ca414886")
-		)
-		(pin "2"
-			(uuid "b1aac417-fedf-45e7-b2df-0deac6445cc7")
-		)
-		(pin "1"
-			(uuid "84f4bfe2-11e8-4d85-b7d1-99ebdad4be97")
-		)
-		(pin "3"
-			(uuid "da9572b9-592d-45a1-b714-d2374ff744bb")
-		)
-		(pin "4"
-			(uuid "a7529d90-877b-427a-99db-d9faae5e43b1")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/ad4094d0-ab7e-4abf-8811-376ff72ef3ce"
-					(reference "D702")
-					(unit 2)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Device:R_Small")
 		(at 190.5 157.48 270)
 		(mirror x)
@@ -10673,6 +10571,108 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/ad4094d0-ab7e-4abf-8811-376ff72ef3ce"
 					(reference "D707")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Diode:BAV199DW")
+		(at 170.18 36.83 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "ccb6e8da-4f52-4c71-8106-5f7ade06c77a")
+		(property "Reference" "D709"
+			(at 167.64 31.75 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "BAV199DW"
+			(at 170.18 34.29 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Package_TO_SOT_SMD:SOT-363_SC-70-6"
+			(at 170.18 49.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.diodes.com/assets/Datasheets/ds30417.pdf"
+			(at 170.18 36.83 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Quad Surface Mount Low Leakage Diode, SOT-363"
+			(at 170.18 36.83 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "JLCPCB Part" "C459846"
+			(at 170.18 36.83 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "5"
+			(uuid "78a85c78-024f-41f8-bf04-a623bd03b8b1")
+		)
+		(pin "6"
+			(uuid "8556d04c-aa9b-4b7d-9fb3-46de048577a0")
+		)
+		(pin "2"
+			(uuid "e5ffd957-ab4c-4f28-8258-4f3c5da60d38")
+		)
+		(pin "1"
+			(uuid "b293b985-0501-4df7-b69f-67a1fdafd06e")
+		)
+		(pin "3"
+			(uuid "d2ea2f38-583a-417d-909e-794b527a417a")
+		)
+		(pin "4"
+			(uuid "afae1c01-e607-4c07-b65b-3c45b361a3bc")
+		)
+		(instances
+			(project "c0-dev"
+				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/ad4094d0-ab7e-4abf-8811-376ff72ef3ce"
+					(reference "D709")
 					(unit 1)
 				)
 			)

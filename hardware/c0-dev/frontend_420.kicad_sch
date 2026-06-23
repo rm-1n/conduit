@@ -1641,12 +1641,6 @@
 		(uuid "16cbeeb1-acde-458f-9f1f-69b7e834e9a6")
 	)
 	(junction
-		(at 57.15 49.53)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "1a2dcdc7-073d-4ac7-be01-1f946fdf1f5f")
-	)
-	(junction
 		(at 67.31 73.66)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -1669,18 +1663,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "33339e29-7886-4a32-adad-afdca168cb0d")
-	)
-	(junction
-		(at 60.96 33.02)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "41408260-e064-4c91-a53e-36669ca1e288")
-	)
-	(junction
-		(at 60.96 52.07)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "4c9e0129-5183-4343-b017-e6c862c7eab8")
 	)
 	(junction
 		(at 152.4 46.99)
@@ -1960,16 +1942,6 @@
 	)
 	(wire
 		(pts
-			(xy 57.15 33.02) (xy 60.96 33.02)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "0e42517a-3573-4aed-a297-1b0ed5eabc2d")
-	)
-	(wire
-		(pts
 			(xy 95.25 62.23) (xy 96.52 62.23)
 		)
 		(stroke
@@ -2017,16 +1989,6 @@
 			(type default)
 		)
 		(uuid "1b8d25b6-2ff7-4084-bf55-3587f9fcc097")
-	)
-	(wire
-		(pts
-			(xy 52.07 49.53) (xy 57.15 49.53)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "1bfe78e0-3eae-40f4-98c9-4194d46fa2b0")
 	)
 	(wire
 		(pts
@@ -2090,7 +2052,7 @@
 	)
 	(wire
 		(pts
-			(xy 60.96 52.07) (xy 85.09 52.07)
+			(xy 52.07 52.07) (xy 85.09 52.07)
 		)
 		(stroke
 			(width 0)
@@ -2360,16 +2322,6 @@
 	)
 	(wire
 		(pts
-			(xy 57.15 45.72) (xy 57.15 49.53)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "4f8df33b-1cf1-4a4c-8618-afd2d1befce7")
-	)
-	(wire
-		(pts
 			(xy 76.2 41.91) (xy 67.31 41.91)
 		)
 		(stroke
@@ -2440,16 +2392,6 @@
 	)
 	(wire
 		(pts
-			(xy 60.96 33.02) (xy 67.31 33.02)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "63a40757-773d-4fd0-86d6-3c14da81847b")
-	)
-	(wire
-		(pts
 			(xy 127 129.54) (xy 127 130.81)
 		)
 		(stroke
@@ -2477,26 +2419,6 @@
 			(type default)
 		)
 		(uuid "655c6295-a2fd-4009-bd84-0def3b6004ca")
-	)
-	(wire
-		(pts
-			(xy 52.07 52.07) (xy 60.96 52.07)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "66934a7c-04df-4724-ac2f-15e39eb79375")
-	)
-	(wire
-		(pts
-			(xy 57.15 40.64) (xy 57.15 33.02)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "6759a201-64cd-4ae8-b5a0-901060e9984f")
 	)
 	(wire
 		(pts
@@ -2970,7 +2892,7 @@
 	)
 	(wire
 		(pts
-			(xy 57.15 49.53) (xy 85.09 49.53)
+			(xy 52.07 49.53) (xy 85.09 49.53)
 		)
 		(stroke
 			(width 0)
@@ -2987,16 +2909,6 @@
 			(type default)
 		)
 		(uuid "b4dfa07a-4b4a-4fa0-87cf-87f9f06d3623")
-	)
-	(wire
-		(pts
-			(xy 60.96 40.64) (xy 60.96 33.02)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "b7f339a0-df94-4f1b-af85-0ab26fde59c8")
 	)
 	(wire
 		(pts
@@ -3267,16 +3179,6 @@
 			(type default)
 		)
 		(uuid "eb6cd54d-6470-484a-8d1b-d9c9712a6a26")
-	)
-	(wire
-		(pts
-			(xy 60.96 45.72) (xy 60.96 52.07)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "f305607b-7fe9-44d1-8307-c0c78901ad96")
 	)
 	(wire
 		(pts
@@ -5250,86 +5152,6 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
 					(reference "#PWR0604")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R_Small")
-		(at 60.96 43.18 0)
-		(mirror x)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "3e15f6dd-c286-4db6-847a-d91a319d8c92")
-		(property "Reference" "R602"
-			(at 62.23 39.116 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "1k"
-			(at 62.23 47.244 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 60.96 43.18 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 60.96 43.18 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor, small symbol"
-			(at 60.96 43.18 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "c46fa584-e425-42d5-a85d-3a34309ece88")
-		)
-		(pin "2"
-			(uuid "1ad665f9-3478-45de-b8d6-d73357f9beba")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
-					(reference "R602")
 					(unit 1)
 				)
 			)
@@ -7903,86 +7725,6 @@
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
 					(reference "C603")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R_Small")
-		(at 57.15 43.18 0)
-		(mirror x)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "cb498e66-32ba-4b42-a7f6-069be4a664ba")
-		(property "Reference" "R601"
-			(at 58.42 39.116 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "1k"
-			(at 58.42 47.244 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
-			(at 57.15 43.18 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 57.15 43.18 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor, small symbol"
-			(at 57.15 43.18 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "780e2425-e2a5-4c7f-9643-8af99b05af54")
-		)
-		(pin "2"
-			(uuid "c086d43b-16c6-4e30-8db3-1d27787979cd")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/35647f67-fe66-4594-b053-34e69d9fd56d"
-					(reference "R601")
 					(unit 1)
 				)
 			)
