@@ -161,174 +161,6 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Display_Graphic:ER_OLEDM0.91_1x-I2C"
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
-			(property "Reference" "U"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Value" "ER_OLEDM0.91_1x-I2C"
-				(at 14.224 -10.668 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" "Display:ER_OLEDM0.91_1x-I2C"
-				(at 18.034 -12.7 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Datasheet" "https://www.buydisplay.com/download/manual/ER-OLEDM0.91-1_Datasheet.pdf"
-				(at 42.672 -14.732 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Description" "SSD1306 OLED module, 0.91 inch, 128x32, I2C"
-				(at 26.67 -16.764 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "EastRising"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_fp_filters" "ER?OLEDM0.91?1x?I2C*"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(symbol "ER_OLEDM0.91_1x-I2C_1_1"
-				(rectangle
-					(start -7.62 7.62)
-					(end 7.62 -7.62)
-					(stroke
-						(width 0.254)
-						(type solid)
-					)
-					(fill
-						(type background)
-					)
-				)
-				(pin power_in line
-					(at 0 -10.16 90)
-					(length 2.54)
-					(name "GND"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin power_in line
-					(at 0 10.16 270)
-					(length 2.54)
-					(name "VCC"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin input clock
-					(at -10.16 2.54 0)
-					(length 2.54)
-					(name "SCL"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin bidirectional line
-					(at -10.16 -2.54 0)
-					(length 2.54)
-					(name "SDA"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 		(symbol "LED:WS2812B"
 			(pin_names
 				(offset 0.254)
@@ -880,10 +712,10 @@
 		(uuid "d69c7aeb-6524-42ad-8208-5376e6dd3936")
 	)
 	(junction
-		(at 115.57 73.66)
+		(at 173.99 121.92)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "ed14eb5c-9fc7-4fad-974e-2ed047669388")
+		(uuid "f5d41a2c-59dd-4c65-a84e-f81d85beed4c")
 	)
 	(no_connect
 		(at 181.61 134.62)
@@ -911,16 +743,6 @@
 	)
 	(wire
 		(pts
-			(xy 115.57 73.66) (xy 115.57 74.93)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "109194a9-17fd-4421-9445-38ff6d351e68")
-	)
-	(wire
-		(pts
 			(xy 101.6 142.24) (xy 101.6 143.51)
 		)
 		(stroke
@@ -928,26 +750,6 @@
 			(type default)
 		)
 		(uuid "13819a54-a572-4118-9039-97c7224f6980")
-	)
-	(wire
-		(pts
-			(xy 87.63 86.36) (xy 91.44 86.36)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "21dc5c18-1deb-4545-87cb-a8413af6202c")
-	)
-	(wire
-		(pts
-			(xy 115.57 80.01) (xy 115.57 81.28)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "2c2aba82-2819-47d2-a418-342977358632")
 	)
 	(wire
 		(pts
@@ -1001,16 +803,6 @@
 	)
 	(wire
 		(pts
-			(xy 115.57 71.12) (xy 115.57 73.66)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "62bf9df1-f00c-41ef-9c5e-394d66fb253b")
-	)
-	(wire
-		(pts
 			(xy 149.86 121.92) (xy 125.73 121.92)
 		)
 		(stroke
@@ -1031,6 +823,16 @@
 	)
 	(wire
 		(pts
+			(xy 191.77 121.92) (xy 173.99 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "77ec6a3f-dd5d-453d-8b7b-6c2fb13fb0ce")
+	)
+	(wire
+		(pts
 			(xy 173.99 121.92) (xy 149.86 121.92)
 		)
 		(stroke
@@ -1038,16 +840,6 @@
 			(type default)
 		)
 		(uuid "8c025f24-7288-4683-b4c4-39f101d1b568")
-	)
-	(wire
-		(pts
-			(xy 101.6 73.66) (xy 115.57 73.66)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "8fea8b22-809f-49f2-975f-f6d246b23a54")
 	)
 	(wire
 		(pts
@@ -1071,16 +863,6 @@
 	)
 	(wire
 		(pts
-			(xy 101.6 99.06) (xy 101.6 101.6)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "bf179828-659e-4071-bdc0-cc0c0b3a6404")
-	)
-	(wire
-		(pts
 			(xy 109.22 134.62) (xy 118.11 134.62)
 		)
 		(stroke
@@ -1101,13 +883,13 @@
 	)
 	(wire
 		(pts
-			(xy 101.6 73.66) (xy 101.6 78.74)
+			(xy 191.77 129.54) (xy 191.77 130.81)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "ca067045-9f10-400c-bb65-2fb1a7778e7f")
+		(uuid "c94e1481-d56b-457f-8e1f-6ef39987901d")
 	)
 	(wire
 		(pts
@@ -1131,13 +913,13 @@
 	)
 	(wire
 		(pts
-			(xy 87.63 91.44) (xy 91.44 91.44)
+			(xy 191.77 124.46) (xy 191.77 121.92)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "dcd72c0a-1415-40cb-9d11-f5f0b29ffbe6")
+		(uuid "d06ff5cd-870c-436a-81ce-9f0120cc7268")
 	)
 	(wire
 		(pts
@@ -1170,28 +952,6 @@
 		)
 		(uuid "15d1793f-82f6-4715-916d-869e197a2c34")
 	)
-	(hierarchical_label "SCL"
-		(shape input)
-		(at 87.63 86.36 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "653cf53b-1545-44ac-9baa-437f695e9e17")
-	)
-	(hierarchical_label "SDA"
-		(shape bidirectional)
-		(at 87.63 91.44 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "e5c732bf-30df-4234-bad6-da7efb8c2334")
-	)
 	(symbol
 		(lib_id "power:GND")
 		(at 88.9 129.54 0)
@@ -1203,7 +963,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "0e04487e-af22-47a4-8ebf-9285dbd32b08")
-		(property "Reference" "#PWR01201"
+		(property "Reference" "#PWR01202"
 			(at 88.9 135.89 0)
 			(hide yes)
 			(show_name no)
@@ -1264,15 +1024,15 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR01201")
+					(reference "#PWR01202")
 					(unit 1)
 				)
 			)
 		)
 	)
 	(symbol
-		(lib_id "power:GND")
-		(at 101.6 101.6 0)
+		(lib_id "Device:C_Small")
+		(at 191.77 127 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -1280,31 +1040,32 @@
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
-		(uuid "2056799b-99be-4fea-96e5-852444bf2509")
-		(property "Reference" "#PWR01202"
-			(at 101.6 107.95 0)
-			(hide yes)
+		(fields_autoplaced yes)
+		(uuid "1d3d7bf2-7fc2-4440-b431-005ce359f577")
+		(property "Reference" "C1202"
+			(at 194.31 125.7362 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
-		(property "Value" "GND"
-			(at 105.41 105.41 0)
+		(property "Value" "10uF"
+			(at 194.31 128.2762 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify right)
+				(justify left)
 			)
 		)
-		(property "Footprint" ""
-			(at 101.6 101.6 0)
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
+			(at 191.77 127 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1315,7 +1076,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 101.6 101.6 0)
+			(at 191.77 127 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1325,8 +1086,8 @@
 				)
 			)
 		)
-		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 101.6 101.6 0)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 191.77 127 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1335,14 +1096,17 @@
 					(size 1.27 1.27)
 				)
 			)
+		)
+		(pin "2"
+			(uuid "edf34d5c-38eb-4353-a68d-4151618208f3")
 		)
 		(pin "1"
-			(uuid "b5d0adab-5566-432c-8e3c-45a5cb2b86fb")
+			(uuid "f0a7ea2d-082b-476d-ba63-056640e8745a")
 		)
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR01202")
+					(reference "C1202")
 					(unit 1)
 				)
 			)
@@ -1359,7 +1123,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "36d62040-e6cf-4ce0-be4e-5629e46d8de5")
-		(property "Reference" "#PWR01212"
+		(property "Reference" "#PWR01209"
 			(at 173.99 149.86 0)
 			(hide yes)
 			(show_name no)
@@ -1420,7 +1184,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR01212")
+					(reference "#PWR01209")
 					(unit 1)
 				)
 			)
@@ -1437,7 +1201,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "66ab4807-b456-4827-91ea-c26c17afd58a")
-		(property "Reference" "#PWR01208"
+		(property "Reference" "#PWR01207"
 			(at 125.73 149.86 0)
 			(hide yes)
 			(show_name no)
@@ -1498,7 +1262,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR01208")
+					(reference "#PWR01207")
 					(unit 1)
 				)
 			)
@@ -1671,88 +1435,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:C_Small")
-		(at 115.57 77.47 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "89e1c7bd-fc38-40cb-8926-9d67b33b8f08")
-		(property "Reference" "C1202"
-			(at 118.11 76.2062 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "10uF"
-			(at 118.11 78.7462 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
-			(at 115.57 77.47 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 115.57 77.47 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Unpolarized capacitor, small symbol"
-			(at 115.57 77.47 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "2"
-			(uuid "c7e01806-c9c8-4570-ba60-5455e2e9349c")
-		)
-		(pin "1"
-			(uuid "8f6c630c-a76b-4efe-b107-645596459aee")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "C1202")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "power:+12V")
 		(at 88.9 120.65 0)
 		(unit 1)
@@ -1763,7 +1445,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "9384ba55-6728-4070-9988-dd4fb58f1a4c")
-		(property "Reference" "#PWR01203"
+		(property "Reference" "#PWR01201"
 			(at 88.9 124.46 0)
 			(hide yes)
 			(show_name no)
@@ -1824,7 +1506,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR01203")
+					(reference "#PWR01201")
 					(unit 1)
 				)
 			)
@@ -2105,7 +1787,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "a85f6c16-c0a5-4ee4-a38a-a2ebb78f17dc")
-		(property "Reference" "#PWR01210"
+		(property "Reference" "#PWR01208"
 			(at 149.86 149.86 0)
 			(hide yes)
 			(show_name no)
@@ -2166,7 +1848,7 @@
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR01210")
+					(reference "#PWR01208")
 					(unit 1)
 				)
 			)
@@ -2174,7 +1856,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 115.57 81.28 0)
+		(at 191.77 130.81 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -2182,9 +1864,9 @@
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
-		(uuid "ad99bd3d-f912-4f22-9434-896a1b6e4a14")
-		(property "Reference" "#PWR01206"
-			(at 115.57 87.63 0)
+		(uuid "dbaaa4f7-5b6f-4178-aeb2-793cb7db11f7")
+		(property "Reference" "#PWR01203"
+			(at 191.77 137.16 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2195,7 +1877,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 119.38 85.09 0)
+			(at 195.58 134.62 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -2206,7 +1888,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 115.57 81.28 0)
+			(at 191.77 130.81 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2217,7 +1899,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 115.57 81.28 0)
+			(at 191.77 130.81 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2228,7 +1910,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 115.57 81.28 0)
+			(at 191.77 130.81 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2239,178 +1921,12 @@
 			)
 		)
 		(pin "1"
-			(uuid "5f2fc35d-0202-4a2f-b2c8-fc5db9524aa0")
+			(uuid "93b1a76c-2171-431f-9267-035fcdf8ecb1")
 		)
 		(instances
 			(project "c0-dev"
 				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR01206")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:+12V")
-		(at 115.57 71.12 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "cfbcc968-4710-4fd2-be5b-0984fab7cad6")
-		(property "Reference" "#PWR01205"
-			(at 115.57 74.93 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3.3V"
-			(at 114.3 67.31 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" ""
-			(at 115.57 71.12 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 115.57 71.12 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"+12V\""
-			(at 115.57 71.12 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "974770a0-5ee1-430f-bec6-fb918934b30b")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "#PWR01205")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Display_Graphic:ER_OLEDM0.91_1x-I2C")
-		(at 101.6 88.9 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "daaad1b6-bb1b-4463-b2b1-28adabc12e53")
-		(property "Reference" "U1201"
-			(at 110.49 87.6299 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "ER_OLEDM0.91_1x-I2C"
-			(at 110.49 90.1699 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Display:ER_OLEDM0.91_1x-I2C"
-			(at 119.634 101.6 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" "https://www.buydisplay.com/download/manual/ER-OLEDM0.91-1_Datasheet.pdf"
-			(at 144.272 103.632 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "SSD1306 OLED module, 0.91 inch, 128x32, I2C"
-			(at 128.27 105.664 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "3"
-			(uuid "af201139-51f7-4e19-9b04-3ee8c64e04fd")
-		)
-		(pin "1"
-			(uuid "fd6e58dc-e9fc-451f-8944-18db0551ac68")
-		)
-		(pin "4"
-			(uuid "9d12505c-1d87-4fd0-8217-5cd52380bfb5")
-		)
-		(pin "2"
-			(uuid "fb2bb888-efcb-48db-b35c-f32284be3212")
-		)
-		(instances
-			(project "c0-dev"
-				(path "/b8347a0e-ad04-4414-969d-3c64a611d74e/b3a362d3-bb15-48bf-a1e5-1773c27a02b7/8163fdfe-0ffb-4135-bb2a-8165bcb76d87"
-					(reference "U1201")
+					(reference "#PWR01203")
 					(unit 1)
 				)
 			)
