@@ -3325,7 +3325,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Converter_DCDC:Converter_DCDC_Murata_MEE1SxxxxSC_THT"
+		(property "Footprint" "conduit:Converter_DCDC_EVISUN_BXXXXS-1WR3"
 			(at 100.33 50.8 0)
 			(hide yes)
 			(show_name no)

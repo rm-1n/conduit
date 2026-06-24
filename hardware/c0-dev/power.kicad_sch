@@ -5714,7 +5714,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Diode_SMD:Diode_Bridge_Bourns_CD-DF4xxS"
+		(property "Footprint" "conduit:Diode_Bridge_Bourns_CD-DF4xxS"
 			(at 57.15 35.56 0)
 			(hide yes)
 			(show_name no)
@@ -7677,7 +7677,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Package_SO:TI_SO-PowerPAD-8_ThermalVias"
+		(property "Footprint" "Package_SO:TI_SO-PowerPAD-8"
 			(at 149.86 121.92 0)
 			(hide yes)
 			(show_name no)
@@ -8044,7 +8044,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Diode_SMD:Diode_Bridge_Bourns_CD-DF4xxS"
+		(property "Footprint" "conduit:Diode_Bridge_Bourns_CD-DF4xxS"
 			(at 57.15 68.58 0)
 			(hide yes)
 			(show_name no)

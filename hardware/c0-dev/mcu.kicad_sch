@@ -12839,7 +12839,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm"
+		(property "Footprint" "conduit:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm"
 			(at 193.04 82.55 0)
 			(hide yes)
 			(show_name no)

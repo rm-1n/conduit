@@ -1680,6 +1680,12 @@
       "unconnected-(L1101-Pad7)": [
         "Isolated_POE"
       ],
+      "unconnected-(TR201-NC-Pad12)": [
+        "Isolated_POE"
+      ],
+      "unconnected-(TR201-NC-Pad13)": [
+        "Isolated_POE"
+      ],
       "unconnected-(U1-XTAL2-Pad4)": [
         "Isolated_MCU"
       ],
@@ -2064,7 +2070,7 @@
         "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
       }
     ],
-    "used_designators": "D710-711,D1202-1204,R525",
+    "used_designators": "D710-711,D1202-1204,TR201-202,R525",
     "variants": []
   },
   "sheets": [
