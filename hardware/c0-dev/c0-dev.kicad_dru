@@ -20,3 +20,19 @@
 (rule clearance_Isolated_BR_to_Isolated_POE
 	(condition "A.hasNetclass('Isolated_BR') && B.hasNetclass('Isolated_POE')")
 	(constraint clearance (min 1.8mm)))
+(rule clearance_Isolated_to_Isolated_POE
+	(condition "A.hasNetclass('Isolated') && B.hasNetclass('Isolated_POE')")
+	(constraint clearance (min 1.8mm)))
+(rule clearance_Isolated_to_Isolated_BR
+	(condition "A.hasNetclass('Isolated') && B.hasNetclass('Isolated_BR')")
+	(constraint clearance (min 1.8mm)))
+(rule clearance_Isolated_to_Isolated_TC
+	(condition "A.hasNetclass('Isolated') && B.hasNetclass('Isolated_TC')")
+	(constraint clearance (min 1.8mm)))
+(rule clearance_Isolated_to_Isolated_CAN
+	(condition "A.hasNetclass('Isolated') && B.hasNetclass('Isolated_CAN')")
+	(constraint clearance (min 1.8mm)))
+(rule clearance_Isolated_CAN_to_Default
+	(condition "A.hasNetclass('Isolated_CAN') && B.hasNetclass('Default')")
+	(constraint clearance (min 1.8mm)))
+

@@ -1106,8 +1106,7 @@
         "Isolated_MCU"
       ],
       "Earth": [
-        "Isolated",
-        "Isolated_POE"
+        "Isolated"
       ],
       "GND": [
         "Isolated_CAN"
@@ -1126,16 +1125,16 @@
         "Isolated"
       ],
       "Net-(C208-Pad2)": [
-        "Isolated_POE"
+        "Isolated"
       ],
       "Net-(C209-Pad2)": [
-        "Isolated_POE"
+        "Isolated"
       ],
       "Net-(C210-Pad2)": [
-        "Isolated_POE"
+        "Isolated"
       ],
       "Net-(C211-Pad2)": [
-        "Isolated_POE"
+        "Isolated"
       ],
       "Net-(C317-Pad1)": [
         "Isolated"

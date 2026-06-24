@@ -5373,7 +5373,7 @@
 		(dnp no)
 		(polyline
 			(pts
-				(xy 184.15 36.83) (xy 255.905 36.83) (xy 256.54 114.3) (xy 184.15 114.3) (xy 184.15 110.49)
+				(xy 184.15 105.41) (xy 184.15 127) (xy 256.54 127) (xy 256.54 105.41)
 			)
 			(stroke
 				(width 0)
@@ -5382,22 +5382,22 @@
 			(fill
 				(type none)
 			)
-			(uuid "afb5c85c-0b63-4538-9591-b218e3dcc0f4")
+			(uuid "090544e4-1bbb-499f-83bb-c858bc67c8f3")
 		)
 	)
 	(netclass_flag ""
 		(length 2.54)
 		(shape round)
-		(at 184.15 36.83 0)
+		(at 227.33 67.31 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left bottom)
 		)
-		(uuid "9b5fc13f-d7d4-4f79-95dc-921be788d3af")
+		(uuid "12ca52c5-8bce-4560-9a26-cbc37ffaaea2")
 		(property "Net Class" "Isolated_POE"
-			(at 185.42 34.29 0)
+			(at 228.6 64.77 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -5408,7 +5408,7 @@
 			)
 		)
 		(property "Component Class" ""
-			(at 143.51 55.88 90)
+			(at 186.69 86.36 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -5422,16 +5422,84 @@
 	(netclass_flag ""
 		(length 2.54)
 		(shape round)
-		(at 208.28 116.84 90)
+		(at 199.39 96.52 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left bottom)
 		)
-		(uuid "b8135176-d7ae-4d28-947a-8cfa656e0df0")
+		(uuid "35fb10b3-bc19-4280-a821-bf7f893bdf87")
+		(property "Net Class" "Isolated_POE"
+			(at 200.66 93.98 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Component Class" ""
+			(at 158.75 115.57 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+			)
+		)
+	)
+	(netclass_flag ""
+		(length 2.54)
+		(shape round)
+		(at 196.85 91.44 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "45ff8967-9ae9-4c3b-b059-af526072eb2d")
+		(property "Net Class" "Isolated_POE"
+			(at 198.12 88.9 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Component Class" ""
+			(at 156.21 110.49 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+			)
+		)
+	)
+	(netclass_flag ""
+		(length 2.54)
+		(shape round)
+		(at 184.15 105.41 90)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "5d2cdb34-ae83-4074-9629-50596f71dcf7")
 		(property "Net Class" "Isolated"
-			(at 204.47 116.84 0)
+			(at 180.34 105.41 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -5442,7 +5510,177 @@
 			)
 		)
 		(property "Component Class" ""
-			(at 227.33 157.48 0)
+			(at 203.2 146.05 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+			)
+		)
+	)
+	(netclass_flag ""
+		(length 2.54)
+		(shape round)
+		(at 227.2673 72.39 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "636e387a-5506-4c4c-8472-7e0b006ebea6")
+		(property "Net Class" "Isolated_POE"
+			(at 228.5373 69.85 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Component Class" ""
+			(at 186.6273 91.44 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+			)
+		)
+	)
+	(netclass_flag ""
+		(length 2.54)
+		(shape round)
+		(at 200.66 99.06 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "7406a95b-515d-4368-9971-d4a7e404b8d1")
+		(property "Net Class" "Isolated_POE"
+			(at 201.93 96.52 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Component Class" ""
+			(at 160.02 118.11 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+			)
+		)
+	)
+	(netclass_flag ""
+		(length 2.54)
+		(shape round)
+		(at 227.33 80.01 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "b5e90734-52a4-46fd-827d-a523dbb711d3")
+		(property "Net Class" "Isolated_POE"
+			(at 228.6 77.47 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Component Class" ""
+			(at 186.69 99.06 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+			)
+		)
+	)
+	(netclass_flag ""
+		(length 2.54)
+		(shape round)
+		(at 227.1725 69.85 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "bb003dec-4c19-48a9-9277-32e77af1317d")
+		(property "Net Class" "Isolated_POE"
+			(at 228.4425 67.31 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Component Class" ""
+			(at 186.5325 88.9 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+			)
+		)
+	)
+	(netclass_flag ""
+		(length 2.54)
+		(shape round)
+		(at 198.12 93.98 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "f1fa04e1-5809-4128-ad3c-e102f3e67833")
+		(property "Net Class" "Isolated_POE"
+			(at 199.39 91.44 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Component Class" ""
+			(at 157.48 113.03 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
