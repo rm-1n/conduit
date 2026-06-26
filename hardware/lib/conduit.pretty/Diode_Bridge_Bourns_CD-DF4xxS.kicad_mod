@@ -1,0 +1,247 @@
+(footprint "Diode_Bridge_Bourns_CD-DF4xxS"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(descr "8.1x10.5mm, 4A, single phase bridge rectifier, https://www.bourns.com/docs/Product-Datasheets/CD-DF4xxSL.pdf")
+	(tags "Surface Mount Bridge Rectifier Diode")
+	(property "Reference" "REF**"
+		(at 0 -7 0)
+		(layer "F.SilkS")
+		(uuid "e6c6a895-a2c6-488a-9d6f-bf1fa1b8a0b6")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "Diode_Bridge_Bourns_CD-DF4xxS"
+		(at 0 7 0)
+		(layer "F.Fab")
+		(uuid "89da0198-4d3f-45e2-b8f8-4f20d374bca5")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "037886df-bb42-436a-863a-d09970acfa72")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "433e40d1-5532-4ff8-a644-c34568337e83")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -4.16 0)
+		(end -4.16 5.36)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "0def1bb9-dda9-4fe1-a688-dc4ff3e3df1f")
+	)
+	(fp_line
+		(start -1.14 5.36)
+		(end 1.13 5.36)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "3e96839e-fff3-4807-813c-ebbcd6e292f5")
+	)
+	(fp_line
+		(start -0.07 -5.36)
+		(end 1.13 -5.36)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "f7b0b265-bff5-4417-a623-a2258c939b92")
+	)
+	(fp_line
+		(start 4.16 -5.36)
+		(end 4.16 5.36)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "0a178cb9-b6e6-4bd8-b75c-ab1765c596a1")
+	)
+	(fp_poly
+		(pts
+			(xy -4.31 -5.61) (xy -4.59 -5.61) (xy -4.31 -5.89) (xy -4.31 -5.61)
+		)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill yes)
+		(layer "F.SilkS")
+		(uuid "729ce222-8d62-465c-99a5-8032d526e51f")
+	)
+	(fp_line
+		(start -4.3 -6.3)
+		(end -4.3 6.3)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "1f2c3c67-4e0b-42b8-af69-0798883c852a")
+	)
+	(fp_line
+		(start -4.3 -6.3)
+		(end 4.3 -6.3)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "70269422-3f32-492a-a452-84dabfdf965a")
+	)
+	(fp_line
+		(start 4.3 6.3)
+		(end -4.3 6.3)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "743aba04-2a99-4f41-a18e-2802a224c760")
+	)
+	(fp_line
+		(start 4.3 6.3)
+		(end 4.3 -6.3)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "e17c2129-2d92-40c3-a9c8-f96b8a569d68")
+	)
+	(fp_line
+		(start -4.05 -4.25)
+		(end -3.05 -5.25)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "a7b2da6c-bfb7-4951-87c4-90b6a3898fa6")
+	)
+	(fp_line
+		(start -4.05 5.25)
+		(end -4.05 -4.25)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "b88cde1a-5e66-4304-a897-2a8ce7a89964")
+	)
+	(fp_line
+		(start -3.05 -5.25)
+		(end 4.05 -5.25)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "72bf87eb-75fb-40d8-901f-d6ffa46eec88")
+	)
+	(fp_line
+		(start 4.05 -5.25)
+		(end 4.05 5.25)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "6fbe6367-0b9d-4623-a985-cdfe06a6e4ec")
+	)
+	(fp_line
+		(start 4.05 5.25)
+		(end -4.05 5.25)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "a1c00215-bce5-41dc-8a20-adea0da0bb1f")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(uuid "23ddac2b-71bd-4e60-8877-b0d64add836b")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" smd rect
+		(at -2.6 -3.85)
+		(size 2.4 4.4)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "55302ab4-9383-430f-890c-2f0c8a4bfb6e")
+	)
+	(pad "2" smd rect
+		(at -2.6 3.85)
+		(size 2.4 4.4)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "577bf5eb-5b2e-4a4f-aa26-2051027dfedb")
+	)
+	(pad "3" smd rect
+		(at 2.6 3.85)
+		(size 2.4 4.4)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "f66a8820-fbf2-4ff2-b9ec-0a55d926b910")
+	)
+	(pad "4" smd rect
+		(at 2.6 -3.85)
+		(size 2.4 4.4)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "8ad31ee6-7bf9-43db-9dae-bbfcac8291cb")
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/../lib/3d/CD-DF406SL.stp"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz -90 -0 -0)
+		)
+	)
+)

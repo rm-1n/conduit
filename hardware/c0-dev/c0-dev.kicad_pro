@@ -1,0 +1,2136 @@
+{
+  "board": {
+    "3dviewports": [],
+    "design_settings": {
+      "defaults": {
+        "apply_defaults_to_fp_barcodes": false,
+        "apply_defaults_to_fp_dimensions": false,
+        "apply_defaults_to_fp_fields": false,
+        "apply_defaults_to_fp_shapes": false,
+        "apply_defaults_to_fp_text": false,
+        "board_outline_line_width": 0.05,
+        "copper_line_width": 0.2,
+        "copper_text_italic": false,
+        "copper_text_size_h": 1.5,
+        "copper_text_size_v": 1.5,
+        "copper_text_thickness": 0.3,
+        "copper_text_upright": false,
+        "courtyard_line_width": 0.05,
+        "dimension_precision": 4,
+        "dimension_units": 3,
+        "dimensions": {
+          "arrow_length": 1270000,
+          "extension_offset": 500000,
+          "keep_text_aligned": true,
+          "suppress_zeroes": true,
+          "text_position": 0,
+          "units_format": 0
+        },
+        "fab_line_width": 0.1,
+        "fab_text_italic": false,
+        "fab_text_size_h": 1.0,
+        "fab_text_size_v": 1.0,
+        "fab_text_thickness": 0.15,
+        "fab_text_upright": false,
+        "other_line_width": 0.1,
+        "other_text_italic": false,
+        "other_text_size_h": 1.0,
+        "other_text_size_v": 1.0,
+        "other_text_thickness": 0.15,
+        "other_text_upright": false,
+        "pads": {
+          "drill": 0.8,
+          "height": 1.27,
+          "width": 2.54
+        },
+        "silk_line_width": 0.1,
+        "silk_text_italic": false,
+        "silk_text_size_h": 1.0,
+        "silk_text_size_v": 1.0,
+        "silk_text_thickness": 0.1,
+        "silk_text_upright": false,
+        "zones": {
+          "min_clearance": 0.5
+        }
+      },
+      "diff_pair_dimensions": [],
+      "drc_exclusions": [],
+      "meta": {
+        "version": 2
+      },
+      "rule_severities": {
+        "annular_width": "error",
+        "clearance": "error",
+        "connection_width": "warning",
+        "copper_edge_clearance": "error",
+        "copper_sliver": "warning",
+        "courtyards_overlap": "error",
+        "creepage": "error",
+        "diff_pair_gap_out_of_range": "error",
+        "diff_pair_uncoupled_length_too_long": "error",
+        "drill_out_of_range": "error",
+        "duplicate_footprints": "warning",
+        "extra_footprint": "warning",
+        "footprint": "error",
+        "footprint_filters_mismatch": "ignore",
+        "footprint_symbol_field_mismatch": "warning",
+        "footprint_symbol_mismatch": "warning",
+        "footprint_type_mismatch": "ignore",
+        "hole_clearance": "error",
+        "hole_to_hole": "warning",
+        "holes_co_located": "warning",
+        "invalid_outline": "error",
+        "isolated_copper": "warning",
+        "item_on_disabled_layer": "error",
+        "items_not_allowed": "error",
+        "length_out_of_range": "error",
+        "lib_footprint_issues": "warning",
+        "lib_footprint_mismatch": "warning",
+        "malformed_courtyard": "error",
+        "microvia_drill_out_of_range": "error",
+        "mirrored_text_on_front_layer": "warning",
+        "missing_courtyard": "ignore",
+        "missing_footprint": "warning",
+        "missing_tuning_profile": "warning",
+        "net_conflict": "warning",
+        "nonmirrored_text_on_back_layer": "warning",
+        "npth_inside_courtyard": "error",
+        "padstack": "warning",
+        "pth_inside_courtyard": "error",
+        "shorting_items": "error",
+        "silk_edge_clearance": "warning",
+        "silk_over_copper": "warning",
+        "silk_overlap": "warning",
+        "skew_out_of_range": "error",
+        "solder_mask_bridge": "error",
+        "starved_thermal": "error",
+        "text_height": "warning",
+        "text_on_edge_cuts": "error",
+        "text_thickness": "warning",
+        "through_hole_pad_without_hole": "error",
+        "too_many_vias": "error",
+        "track_angle": "error",
+        "track_dangling": "warning",
+        "track_not_centered_on_via": "ignore",
+        "track_on_post_machined_layer": "error",
+        "track_segment_length": "error",
+        "track_width": "error",
+        "tracks_crossing": "error",
+        "tuning_profile_track_geometries": "ignore",
+        "unconnected_items": "ignore",
+        "unresolved_variable": "error",
+        "via_dangling": "warning",
+        "zones_intersect": "error"
+      },
+      "rules": {
+        "max_error": 0.005,
+        "min_clearance": 0.0,
+        "min_connection": 0.0,
+        "min_copper_edge_clearance": 0.5,
+        "min_groove_width": 0.0,
+        "min_hole_clearance": 0.25,
+        "min_hole_to_hole": 0.25,
+        "min_microvia_diameter": 0.2,
+        "min_microvia_drill": 0.1,
+        "min_resolved_spokes": 2,
+        "min_silk_clearance": 0.0,
+        "min_text_height": 0.8,
+        "min_text_thickness": 0.08,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.2,
+        "min_via_annular_width": 0.1,
+        "min_via_diameter": 0.5,
+        "solder_mask_to_copper_clearance": 0.0,
+        "use_height_for_length_calcs": true
+      },
+      "teardrop_options": [
+        {
+          "td_onpthpad": true,
+          "td_onroundshapesonly": false,
+          "td_onsmdpad": true,
+          "td_ontrackend": false,
+          "td_onvia": true
+        }
+      ],
+      "teardrop_parameters": [
+        {
+          "td_allow_use_two_tracks": true,
+          "td_curve_segcount": 0,
+          "td_height_ratio": 1.0,
+          "td_length_ratio": 0.5,
+          "td_maxheight": 2.0,
+          "td_maxlen": 1.0,
+          "td_on_pad_in_zone": false,
+          "td_target_name": "td_round_shape",
+          "td_width_to_size_filter_ratio": 0.9
+        },
+        {
+          "td_allow_use_two_tracks": true,
+          "td_curve_segcount": 0,
+          "td_height_ratio": 1.0,
+          "td_length_ratio": 0.5,
+          "td_maxheight": 2.0,
+          "td_maxlen": 1.0,
+          "td_on_pad_in_zone": false,
+          "td_target_name": "td_rect_shape",
+          "td_width_to_size_filter_ratio": 0.9
+        },
+        {
+          "td_allow_use_two_tracks": true,
+          "td_curve_segcount": 0,
+          "td_height_ratio": 1.0,
+          "td_length_ratio": 0.5,
+          "td_maxheight": 2.0,
+          "td_maxlen": 1.0,
+          "td_on_pad_in_zone": false,
+          "td_target_name": "td_track_end",
+          "td_width_to_size_filter_ratio": 0.9
+        }
+      ],
+      "track_widths": [],
+      "tuning_pattern_settings": {
+        "diff_pair_defaults": {
+          "corner_radius_percentage": 80,
+          "corner_style": 1,
+          "max_amplitude": 1.0,
+          "min_amplitude": 0.2,
+          "single_sided": false,
+          "spacing": 1.0
+        },
+        "diff_pair_skew_defaults": {
+          "corner_radius_percentage": 80,
+          "corner_style": 1,
+          "max_amplitude": 1.0,
+          "min_amplitude": 0.2,
+          "single_sided": false,
+          "spacing": 0.6
+        },
+        "single_track_defaults": {
+          "corner_radius_percentage": 80,
+          "corner_style": 1,
+          "max_amplitude": 1.0,
+          "min_amplitude": 0.2,
+          "single_sided": false,
+          "spacing": 0.6
+        }
+      },
+      "via_dimensions": [],
+      "zones_allow_external_fillets": false
+    },
+    "ipc2581": {
+      "bom_rev": "",
+      "dist": "",
+      "distpn": "",
+      "internal_id": "",
+      "mfg": "",
+      "mpn": "",
+      "sch_revision": ""
+    },
+    "layer_pairs": [],
+    "layer_presets": [],
+    "viewports": []
+  },
+  "boards": [],
+  "component_class_settings": {
+    "assignments": [],
+    "meta": {
+      "version": 0
+    },
+    "sheet_component_classes": {
+      "enabled": false
+    }
+  },
+  "cvpcb": {
+    "equivalence_files": []
+  },
+  "erc": {
+    "erc_exclusions": [],
+    "meta": {
+      "version": 0
+    },
+    "pin_map": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        2,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        2,
+        2,
+        2,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        2
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        2,
+        1,
+        1,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        2,
+        1,
+        2,
+        0,
+        0,
+        1,
+        0,
+        2,
+        2,
+        2,
+        2
+      ],
+      [
+        0,
+        2,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        2,
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        2,
+        1,
+        1,
+        0,
+        0,
+        1,
+        0,
+        2,
+        0,
+        0,
+        2
+      ],
+      [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ]
+    ],
+    "rule_severities": {
+      "bus_definition_conflict": "error",
+      "bus_entry_needed": "error",
+      "bus_to_bus_conflict": "error",
+      "bus_to_net_conflict": "error",
+      "different_unit_footprint": "error",
+      "different_unit_net": "error",
+      "duplicate_reference": "error",
+      "duplicate_sheet_names": "error",
+      "endpoint_off_grid": "warning",
+      "extra_units": "error",
+      "field_name_whitespace": "warning",
+      "footprint_filter": "ignore",
+      "footprint_link_issues": "warning",
+      "four_way_junction": "ignore",
+      "ground_pin_not_ground": "warning",
+      "hier_label_mismatch": "error",
+      "isolated_pin_label": "warning",
+      "label_dangling": "error",
+      "label_multiple_wires": "warning",
+      "lib_symbol_issues": "warning",
+      "lib_symbol_mismatch": "warning",
+      "missing_bidi_pin": "warning",
+      "missing_input_pin": "warning",
+      "missing_power_pin": "error",
+      "missing_unit": "warning",
+      "multiple_net_names": "warning",
+      "net_not_bus_member": "warning",
+      "no_connect_connected": "warning",
+      "no_connect_dangling": "warning",
+      "pin_not_connected": "error",
+      "pin_not_driven": "error",
+      "pin_to_pin": "error",
+      "power_pin_not_driven": "error",
+      "same_local_global_label": "warning",
+      "similar_label_and_power": "warning",
+      "similar_labels": "warning",
+      "similar_power": "warning",
+      "simulation_model_issue": "ignore",
+      "single_global_label": "ignore",
+      "stacked_pin_name": "warning",
+      "unannotated": "error",
+      "unconnected_wire_endpoint": "warning",
+      "undefined_netclass": "error",
+      "unit_value_mismatch": "error",
+      "unresolved_variable": "error",
+      "wire_dangling": "error"
+    }
+  },
+  "libraries": {
+    "pinned_footprint_libs": [],
+    "pinned_symbol_libs": []
+  },
+  "meta": {
+    "filename": "c0-dev.kicad_pro",
+    "version": 3
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Default",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Isolated",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 0,
+        "schematic_color": "rgb(0, 0, 255)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Isolated_BR",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 3,
+        "schematic_color": "rgb(0, 255, 255)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Isolated_CAN",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 1,
+        "schematic_color": "rgb(255, 153, 0)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Isolated_POE",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 2,
+        "schematic_color": "rgb(0, 255, 0)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Isolated_TC",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 4,
+        "schematic_color": "rgb(255, 0, 255)",
+        "track_width": 0.2,
+        "tuning_profile": "",
+        "via_diameter": 0.45,
+        "via_drill": 0.3,
+        "wire_width": 6
+      }
+    ],
+    "meta": {
+      "version": 5
+    },
+    "net_colors": null,
+    "netclass_assignments": {
+      "+1.1V": [
+        "Isolated_MCU"
+      ],
+      "+24V": [
+        "Isolated",
+        "Isolated_POE"
+      ],
+      "+3.3V": [
+        "Isolated_CAN"
+      ],
+      "+3.3VA": [
+        "Isolated_POE"
+      ],
+      "+5V": [
+        "Isolated_CAN"
+      ],
+      "+5V_ISO": [
+        "Isolated",
+        "Isolated_CAN"
+      ],
+      "+POE": [
+        "Isolated_POE"
+      ],
+      "-POE": [
+        "Isolated_POE"
+      ],
+      "/CAN/+5V": [
+        "Isolated_CAN"
+      ],
+      "/CAN/CAN_GND": [
+        "Isolated_CAN"
+      ],
+      "/CAN/CAN_H": [
+        "Isolated_CAN"
+      ],
+      "/CAN/CAN_L": [
+        "Isolated_CAN"
+      ],
+      "/CAN/RX": [
+        "Isolated_MCU"
+      ],
+      "/CAN/TERM_EN": [
+        "Isolated_MCU"
+      ],
+      "/CAN/TX": [
+        "Isolated_MCU"
+      ],
+      "/Digital Input/OUT0": [
+        "Isolated_MCU"
+      ],
+      "/Digital Input/OUT1": [
+        "Isolated_MCU"
+      ],
+      "/Digital Input/OUT2": [
+        "Isolated_MCU"
+      ],
+      "/Digital Input/OUT3": [
+        "Isolated_MCU"
+      ],
+      "/Digital Input/OUT4": [
+        "Isolated_MCU"
+      ],
+      "/Digital Input/OUT5": [
+        "Isolated_MCU"
+      ],
+      "/Digital Input/OUT6": [
+        "Isolated_MCU"
+      ],
+      "/Digital Input/OUT7": [
+        "Isolated_MCU"
+      ],
+      "/Digital Output/SCL": [
+        "Isolated",
+        "Isolated_MCU"
+      ],
+      "/Digital Output/SDA": [
+        "Isolated",
+        "Isolated_MCU"
+      ],
+      "/EN": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/CLK": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/CRS": [
+        "Isolated"
+      ],
+      "/Ethernet/LED1": [
+        "Isolated_POE"
+      ],
+      "/Ethernet/LED2": [
+        "Isolated_POE"
+      ],
+      "/Ethernet/MDC": [
+        "Isolated"
+      ],
+      "/Ethernet/MDIO": [
+        "Isolated"
+      ],
+      "/Ethernet/MDIO0.MDC": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/MDIO0.MDIO": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/MDIO0{MDIO MDC}": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/POE+12": [
+        "Isolated_POE"
+      ],
+      "/Ethernet/POE+45": [
+        "Isolated_POE"
+      ],
+      "/Ethernet/POE-36": [
+        "Isolated_POE"
+      ],
+      "/Ethernet/POE-78": [
+        "Isolated_POE"
+      ],
+      "/Ethernet/RMII.CRS": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/RMII.RXD0": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/RMII.RXD1": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/RMII.TXD0": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/RMII.TXD1": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/RMII.TXEN": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/RMII{TXD0 TXD1 TXEN RXD0 RXD1 CRS}": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/RXD0": [
+        "Isolated"
+      ],
+      "/Ethernet/RXD1": [
+        "Isolated"
+      ],
+      "/Ethernet/RXN": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/RXP": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/RX_N": [
+        "Isolated_POE"
+      ],
+      "/Ethernet/RX_P": [
+        "Isolated_POE"
+      ],
+      "/Ethernet/TXD0": [
+        "Isolated"
+      ],
+      "/Ethernet/TXD1": [
+        "Isolated"
+      ],
+      "/Ethernet/TXEN": [
+        "Isolated"
+      ],
+      "/Ethernet/TXN": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/TXP": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/TX_N": [
+        "Isolated_POE"
+      ],
+      "/Ethernet/TX_P": [
+        "Isolated_POE"
+      ],
+      "/Ethernet/VDDCR": [
+        "Isolated_MCU"
+      ],
+      "/Ethernet/~{RST}": [
+        "Isolated_MCU"
+      ],
+      "/FAULT_420": [
+        "Isolated_MCU"
+      ],
+      "/GND_TC": [
+        "Isolated_TC"
+      ],
+      "/MCU/CAN_RX": [
+        "Isolated_MCU"
+      ],
+      "/MCU/CAN_TX": [
+        "Isolated_MCU"
+      ],
+      "/MCU/DI0": [
+        "Isolated_MCU"
+      ],
+      "/MCU/DI1": [
+        "Isolated_MCU"
+      ],
+      "/MCU/DI2": [
+        "Isolated_MCU"
+      ],
+      "/MCU/DI3": [
+        "Isolated_MCU"
+      ],
+      "/MCU/DI4": [
+        "Isolated_MCU"
+      ],
+      "/MCU/DI5": [
+        "Isolated_MCU"
+      ],
+      "/MCU/DI6": [
+        "Isolated_MCU"
+      ],
+      "/MCU/DI7": [
+        "Isolated_MCU"
+      ],
+      "/MCU/I2C0.SCL": [
+        "Isolated_MCU",
+        "Isolated_TC"
+      ],
+      "/MCU/I2C0.SDA": [
+        "Isolated_MCU",
+        "Isolated_TC"
+      ],
+      "/MCU/I2C0{SDA SCL}": [
+        "Isolated_MCU"
+      ],
+      "/MCU/I2C1.SCL": [
+        "Isolated_MCU"
+      ],
+      "/MCU/I2C1.SDA": [
+        "Isolated_MCU"
+      ],
+      "/MCU/I2C1{SDA SCL}": [
+        "Isolated_MCU"
+      ],
+      "/MCU/I2C2.SCL": [
+        "Isolated_MCU"
+      ],
+      "/MCU/I2C2.SDA": [
+        "Isolated_MCU"
+      ],
+      "/MCU/I2C2{SDA SCL}": [
+        "Isolated_MCU"
+      ],
+      "/MCU/LANCLK": [
+        "Isolated_MCU"
+      ],
+      "/MCU/LAN~{RST}": [
+        "Isolated_MCU"
+      ],
+      "/MCU/POE_T2P": [
+        "Isolated",
+        "Isolated_MCU",
+        "Isolated_POE"
+      ],
+      "/MCU/SPI0.CS0": [
+        "Isolated_BR",
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0.CS1": [
+        "Isolated_BR",
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0.RX": [
+        "Isolated_BR",
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0.SCK": [
+        "Isolated_BR",
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0.TX": [
+        "Isolated_BR",
+        "Isolated_MCU"
+      ],
+      "/MCU/SPI0{SCK RX TX CS0 CS1}": [
+        "Isolated_MCU"
+      ],
+      "/MCU/SWCLK": [
+        "Isolated_MCU"
+      ],
+      "/MCU/SWDIO": [
+        "Isolated_MCU"
+      ],
+      "/MCU/USB_D+": [
+        "Isolated_MCU"
+      ],
+      "/MCU/USB_D-": [
+        "Isolated_MCU"
+      ],
+      "/MCU/VREG_AVDD": [
+        "Isolated_MCU"
+      ],
+      "/MCU/VREG_LX": [
+        "Isolated_MCU"
+      ],
+      "/MCU/WDI": [
+        "Isolated_MCU"
+      ],
+      "/MCU/~{QSPI_SS}": [
+        "Isolated_MCU"
+      ],
+      "/MCU/~{RST}": [
+        "Isolated_MCU"
+      ],
+      "/Power/+5V_0": [
+        "Isolated"
+      ],
+      "/Power/+5V_1": [
+        "Isolated"
+      ],
+      "/Power/+5V_2": [
+        "Isolated"
+      ],
+      "/Power/CDB": [
+        "Isolated_POE"
+      ],
+      "/Power/FB": [
+        "Isolated"
+      ],
+      "/Power/FB2": [
+        "Isolated"
+      ],
+      "/Power/FlyBuck/+24V_PRIM": [
+        "Isolated_POE"
+      ],
+      "/Power/FlyBuck/A": [
+        "Isolated_POE"
+      ],
+      "/Power/FlyBuck/FB": [
+        "Isolated_POE"
+      ],
+      "/Power/FlyBuck/SW": [
+        "Isolated_POE"
+      ],
+      "/Power/FlyBuck/VCC": [
+        "Isolated_POE"
+      ],
+      "/Power/GND_0": [
+        "Isolated"
+      ],
+      "/Power/GND_1": [
+        "Isolated"
+      ],
+      "/Power/GND_2": [
+        "Isolated"
+      ],
+      "/Power/GND_ISO": [
+        "Isolated_POE"
+      ],
+      "/Power/POE+12": [
+        "Isolated"
+      ],
+      "/Power/POE+45": [
+        "Isolated"
+      ],
+      "/Power/POE-36": [
+        "Isolated"
+      ],
+      "/Power/POE-78": [
+        "Isolated"
+      ],
+      "/Power/T2P": [
+        "Isolated_MCU"
+      ],
+      "/Power/V+": [
+        "Isolated"
+      ],
+      "/frontend_bridge/+5V": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/+5V_SENSE0": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/+5V_SENSE1": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/AIN10": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/AIN11": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/AIN20": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/AIN21": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B0+": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B0-": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B0_5V+": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B0_GND": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B1+": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B1-": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B1_5V+": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/B1_GND": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/CLK_ISO": [
+        "Isolated",
+        "Isolated_MCU"
+      ],
+      "/frontend_bridge/DIN_ISO": [
+        "Isolated",
+        "Isolated_MCU"
+      ],
+      "/frontend_bridge/DOUT_ISO": [
+        "Isolated",
+        "Isolated_MCU"
+      ],
+      "/frontend_bridge/EN0": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/EN1": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/GND": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/GND_BR": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/~{CS0_ISO}": [
+        "Isolated",
+        "Isolated_MCU"
+      ],
+      "/frontend_bridge/~{CS0}": [
+        "Isolated_BR"
+      ],
+      "/frontend_bridge/~{CS1_ISO}": [
+        "Isolated",
+        "Isolated_MCU"
+      ],
+      "/frontend_bridge/~{CS1}": [
+        "Isolated_BR"
+      ],
+      "/frontend_temp/+3.3V": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/+5V_ISO": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/GND": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/GND_TC": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/SCL": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/SCL_400k": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/SDA": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/SDA_400k": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC0+": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC0-": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC1+": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC1-": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC2+": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC2-": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC3+": [
+        "Isolated_TC"
+      ],
+      "/frontend_temp/TC3-": [
+        "Isolated_TC"
+      ],
+      "/screen/SCL": [
+        "Isolated_MCU"
+      ],
+      "/screen/SDA": [
+        "Isolated_MCU"
+      ],
+      "Earth": [
+        "Isolated"
+      ],
+      "GND": [
+        "Isolated_CAN"
+      ],
+      "GND_ISO": [
+        "Isolated",
+        "Isolated_CAN"
+      ],
+      "Net-(C10-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C11-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C19-Pad1)": [
+        "Isolated"
+      ],
+      "Net-(C208-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C209-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C210-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C211-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C317-Pad1)": [
+        "Isolated"
+      ],
+      "Net-(C39-Pad2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(C41-Pad2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(C416-Pad2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(C8-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(C9-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(D1101-A)": [
+        "Isolated"
+      ],
+      "Net-(D1102-A)": [
+        "Isolated"
+      ],
+      "Net-(D307-K)": [
+        "Isolated",
+        "Isolated_POE"
+      ],
+      "Net-(D309-A)": [
+        "Isolated"
+      ],
+      "Net-(D4-K)": [
+        "Isolated"
+      ],
+      "Net-(D401-A)": [
+        "Isolated_MCU"
+      ],
+      "Net-(D402-A)": [
+        "Isolated_MCU"
+      ],
+      "Net-(D5-K)": [
+        "Isolated"
+      ],
+      "Net-(D501-A)": [
+        "Isolated_TC"
+      ],
+      "Net-(D502A-K3A4)": [
+        "Isolated_TC"
+      ],
+      "Net-(D502B-K1A2)": [
+        "Isolated_TC"
+      ],
+      "Net-(D503A-K3A4)": [
+        "Isolated_TC"
+      ],
+      "Net-(D503B-K1A2)": [
+        "Isolated_TC"
+      ],
+      "Net-(D504A-K3A4)": [
+        "Isolated_TC"
+      ],
+      "Net-(D504B-K1A2)": [
+        "Isolated_TC"
+      ],
+      "Net-(D505A-K3A4)": [
+        "Isolated_TC"
+      ],
+      "Net-(D505B-K1A2)": [
+        "Isolated_TC"
+      ],
+      "Net-(D6-A)": [
+        "Isolated"
+      ],
+      "Net-(D7-A)": [
+        "Isolated_MCU"
+      ],
+      "Net-(D701-A)": [
+        "Isolated_BR"
+      ],
+      "Net-(D8-A)": [
+        "Isolated_MCU"
+      ],
+      "Net-(D801-A)": [
+        "Isolated_CAN"
+      ],
+      "Net-(D9-A)": [
+        "Isolated_MCU"
+      ],
+      "Net-(J1-Pad11)": [
+        "Isolated_MCU"
+      ],
+      "Net-(J1-Pad9)": [
+        "Isolated_MCU"
+      ],
+      "Net-(J15-Pad11)": [
+        "Isolated_MCU"
+      ],
+      "Net-(J15-Pad9)": [
+        "Isolated_MCU"
+      ],
+      "Net-(J201-Pad11)": [
+        "Isolated_POE"
+      ],
+      "Net-(J201-Pad9)": [
+        "Isolated_POE"
+      ],
+      "Net-(R108-Pad1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(R23-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(R24-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(R25-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(R26-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(R27-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(R28-Pad2)": [
+        "Isolated"
+      ],
+      "Net-(R30-Pad1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(R307-Pad2)": [
+        "Isolated_POE"
+      ],
+      "Net-(R309-Pad2)": [
+        "Isolated_POE"
+      ],
+      "Net-(R40-Pad1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(R409-Pad1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(R801-Pad1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(R802-Pad1)": [
+        "Isolated_CAN"
+      ],
+      "Net-(R91-Pad1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U1-CRS_DV{slash}MODE2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U1-RBIAS)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U1-RXD0{slash}MODE0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U1-RXD1{slash}MODE1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U1-RXER{slash}PHYAD0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U1-XTAL1{slash}CLKIN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U10-QSPI_SCLK)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U10-QSPI_SD0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U10-QSPI_SD1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U10-QSPI_SD2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U10-QSPI_SD3)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U10-USB_DM)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U10-USB_DP)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U10-XIN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U10-XOUT)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U11-ADD0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U1101-BST)": [
+        "Isolated_POE"
+      ],
+      "Net-(U1101-EN{slash}UVLO)": [
+        "Isolated_POE"
+      ],
+      "Net-(U1101-FPWM)": [
+        "Isolated_POE"
+      ],
+      "Net-(U1101-RON)": [
+        "Isolated_POE"
+      ],
+      "Net-(U1101-SS)": [
+        "Isolated_POE"
+      ],
+      "Net-(U1102-ADJ)": [
+        "Isolated_POE"
+      ],
+      "Net-(U2-BOOT)": [
+        "Isolated"
+      ],
+      "Net-(U2-COMP)": [
+        "Isolated"
+      ],
+      "Net-(U2-RT{slash}CLK)": [
+        "Isolated"
+      ],
+      "Net-(U201-CRS_DV{slash}MODE2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U201-RBIAS)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U201-RXD0{slash}MODE0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U201-RXD1{slash}MODE1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U201-RXER{slash}PHYAD0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U201-XTAL1{slash}CLKIN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U29-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U3-APD)": [
+        "Isolated"
+      ],
+      "Net-(U3-CLS)": [
+        "Isolated"
+      ],
+      "Net-(U3-DEN)": [
+        "Isolated"
+      ],
+      "Net-(U3-T2P)": [
+        "Isolated"
+      ],
+      "Net-(U30-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U302-APD)": [
+        "Isolated_POE"
+      ],
+      "Net-(U302-CLS)": [
+        "Isolated_POE"
+      ],
+      "Net-(U302-DEN)": [
+        "Isolated_POE"
+      ],
+      "Net-(U302-T2P)": [
+        "Isolated_POE"
+      ],
+      "Net-(U303-BOOT)": [
+        "Isolated",
+        "Isolated_POE"
+      ],
+      "Net-(U303-COMP)": [
+        "Isolated"
+      ],
+      "Net-(U303-EN)": [
+        "Isolated"
+      ],
+      "Net-(U303-RT{slash}CLK)": [
+        "Isolated"
+      ],
+      "Net-(U31-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U32-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U33-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U34-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-A0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-A1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-A2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-P05)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-P06)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U401-~{INT})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-CLK)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-DI{slash}IO_{0})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-DO{slash}IO_{1})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-~{CS})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-~{HOLD}{slash}~{RESET}{slash}IO_{3})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U402-~{WP}{slash}IO_{2})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U403-~{MR})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U404-USB_DM)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U404-USB_DP)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U404-XIN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U404-XOUT)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U45-A0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U45-A1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U45-A2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U45-~{INT})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U501-+Vout)": [
+        "Isolated_TC"
+      ],
+      "Net-(U501-ADD0)": [
+        "Isolated_MCU",
+        "Isolated_TC"
+      ],
+      "Net-(U502-+Vout)": [
+        "Isolated_TC"
+      ],
+      "Net-(U504-ADD0)": [
+        "Isolated_TC"
+      ],
+      "Net-(U505-ADDR)": [
+        "Isolated_TC"
+      ],
+      "Net-(U506-ADD0)": [
+        "Isolated_TC"
+      ],
+      "Net-(U506-ADDR)": [
+        "Isolated_TC"
+      ],
+      "Net-(U507-ADDR)": [
+        "Isolated_TC"
+      ],
+      "Net-(U508-ADDR)": [
+        "Isolated_TC"
+      ],
+      "Net-(U7-A0)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-A1)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-A2)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-CLK)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-DI{slash}IO_{0})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-DO{slash}IO_{1})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-P04)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-P05)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-~{CS})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-~{HOLD}{slash}~{RESET}{slash}IO_{3})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-~{INT})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U7-~{WP}{slash}IO_{2})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U701-+Vout)": [
+        "Isolated_BR"
+      ],
+      "Net-(U702-EN2)": [
+        "Isolated_BR"
+      ],
+      "Net-(U702-IND)": [
+        "Isolated_BR"
+      ],
+      "Net-(U702-OUTA)": [
+        "Isolated_BR"
+      ],
+      "Net-(U702-OUTB)": [
+        "Isolated_BR"
+      ],
+      "Net-(U703-EN2)": [
+        "Isolated_BR"
+      ],
+      "Net-(U703-IND)": [
+        "Isolated_BR"
+      ],
+      "Net-(U703-OUTA)": [
+        "Isolated_BR"
+      ],
+      "Net-(U703-OUTB)": [
+        "Isolated_BR"
+      ],
+      "Net-(U704-AIN3{slash}REFN1)": [
+        "Isolated_BR"
+      ],
+      "Net-(U704-CLK)": [
+        "Isolated_BR"
+      ],
+      "Net-(U704-DVDD)": [
+        "Isolated_BR"
+      ],
+      "Net-(U705-AIN3{slash}REFN1)": [
+        "Isolated_BR"
+      ],
+      "Net-(U705-CLK)": [
+        "Isolated_BR"
+      ],
+      "Net-(U705-DVDD)": [
+        "Isolated_BR"
+      ],
+      "Net-(U8-USB_DM)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U8-USB_DP)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U8-XIN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U8-XOUT)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U8-~{CS})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U801-+Vout)": [
+        "Isolated_CAN"
+      ],
+      "Net-(U9-~{MR})": [
+        "Isolated_MCU"
+      ],
+      "Net-(U901-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U902-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U903-EN)": [
+        "Isolated_MCU"
+      ],
+      "Net-(U904-EN)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(C503-Pad1)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(C504-Pad1)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(D702B-A3-Pad4)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(D702B-K1A2-Pad3)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(D702B-K4-Pad5)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(D703B-A3-Pad4)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(D703B-K1A2-Pad3)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(D703B-K4-Pad5)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(J16-SWO-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(J2-SWO-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(J401-SWO-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(L1101-Pad2)": [
+        "Isolated_POE"
+      ],
+      "unconnected-(L1101-Pad7)": [
+        "Isolated_POE"
+      ],
+      "unconnected-(TR201-NC-Pad12)": [
+        "Isolated_POE"
+      ],
+      "unconnected-(TR201-NC-Pad13)": [
+        "Isolated_POE"
+      ],
+      "unconnected-(U1-XTAL2-Pad4)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U1-~{INT}{slash}REFCLKO-Pad14)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U10-GPIO24-Pad36)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U11-ALERT-Pad3)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U201-XTAL2-Pad4)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U201-~{INT}{slash}REFCLKO-Pad14)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U29-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U29-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U30-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U30-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U31-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U31-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U32-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U32-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U33-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U33-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U34-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U34-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P07-Pad11)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P10-Pad13)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P11-Pad14)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P12-Pad15)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P13-Pad16)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P14-Pad17)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P15-Pad18)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U401-P16-Pad19)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U404-GPIO24-Pad36)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P04-Pad8)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P05-Pad9)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P06-Pad10)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P07-Pad11)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P10-Pad13)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P11-Pad14)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P12-Pad15)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P13-Pad16)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P14-Pad17)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P15-Pad18)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P16-Pad19)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U45-P17-Pad20)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U501-ALERT-Pad3)": [
+        "Isolated_MCU",
+        "Isolated_TC"
+      ],
+      "unconnected-(U504-ALERT-Pad3)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(U505-ALERT{slash}RDY-Pad2)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(U506-ALERT-Pad3)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(U506-ALERT{slash}RDY-Pad2)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(U507-ALERT{slash}RDY-Pad2)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(U508-ALERT{slash}RDY-Pad2)": [
+        "Isolated_TC"
+      ],
+      "unconnected-(U7-P06-Pad10)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P07-Pad11)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P10-Pad13)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P11-Pad14)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P12-Pad15)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P13-Pad16)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P14-Pad17)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P15-Pad18)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U7-P16-Pad19)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U704-REFN0-Pad8)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U704-REFP0-Pad9)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U704-~{DRDY}-Pad14)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U705-REFN0-Pad8)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U705-REFP0-Pad9)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U705-~{DRDY}-Pad14)": [
+        "Isolated_BR"
+      ],
+      "unconnected-(U8-GPIO24-Pad36)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U901-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U901-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U902-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U902-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U903-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U903-NC-Pad7)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U904-NC-Pad6)": [
+        "Isolated_MCU"
+      ],
+      "unconnected-(U904-NC-Pad7)": [
+        "Isolated_MCU"
+      ]
+    },
+    "netclass_patterns": []
+  },
+  "pcbnew": {
+    "last_paths": {
+      "idf": "",
+      "netlist": "",
+      "plot": "",
+      "specctra_dsn": "",
+      "vrml": ""
+    },
+    "page_layout_descr_file": ""
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "annotation": {
+      "method": 1,
+      "sort_order": 0
+    },
+    "bom_export_filename": "production/pico-poe_bom_extended.csv",
+    "bom_fmt_presets": [],
+    "bom_fmt_settings": {
+      "field_delimiter": ",",
+      "keep_line_breaks": false,
+      "keep_tabs": false,
+      "name": "CSV",
+      "ref_delimiter": ",",
+      "ref_range_delimiter": "",
+      "string_delimiter": "\""
+    },
+    "bom_presets": [],
+    "bom_settings": {
+      "exclude_dnp": false,
+      "fields_ordered": [
+        {
+          "group_by": false,
+          "label": "Reference",
+          "name": "Reference",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Qty",
+          "name": "${QUANTITY}",
+          "show": true
+        },
+        {
+          "group_by": true,
+          "label": "Value",
+          "name": "Value",
+          "show": true
+        },
+        {
+          "group_by": true,
+          "label": "DNP",
+          "name": "${DNP}",
+          "show": true
+        },
+        {
+          "group_by": true,
+          "label": "Exclude from BOM",
+          "name": "${EXCLUDE_FROM_BOM}",
+          "show": true
+        },
+        {
+          "group_by": true,
+          "label": "Exclude from Board",
+          "name": "${EXCLUDE_FROM_BOARD}",
+          "show": true
+        },
+        {
+          "group_by": true,
+          "label": "Footprint",
+          "name": "Footprint",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Datasheet",
+          "name": "Datasheet",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "MPN",
+          "name": "MPN",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Sim.Device",
+          "name": "Sim.Device",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Sim.Pins",
+          "name": "Sim.Pins",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Voltage",
+          "name": "Voltage",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "JLCPCB Part",
+          "name": "JLCPCB Part",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Description",
+          "name": "Description",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "#",
+          "name": "${ITEM_NUMBER}",
+          "show": false
+        }
+      ],
+      "filter_string": "",
+      "group_symbols": true,
+      "include_excluded_from_bom": true,
+      "name": "",
+      "sort_asc": true,
+      "sort_field": "Reference"
+    },
+    "bus_aliases": {},
+    "connection_grid_size": 50.0,
+    "drawing": {
+      "dashed_lines_dash_length_ratio": 12.0,
+      "dashed_lines_gap_length_ratio": 3.0,
+      "default_line_thickness": 6.0,
+      "default_text_size": 50.0,
+      "field_names": [],
+      "hop_over_size_choice": 0,
+      "intersheets_ref_own_page": false,
+      "intersheets_ref_prefix": "",
+      "intersheets_ref_short": false,
+      "intersheets_ref_show": false,
+      "intersheets_ref_suffix": "",
+      "junction_size_choice": 3,
+      "label_size_ratio": 0.375,
+      "operating_point_overlay_i_precision": 3,
+      "operating_point_overlay_i_range": "~A",
+      "operating_point_overlay_v_precision": 3,
+      "operating_point_overlay_v_range": "~V",
+      "overbar_offset_ratio": 1.23,
+      "pin_symbol_size": 25.0,
+      "text_offset_ratio": 0.15
+    },
+    "legacy_lib_dir": "",
+    "legacy_lib_list": [],
+    "meta": {
+      "version": 1
+    },
+    "page_layout_descr_file": "",
+    "plot_directory": "",
+    "reuse_designators": true,
+    "subpart_first_id": 65,
+    "subpart_id_separator": 0,
+    "top_level_sheets": [
+      {
+        "filename": "c0-dev.kicad_sch",
+        "name": "Root",
+        "uuid": "b8347a0e-ad04-4414-969d-3c64a611d74e"
+      }
+    ],
+    "used_designators": "D710-711,D1202-1204,TR201-202,R525",
+    "variants": []
+  },
+  "sheets": [
+    [
+      "b8347a0e-ad04-4414-969d-3c64a611d74e",
+      "Root"
+    ],
+    [
+      "9c4bf4fa-f54f-41b6-aa34-920acf2f273a",
+      "Ethernet"
+    ],
+    [
+      "478925be-12da-4cfa-9644-8a4b77bbc69d",
+      "Power"
+    ],
+    [
+      "b3a362d3-bb15-48bf-a1e5-1773c27a02b7",
+      "MCU"
+    ],
+    [
+      "9211758b-1927-4f1b-ad15-6153b4ae272e",
+      "frontend_temp"
+    ],
+    [
+      "35647f67-fe66-4594-b053-34e69d9fd56d",
+      "frontend_420"
+    ],
+    [
+      "ad4094d0-ab7e-4abf-8811-376ff72ef3ce",
+      "frontend_bridge"
+    ],
+    [
+      "80e53efd-e5a4-4d09-bb57-828ee723d9b9",
+      "CAN"
+    ],
+    [
+      "6b9f9807-723d-4367-9050-3aa7a42b0a05",
+      "Digital Input"
+    ],
+    [
+      "680032e3-5da4-48ad-9c49-e468cbbeffb9",
+      "Digital Output"
+    ],
+    [
+      "b2c84169-d7d5-4727-b9af-d9931d6a9d2b",
+      "FlyBuck"
+    ],
+    [
+      "8163fdfe-0ffb-4135-bb2a-8165bcb76d87",
+      "indicators"
+    ],
+    [
+      "a8b92e4a-98cf-456e-8ef2-03c46ca743b1",
+      "Power Output"
+    ]
+  ],
+  "text_variables": {},
+  "tuning_profiles": {
+    "meta": {
+      "version": 0
+    },
+    "tuning_profiles_impedance_geometric": []
+  }
+}
